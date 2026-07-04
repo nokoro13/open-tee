@@ -54,6 +54,8 @@ export const ryderMatchTypeEnum = pgEnum("ryder_match_type", [
 
 export const nineSideEnum = pgEnum("nine_side", ["front", "back"]);
 
+export const startFormatEnum = pgEnum("start_format", ["shotgun", "tee_times"]);
+
 export const organizations = pgTable("organizations", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull(),
@@ -89,6 +91,10 @@ export const events = pgTable("events", {
   scoringFinalizedAt: timestamp("scoring_finalized_at", { withTimezone: true }),
   teamAName: text("team_a_name"),
   teamBName: text("team_b_name"),
+  startFormat: startFormatEnum("start_format").notNull().default("tee_times"),
+  shotgunStartTime: text("shotgun_start_time"),
+  firstTeeTime: text("first_tee_time"),
+  teeTimeIntervalMinutes: integer("tee_time_interval_minutes").default(10),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -117,7 +123,9 @@ export const pairingGroups = pgTable("pairing_groups", {
     .references(() => events.id, { onDelete: "cascade" }),
   label: text("label").notNull(),
   teeTime: text("tee_time"),
+  startingHole: integer("starting_hole"),
   matchType: ryderMatchTypeEnum("match_type"),
+  scoringCode: text("scoring_code"),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -137,6 +145,7 @@ export const registrations = pgTable(
     email: text("email").notNull(),
     handicap: text("handicap"),
     teamSide: teamSideEnum("team_side"),
+    scoringCode: text("scoring_code"),
     paymentStatus: paymentStatusEnum("payment_status")
       .notNull()
       .default("pending"),

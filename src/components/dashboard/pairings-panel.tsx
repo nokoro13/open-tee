@@ -11,6 +11,9 @@ import {
   deletePairingGroup,
   updatePairingGroup,
 } from "@/actions/pairings";
+import { autoAssignShotgunHoles } from "@/actions/start-format";
+import { CopyRegistrationLink } from "@/components/dashboard/copy-registration-link";
+import { SendScoringLinkButton } from "@/components/dashboard/send-scoring-link-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,9 +41,24 @@ import {
   requiresTeamSides,
 } from "@/lib/event-formats";
 import type { EventPairings } from "@/lib/pairings";
+import { getGroupScorePageUrl } from "@/lib/scoring-code-storage";
+import {
+  formatTimeDisplay,
+  getStartingHoleOptions,
+  getStartFormatSummary,
+  type StartFormat,
+} from "@/lib/start-format";
 
 type PairingsPanelProps = {
   eventId: string;
+  slug: string;
+  appUrl: string;
+  scoringStatus: "disabled" | "open" | "finalized";
+  startFormat: StartFormat;
+  shotgunStartTime: string | null;
+  firstTeeTime: string | null;
+  teeTimeIntervalMinutes: number | null;
+  holes: "9" | "18";
   format: string;
   teamAName?: string | null;
   teamBName?: string | null;
@@ -49,6 +67,14 @@ type PairingsPanelProps = {
 
 export function PairingsPanel({
   eventId,
+  slug,
+  appUrl,
+  scoringStatus,
+  startFormat,
+  shotgunStartTime,
+  firstTeeTime,
+  teeTimeIntervalMinutes,
+  holes,
   format,
   teamAName,
   teamBName,
@@ -96,10 +122,23 @@ export function PairingsPanel({
     label: group.label,
   }));
 
+  function handleAutoAssignHoles() {
+    refreshAfter(() => autoAssignShotgunHoles(eventId));
+  }
+
   const totalAssigned = pairings.groups.reduce(
     (sum, group) => sum + group.players.length,
     0
   );
+  const showScoringLinks = scoringStatus !== "disabled";
+  const canEmailPlayers = scoringStatus === "open";
+  const startingHoleOptions = getStartingHoleOptions(holes);
+  const scheduleSummary = getStartFormatSummary({
+    startFormat,
+    shotgunStartTime,
+    firstTeeTime,
+    teeTimeIntervalMinutes,
+  });
 
   return (
     <Card>
@@ -114,18 +153,32 @@ export function PairingsPanel({
               ? `Create matches, set match type, and assign ${sideALabel} / ${sideBLabel} players.`
               : `Assign players to groups manually.`}{" "}
             {totalAssigned} assigned, {pairings.unassigned.length} unassigned.
+            <span className="mt-1 block">{scheduleSummary}</span>
           </CardDescription>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={isPending}
-          onClick={handleCreateGroup}
-        >
-          <Plus />
-          {showMatchType ? "Add match" : "Add group"}
-        </Button>
+        <div className="flex flex-col gap-2 sm:items-end">
+          {startFormat === "shotgun" && pairings.groups.length > 0 && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isPending}
+              onClick={handleAutoAssignHoles}
+            >
+              Auto-assign holes
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={isPending}
+            onClick={handleCreateGroup}
+          >
+            <Plus />
+            {showMatchType ? "Add match" : "Add group"}
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-6">
         {error && (
@@ -165,9 +218,23 @@ export function PairingsPanel({
                       <GroupHeader
                         label={group.label}
                         teeTime={group.teeTime}
+                        startingHole={group.startingHole}
+                        startFormat={startFormat}
+                        startingHoleOptions={startingHoleOptions}
                         matchType={group.matchType}
                         showMatchType={showMatchType}
                         disabled={isPending}
+                        scoringCode={group.scoringCode}
+                        scoringUrl={
+                          group.scoringCode
+                            ? getGroupScorePageUrl(appUrl, slug, group.scoringCode)
+                            : null
+                        }
+                        showScoringLink={
+                          showScoringLinks &&
+                          group.players.length > 0 &&
+                          group.scoringCode != null
+                        }
                         onUpdate={(input) =>
                           refreshAfter(() => updatePairingGroup(group.id, input))
                         }
@@ -188,18 +255,21 @@ export function PairingsPanel({
                       ) : (
                         <ul className="mt-3 divide-y divide-border rounded-md border border-border bg-background">
                           {group.players.map((player) => (
-                            <PlayerRow
-                              key={player.id}
-                              player={player}
-                              groupOptions={groupOptions}
-                              currentGroupId={group.id}
-                              showTeamSides={showTeamSides}
-                              sideALabel={sideALabel}
-                              sideBLabel={sideBLabel}
-                              disabled={isPending}
-                              onAssign={handleAssign}
-                              onTeamSide={handleTeamSide}
-                            />
+                            <li key={player.id}>
+                              <PlayerRow
+                                player={player}
+                                groupOptions={groupOptions}
+                                currentGroupId={group.id}
+                                showTeamSides={showTeamSides}
+                                sideALabel={sideALabel}
+                                sideBLabel={sideBLabel}
+                                disabled={isPending}
+                                eventId={eventId}
+                                canEmailPlayer={canEmailPlayers}
+                                onAssign={handleAssign}
+                                onTeamSide={handleTeamSide}
+                              />
+                            </li>
                           ))}
                         </ul>
                       )}
@@ -220,18 +290,35 @@ export function PairingsPanel({
               ) : (
                 <ul className="divide-y divide-border rounded-lg border border-border">
                   {pairings.unassigned.map((player) => (
-                    <PlayerRow
-                      key={player.id}
-                      player={player}
-                      groupOptions={groupOptions}
-                      currentGroupId={null}
-                      showTeamSides={showTeamSides}
-                      sideALabel={sideALabel}
-                      sideBLabel={sideBLabel}
-                      disabled={isPending}
-                      onAssign={handleAssign}
-                      onTeamSide={handleTeamSide}
-                    />
+                    <li key={player.id}>
+                      <PlayerRow
+                        player={player}
+                        groupOptions={groupOptions}
+                        currentGroupId={null}
+                        showTeamSides={showTeamSides}
+                        sideALabel={sideALabel}
+                        sideBLabel={sideBLabel}
+                        disabled={isPending}
+                        eventId={eventId}
+                        canEmailPlayer={canEmailPlayers}
+                        onAssign={handleAssign}
+                        onTeamSide={handleTeamSide}
+                      />
+                      {showScoringLinks && player.scoringCode && (
+                        <div className="space-y-1.5 border-t border-border px-3 pb-3">
+                          <p className="text-xs font-medium text-muted-foreground">
+                            Scoring link
+                          </p>
+                          <CopyRegistrationLink
+                            url={getGroupScorePageUrl(
+                              appUrl,
+                              slug,
+                              player.scoringCode
+                            )}
+                          />
+                        </div>
+                      )}
+                    </li>
                   ))}
                 </ul>
               )}
@@ -246,12 +333,19 @@ export function PairingsPanel({
 type GroupHeaderProps = {
   label: string;
   teeTime: string | null;
+  startingHole: number | null;
+  startFormat: StartFormat;
+  startingHoleOptions: number[];
   matchType: string | null;
   showMatchType: boolean;
   disabled: boolean;
+  scoringCode?: string | null;
+  scoringUrl?: string | null;
+  showScoringLink?: boolean;
   onUpdate: (input: {
     label?: string;
     teeTime?: string | null;
+    startingHole?: number | null;
     matchType?: "singles" | "fourball" | "foursomes" | null;
   }) => void;
   onDelete: () => void;
@@ -260,14 +354,19 @@ type GroupHeaderProps = {
 function GroupHeader({
   label,
   teeTime,
+  startingHole,
+  startFormat,
+  startingHoleOptions,
   matchType,
   showMatchType,
   disabled,
+  scoringCode,
+  scoringUrl,
+  showScoringLink,
   onUpdate,
   onDelete,
 }: GroupHeaderProps) {
   const [localLabel, setLocalLabel] = useState(label);
-  const [localTeeTime, setLocalTeeTime] = useState(teeTime ?? "");
 
   return (
     <div className="flex flex-col gap-3">
@@ -290,24 +389,44 @@ function GroupHeader({
               }}
             />
           </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">
-              Tee time (optional)
-            </label>
-            <Input
-              value={localTeeTime}
-              placeholder="e.g. 8:00 AM"
-              disabled={disabled}
-              onChange={(e) => setLocalTeeTime(e.target.value)}
-              onBlur={() => {
-                const normalized = localTeeTime.trim();
-                const current = teeTime ?? "";
-                if (normalized !== current) {
-                  onUpdate({ teeTime: normalized || null });
-                }
-              }}
-            />
-          </div>
+
+          {startFormat === "shotgun" ? (
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">
+                Starting hole
+              </label>
+              <Select
+                value={startingHole != null ? String(startingHole) : ""}
+                disabled={disabled}
+                onValueChange={(value) => {
+                  if (!value) return;
+                  onUpdate({ startingHole: Number(value) });
+                }}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select hole">
+                    {startingHole != null ? `Hole ${startingHole}` : undefined}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {startingHoleOptions.map((hole) => (
+                    <SelectItem key={hole} value={String(hole)}>
+                      Hole {hole}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">
+                Tee time
+              </label>
+              <div className="flex h-9 items-center rounded-lg border border-border bg-muted/30 px-3 text-sm font-medium">
+                {formatTimeDisplay(teeTime)}
+              </div>
+            </div>
+          )}
         </div>
         <Button
           type="button"
@@ -356,6 +475,20 @@ function GroupHeader({
           )}
         </div>
       )}
+
+      {showScoringLink && scoringUrl && (
+        <div className="space-y-1.5 border-t border-border pt-3">
+          <p className="text-xs font-medium text-muted-foreground">
+            Scoring link
+            {scoringCode ? (
+              <span className="ml-2 font-mono text-[11px] tracking-wider text-foreground">
+                {scoringCode}
+              </span>
+            ) : null}
+          </p>
+          <CopyRegistrationLink url={scoringUrl} />
+        </div>
+      )}
     </div>
   );
 }
@@ -375,6 +508,8 @@ type PlayerRowProps = {
   sideALabel: string;
   sideBLabel: string;
   disabled: boolean;
+  eventId: string;
+  canEmailPlayer: boolean;
   onAssign: (registrationId: string, groupId: string | null) => void;
   onTeamSide: (registrationId: string, teamSide: "a" | "b" | null) => void;
 };
@@ -387,6 +522,8 @@ function PlayerRow({
   sideALabel,
   sideBLabel,
   disabled,
+  eventId,
+  canEmailPlayer,
   onAssign,
   onTeamSide,
 }: PlayerRowProps) {
@@ -394,7 +531,7 @@ function PlayerRow({
   const teamValue = player.teamSide ?? "none";
 
   return (
-    <li className="flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0">
         <p className="truncate font-medium">{player.name}</p>
         <p className="truncate text-sm text-muted-foreground">{player.email}</p>
@@ -405,6 +542,13 @@ function PlayerRow({
         )}
       </div>
       <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
+        {canEmailPlayer && player.paymentStatus !== "refunded" && (
+          <SendScoringLinkButton
+            eventId={eventId}
+            registrationId={player.id}
+            disabled={disabled}
+          />
+        )}
         <Badge variant="outline" className="capitalize">
           {player.paymentStatus}
         </Badge>
@@ -453,6 +597,6 @@ function PlayerRow({
           </SelectContent>
         </Select>
       </div>
-    </li>
+    </div>
   );
 }

@@ -2,10 +2,13 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { ExternalLink, Lock, Play, Trophy } from "lucide-react";
+import { ExternalLink, Lock, Mail, Play, Trophy } from "lucide-react";
 
-import { finalizeScoring, openScoring } from "@/actions/scoring";
-import { CopyRegistrationLink } from "@/components/dashboard/copy-registration-link";
+import {
+  emailPlayersScoringLinks,
+  finalizeScoring,
+  openScoring,
+} from "@/actions/scoring";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ButtonLink } from "@/components/ui/button-link";
@@ -16,6 +19,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { getScorePageHref } from "@/lib/scoring-code-storage";
 
 type ScoringCardProps = {
   eventId: string;
@@ -47,15 +51,17 @@ export function ScoringCard({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const scoreUrl =
+  const marshalScoreUrl =
     scoringCode != null
-      ? `${appUrl}/e/${slug}/score?code=${scoringCode}`
-      : `${appUrl}/e/${slug}/score`;
+      ? `${appUrl}${getScorePageHref(slug, scoringCode)}`
+      : null;
   const leaderboardUrl = `${appUrl}/e/${slug}/leaderboard`;
 
   function runAction(action: () => Promise<{ success: boolean; error?: string }>) {
     setError(null);
+    setSuccessMessage(null);
     startTransition(async () => {
       const result = await action();
       if (!result.success) {
@@ -63,6 +69,36 @@ export function ScoringCard({
         return;
       }
       router.refresh();
+    });
+  }
+
+  function runEmailPlayers() {
+    setError(null);
+    setSuccessMessage(null);
+    startTransition(async () => {
+      const result = await emailPlayersScoringLinks(eventId);
+      if (!result.success) {
+        setError(result.error ?? "Could not email players.");
+        return;
+      }
+
+      const parts = [
+        `Emailed ${result.emailed} player${result.emailed === 1 ? "" : "s"}.`,
+      ];
+      if (result.failed > 0) {
+        parts.push(
+          `${result.failed} email${result.failed === 1 ? "" : "s"} could not be sent.`
+        );
+        if (result.warning) {
+          parts.push(result.warning);
+        }
+      }
+      if (result.skipped > 0) {
+        parts.push(
+          `${result.skipped} player${result.skipped === 1 ? "" : "s"} skipped (no scoring link or refunded).`
+        );
+      }
+      setSuccessMessage(parts.join(" "));
     });
   }
 
@@ -75,7 +111,8 @@ export function ScoringCard({
             Live scoring
           </CardTitle>
           <CardDescription>
-            Open scoring for tournament day. Share the scorer link with volunteers.
+            Open scoring for tournament day. Email players their scorecard links
+            or share each group&apos;s link from the Pairings section.
           </CardDescription>
         </div>
         <Badge variant={statusVariant[scoringStatus]}>{statusLabel[scoringStatus]}</Badge>
@@ -84,6 +121,12 @@ export function ScoringCard({
         {error && (
           <p className="text-sm text-destructive" role="alert">
             {error}
+          </p>
+        )}
+
+        {successMessage && (
+          <p className="text-sm text-muted-foreground" role="status">
+            {successMessage}
           </p>
         )}
 
@@ -103,30 +146,31 @@ export function ScoringCard({
         {scoringStatus !== "disabled" && (
           <>
             {scoringCode && (
-              <div className="space-y-2">
-                <p className="text-sm font-medium">Scoring code</p>
+              <div className="space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-3">
+                <p className="text-sm font-medium">Marshal code (organizers only)</p>
                 <p className="font-mono text-2xl font-semibold tracking-widest">
                   {scoringCode}
                 </p>
+                <p className="text-xs text-muted-foreground">
+                  For staff who need to enter scores for any group. Do not share
+                  with players.
+                </p>
+                {marshalScoreUrl && scoringStatus === "open" && (
+                  <ButtonLink
+                    variant="outline"
+                    size="sm"
+                    href={getScorePageHref(slug, scoringCode)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <ExternalLink />
+                    Open marshal scorer
+                  </ButtonLink>
+                )}
               </div>
             )}
 
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Scorer link</p>
-              <CopyRegistrationLink url={scoreUrl} />
-            </div>
-
             <div className="flex flex-wrap gap-2">
-              <ButtonLink
-                variant="outline"
-                size="sm"
-                href={`/e/${slug}/score${scoringCode ? `?code=${scoringCode}` : ""}`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <ExternalLink />
-                Open scorer page
-              </ButtonLink>
               <ButtonLink
                 variant="outline"
                 size="sm"
@@ -137,6 +181,19 @@ export function ScoringCard({
                 <ExternalLink />
                 View leaderboard
               </ButtonLink>
+
+              {scoringStatus === "open" && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={isPending}
+                  onClick={runEmailPlayers}
+                >
+                  <Mail />
+                  {isPending ? "Sending..." : "Email players"}
+                </Button>
+              )}
             </div>
 
             {scoringStatus === "open" && (

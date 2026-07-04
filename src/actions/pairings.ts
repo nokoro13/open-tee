@@ -4,6 +4,11 @@ import { and, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 import { getEventById } from "@/actions/events";
+import {
+  ensurePairingGroupScoringCode,
+  syncRegistrationScoringCode,
+} from "@/actions/scoring";
+import { syncTeeTimesForEvent } from "@/actions/start-format";
 import { getDb } from "@/db";
 import { pairingGroups, registrations } from "@/db/schema";
 import { requireOrganization } from "@/lib/auth";
@@ -48,13 +53,19 @@ export async function createPairingGroup(eventId: string): Promise<ActionResult>
 
   const nextIndex = (countResult?.count ?? 0) + 1;
 
-  await getDb()
+  const [inserted] = await getDb()
     .insert(pairingGroups)
     .values({
       eventId,
       label: `Group ${nextIndex}`,
       sortOrder: nextIndex - 1,
-    });
+    })
+    .returning({ id: pairingGroups.id });
+
+  if (inserted) {
+    await ensurePairingGroupScoringCode(inserted.id);
+    await syncTeeTimesForEvent(eventId);
+  }
 
   revalidatePath(`/dashboard/events/${eventId}`);
   return { success: true };
@@ -65,6 +76,7 @@ export async function updatePairingGroup(
   input: {
     label?: string;
     teeTime?: string | null;
+    startingHole?: number | null;
     matchType?: "singles" | "fourball" | "foursomes" | null;
   }
 ): Promise<ActionResult> {
@@ -88,12 +100,22 @@ export async function updatePairingGroup(
     return { success: false, error: "Group label is required." };
   }
 
+  if (input.startingHole !== undefined && input.startingHole !== null) {
+    const maxHole = group.event.holes === "9" ? 9 : 18;
+    if (input.startingHole < 1 || input.startingHole > maxHole) {
+      return { success: false, error: `Starting hole must be between 1 and ${maxHole}.` };
+    }
+  }
+
   await getDb()
     .update(pairingGroups)
     .set({
       ...(label !== undefined ? { label } : {}),
       ...(input.teeTime !== undefined
         ? { teeTime: input.teeTime?.trim() || null }
+        : {}),
+      ...(input.startingHole !== undefined
+        ? { startingHole: input.startingHole }
         : {}),
       ...(input.matchType !== undefined ? { matchType: input.matchType } : {}),
       updatedAt: new Date(),
@@ -121,6 +143,8 @@ export async function deletePairingGroup(groupId: string): Promise<ActionResult>
   }
 
   await getDb().delete(pairingGroups).where(eq(pairingGroups.id, groupId));
+
+  await syncTeeTimesForEvent(group.eventId);
 
   revalidatePath(`/dashboard/events/${group.eventId}`);
   return { success: true };
@@ -165,6 +189,8 @@ export async function assignRegistrationToGroup(
       updatedAt: new Date(),
     })
     .where(eq(registrations.id, registrationId));
+
+  await syncRegistrationScoringCode(registrationId);
 
   revalidatePath(`/dashboard/events/${registration.eventId}`);
   return { success: true };

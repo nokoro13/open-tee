@@ -9,6 +9,8 @@ import { PairingsPanel } from "@/components/dashboard/pairings-panel";
 import { PublishEventCard } from "@/components/dashboard/publish-event-card";
 import { RegistrationsList } from "@/components/dashboard/registrations-list";
 import { ScoringCard } from "@/components/dashboard/scoring-card";
+import { StartFormatCard } from "@/components/dashboard/start-format-card";
+import { DeleteEventButton } from "@/components/dashboard/delete-event-button";
 import { Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button-link";
 import {
@@ -23,6 +25,8 @@ import {
   getRegistrationCount,
 } from "@/lib/events";
 import { getPlatformFeeCents, getAppUrl } from "@/lib/stripe";
+import { syncEventScoringCodes } from "@/actions/scoring";
+import { syncTeeTimesForEvent } from "@/actions/start-format";
 import { getEventPairings } from "@/lib/pairings";
 import { requireOrganization } from "@/lib/auth";
 import { getEventFormatLabel } from "@/lib/event-formats";
@@ -59,7 +63,15 @@ export default async function EventDetailPage({
       : [];
   const pairings =
     event.status === "published"
-      ? await getEventPairings(event.id, org.id)
+      ? await (async () => {
+          if (event.scoringStatus !== "disabled") {
+            await syncEventScoringCodes(event.id);
+          }
+          if (event.startFormat === "tee_times") {
+            await syncTeeTimesForEvent(event.id);
+          }
+          return getEventPairings(event.id, org.id);
+        })()
       : null;
 
   return (
@@ -140,9 +152,29 @@ export default async function EventDetailPage({
         />
       )}
 
+      {event.status === "published" && (
+        <StartFormatCard
+          eventId={event.id}
+          event={{
+            startFormat: event.startFormat,
+            shotgunStartTime: event.shotgunStartTime,
+            firstTeeTime: event.firstTeeTime,
+            teeTimeIntervalMinutes: event.teeTimeIntervalMinutes,
+          }}
+        />
+      )}
+
       {event.status === "published" && pairings && (
         <PairingsPanel
           eventId={event.id}
+          slug={event.slug}
+          appUrl={getAppUrl()}
+          scoringStatus={event.scoringStatus}
+          startFormat={event.startFormat}
+          shotgunStartTime={event.shotgunStartTime}
+          firstTeeTime={event.firstTeeTime}
+          teeTimeIntervalMinutes={event.teeTimeIntervalMinutes}
+          holes={event.holes}
           format={event.format}
           teamAName={event.teamAName}
           teamBName={event.teamBName}
@@ -183,26 +215,33 @@ export default async function EventDetailPage({
               changes.
             </CardDescription>
           </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            <p>Course: {event.courseName}</p>
-            {eventWithScorecard?.eventHoles &&
-              eventWithScorecard.eventHoles.length > 0 && (
-                <p>
-                  Scorecard: Par{" "}
-                  {eventWithScorecard.eventHoles.reduce(
-                    (sum, hole) => sum + hole.par,
-                    0
-                  )}{" "}
-                  ({eventWithScorecard.eventHoles.length} holes)
-                </p>
-              )}
-            <p>Date: {event.date}</p>
-            <p>
-              Entry fee:{" "}
-              {event.entryFeeCents === 0
-                ? "Free"
-                : `$${(event.entryFeeCents / 100).toFixed(2)}`}
-            </p>
+          <CardContent className="space-y-4 text-sm text-muted-foreground">
+            <div>
+              <p>Course: {event.courseName}</p>
+              {eventWithScorecard?.eventHoles &&
+                eventWithScorecard.eventHoles.length > 0 && (
+                  <p>
+                    Scorecard: Par{" "}
+                    {eventWithScorecard.eventHoles.reduce(
+                      (sum, hole) => sum + hole.par,
+                      0
+                    )}{" "}
+                    ({eventWithScorecard.eventHoles.length} holes)
+                  </p>
+                )}
+              <p>Date: {event.date}</p>
+              <p>
+                Entry fee:{" "}
+                {event.entryFeeCents === 0
+                  ? "Free"
+                  : `$${(event.entryFeeCents / 100).toFixed(2)}`}
+              </p>
+            </div>
+            <DeleteEventButton
+              eventId={event.id}
+              eventName={event.name}
+              status={event.status}
+            />
           </CardContent>
         </Card>
       )}

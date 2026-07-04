@@ -179,12 +179,52 @@ export function formatMatchStatus(
     if (remaining > 0 && margin > remaining) {
       return `${margin} & ${remaining}`;
     }
-    return holesUp > 0 ? `${margin} UP` : `${margin} DOWN`;
+    return holesUp > 0 ? `${margin} up` : `${margin} down`;
   }
 
-  if (holesUp === 0) return "AS";
-  const lead = Math.abs(holesUp);
-  return holesUp > 0 ? `${lead} UP` : `${lead} DOWN`;
+  if (holesUp === 0) return "All square";
+
+  const margin = Math.abs(holesUp);
+  const remaining = holeCount - holesPlayed;
+  if (margin === remaining && remaining > 0) {
+    return `${margin} up (dormie)`;
+  }
+
+  return holesUp > 0 ? `${margin} up` : `${margin} down`;
+}
+
+export function formatNamedMatchStatus(
+  playerAName: string,
+  playerBName: string,
+  holesUp: number,
+  holesPlayed: number,
+  holeCount: number,
+  isComplete: boolean
+): string {
+  if (holesPlayed === 0) return "Not started";
+
+  if (isComplete) {
+    if (holesUp === 0) return "Match halved";
+    const margin = Math.abs(holesUp);
+    const remaining = holeCount - holesPlayed;
+    const winner = holesUp > 0 ? playerAName : playerBName;
+    if (remaining > 0 && margin > remaining) {
+      return `${winner} wins ${margin} & ${remaining}`;
+    }
+    return `${winner} wins ${margin} up`;
+  }
+
+  if (holesUp === 0) return "All square";
+
+  const margin = Math.abs(holesUp);
+  const remaining = holeCount - holesPlayed;
+  const leader = holesUp > 0 ? playerAName : playerBName;
+
+  if (margin === remaining && remaining > 0) {
+    return `${leader} ${margin} up (dormie)`;
+  }
+
+  return `${leader} ${margin} up`;
 }
 
 export function formatRyderPoints(points: number): string {

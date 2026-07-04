@@ -1,7 +1,4 @@
-import { ArrowLeft } from "lucide-react";
-
 import { EventForm } from "@/components/dashboard/event-form";
-import { ButtonLink } from "@/components/ui/button-link";
 import {
   Card,
   CardContent,
@@ -9,26 +6,36 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  getEventFormat,
+  getEventFormatLabel,
+  type EventFormat,
+} from "@/lib/event-formats";
 
-export default function NewEventPage() {
+type NewEventPageProps = {
+  searchParams: Promise<{ format?: string }>;
+};
+
+function resolveFormat(format?: string): EventFormat | undefined {
+  if (!format) return undefined;
+  return getEventFormat(format)?.value;
+}
+
+export default async function NewEventPage({ searchParams }: NewEventPageProps) {
+  const { format: formatParam } = await searchParams;
+  const format = resolveFormat(formatParam);
+  const formatMeta = format ? getEventFormat(format) : undefined;
+
   return (
     <div className="space-y-6">
-      <ButtonLink
-        variant="ghost"
-        size="sm"
-        href="/dashboard"
-        className="-ml-2 w-fit"
-      >
-        <ArrowLeft />
-        Back to events
-      </ButtonLink>
-
       <div>
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-          New event
+          {formatMeta ? `New ${formatMeta.label} event` : "New event"}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground sm:text-base">
-          Set up a draft tournament. Registration and payments come in Sprint 2.
+          {formatMeta
+            ? formatMeta.description
+            : "Set up a draft tournament. You can change the format anytime while editing."}
         </p>
       </div>
 
@@ -36,11 +43,13 @@ export default function NewEventPage() {
         <CardHeader>
           <CardTitle>Event details</CardTitle>
           <CardDescription>
-            You can edit this anytime while the event is in draft.
+            {format
+              ? `Starting with ${getEventFormatLabel(format)}. You can edit this anytime while the event is in draft.`
+              : "You can edit this anytime while the event is in draft."}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <EventForm />
+          <EventForm defaultFormat={format} />
         </CardContent>
       </Card>
     </div>

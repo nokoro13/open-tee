@@ -15,3 +15,11 @@ export function getScorePageHref(slug: string, code?: string | null): string {
   if (!code?.trim()) return base;
   return `${base}?code=${encodeURIComponent(code.trim().toUpperCase())}`;
 }
+
+export function getGroupScorePageUrl(
+  appUrl: string,
+  slug: string,
+  code: string
+): string {
+  return `${appUrl}${getScorePageHref(slug, code)}`;
+}

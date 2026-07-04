@@ -11,6 +11,7 @@ import {
   getEntityColumnLabel,
   getEventFormatLabel,
   getTotalColumnLabel,
+  isMatchPlayFormat,
 } from "@/lib/event-formats";
 import {
   getScorePageHref,
@@ -45,6 +46,31 @@ type LeaderboardViewProps = {
   initialData: LeaderboardPayload;
   pollIntervalMs?: number;
 };
+
+function MatchEntryNames({
+  entry,
+}: {
+  entry: LeaderboardEntry;
+}) {
+  const match = entry.matchPlayers;
+
+  if (!match) {
+    return <p className="font-medium">{entry.name}</p>;
+  }
+
+  const playerAClass =
+    match.leader === "a" ? "font-semibold text-primary" : "font-medium";
+  const playerBClass =
+    match.leader === "b" ? "font-semibold text-primary" : "font-medium";
+
+  return (
+    <p className="font-medium">
+      <span className={playerAClass}>{match.playerAName}</span>
+      <span className="text-muted-foreground"> vs </span>
+      <span className={playerBClass}>{match.playerBName}</span>
+    </p>
+  );
+}
 
 export function LeaderboardView({
   slug,
@@ -91,6 +117,7 @@ export function LeaderboardView({
   const totalLabel = getTotalColumnLabel(event.format);
   const entityLabel = getEntityColumnLabel(event.format);
   const showToPar = formatShowsToPar(event.format);
+  const isMatchPlay = isMatchPlayFormat(event.format);
   const scoringAvailable = event.scoringStatus !== "disabled";
   const scorecardLabel =
     event.scoringStatus === "open" ? "Enter scores" : "View scorecard";
@@ -172,7 +199,9 @@ export function LeaderboardView({
         <Card className="mt-6">
           <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
             <div>
-              <CardTitle>{ryderCup ? "Matches" : "Leaderboard"}</CardTitle>
+              <CardTitle>
+                {ryderCup || isMatchPlay ? "Matches" : "Leaderboard"}
+              </CardTitle>
               <CardDescription>
                 {event.scoringStatus === "disabled"
                   ? "Scoring has not started yet."
@@ -220,7 +249,7 @@ export function LeaderboardView({
                           {entry.total === null ? "—" : entry.rank}
                         </td>
                         <td className="py-3 pr-2">
-                          <p className="font-medium">{entry.name}</p>
+                          <MatchEntryNames entry={entry} />
                           {entry.subtitle && (
                             <p className="text-xs text-muted-foreground">
                               {entry.subtitle}

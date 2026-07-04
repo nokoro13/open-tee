@@ -1,9 +1,6 @@
-import { CalendarPlus } from "lucide-react";
-
 import { getEventsForOrg } from "@/actions/events";
 import { EventCard } from "@/components/dashboard/event-card";
 import { requireOrganization } from "@/lib/auth";
-import { ButtonLink } from "@/components/ui/button-link";
 import {
   Card,
   CardContent,
@@ -18,24 +15,14 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            Your events
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground sm:text-base">
-            {org.name} · {eventList.length}{" "}
-            {eventList.length === 1 ? "event" : "events"}
-          </p>
-        </div>
-        <ButtonLink
-          size="lg"
-          href="/dashboard/events/new"
-          className="h-11 w-full sm:w-auto"
-        >
-          <CalendarPlus />
-          New event
-        </ButtonLink>
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+          Your events
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground sm:text-base">
+          {org.name} · {eventList.length}{" "}
+          {eventList.length === 1 ? "event" : "events"}
+        </p>
       </div>
 
       {eventList.length === 0 ? (
@@ -43,19 +30,15 @@ export default async function DashboardPage() {
           <CardHeader>
             <CardTitle>No events yet</CardTitle>
             <CardDescription>
-              Create your first tournament draft. You can build for free and
-              publish when you&apos;re ready.
+              Pick a format from the sidebar to create your first tournament
+              draft. You can build for free and publish when you&apos;re ready.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ButtonLink
-              size="lg"
-              href="/dashboard/events/new"
-              className="h-11 w-full sm:w-auto"
-            >
-              <CalendarPlus />
-              Create draft event
-            </ButtonLink>
+            <p className="text-sm text-muted-foreground">
+              Use the <span className="font-medium text-foreground">Create</span>{" "}
+              section in the sidebar to jump straight into an event form.
+            </p>
           </CardContent>
         </Card>
       ) : (

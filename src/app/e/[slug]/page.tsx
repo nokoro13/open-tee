@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Calendar, Flag, MapPin, Trophy } from "lucide-react";
+import { Calendar, Clock, Flag, MapPin, Trophy } from "lucide-react";
 
 import {
   formatEventDate,
@@ -10,6 +10,7 @@ import {
   isRegistrationOpen,
 } from "@/lib/events";
 import { getEventFormatLabel } from "@/lib/event-formats";
+import { getStartFormatSummary } from "@/lib/start-format";
 import { RegistrationForm } from "@/components/public/registration-form";
 import { ButtonLink } from "@/components/ui/button-link";
 import { Badge } from "@/components/ui/badge";
@@ -80,6 +81,15 @@ export default async function PublicEventPage({
           <div className="flex items-center gap-2.5 text-muted-foreground">
             <MapPin className="size-4 shrink-0 text-primary" />
             {event.courseName}
+          </div>
+          <div className="flex items-center gap-2.5 text-muted-foreground">
+            <Clock className="size-4 shrink-0 text-primary" />
+            {getStartFormatSummary({
+              startFormat: event.startFormat,
+              shotgunStartTime: event.shotgunStartTime,
+              firstTeeTime: event.firstTeeTime,
+              teeTimeIntervalMinutes: event.teeTimeIntervalMinutes,
+            })}
           </div>
           <div className="flex items-center gap-2.5 text-muted-foreground">
             <Trophy className="size-4 shrink-0 text-primary" />

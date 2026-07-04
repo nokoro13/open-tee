@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Calendar, ChevronRight, MapPin } from "lucide-react";
 
 import type { Event } from "@/db/schema";
+import { DeleteEventButton } from "@/components/dashboard/delete-event-button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { getEventFormatLabel } from "@/lib/event-formats";
@@ -29,9 +30,12 @@ const statusLabels: Record<Event["status"], string> = {
 
 export function EventCard({ event }: { event: Event }) {
   return (
-    <Link href={`/dashboard/events/${event.id}`} className="block">
-      <Card className="border-border/60 transition-shadow hover:shadow-md active:scale-[0.99]">
-        <CardContent className="flex items-center gap-4 pt-4">
+    <Card className="border-border/60 transition-shadow hover:shadow-md">
+      <CardContent className="flex items-center gap-2 sm:gap-4">
+        <Link
+          href={`/dashboard/events/${event.id}`}
+          className="flex min-w-0 flex-1 items-center gap-4 active:scale-[0.99]"
+        >
           <div className="flex min-w-0 flex-1 flex-col gap-2">
             <div className="flex flex-wrap items-center gap-2">
               <Badge
@@ -57,8 +61,14 @@ export function EventCard({ event }: { event: Event }) {
             </p>
           </div>
           <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
-        </CardContent>
-      </Card>
-    </Link>
+        </Link>
+        <DeleteEventButton
+          eventId={event.id}
+          eventName={event.name}
+          status={event.status}
+          variant="compact"
+        />
+      </CardContent>
+    </Card>
   );
 }

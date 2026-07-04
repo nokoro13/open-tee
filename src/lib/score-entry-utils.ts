@@ -1,4 +1,8 @@
 import { formatScoreToPar } from "@/lib/scorecard";
+import {
+  computeSinglesMatch,
+  formatNamedMatchStatus,
+} from "@/lib/format-scoring";
 
 export type RunningScore = {
   id: string;
@@ -7,6 +11,15 @@ export type RunningScore = {
   thru: number;
   toPar: number | null;
   toParDisplay: string | null;
+};
+
+export type MatchRunningScore = {
+  playerA: { id: string; label: string };
+  playerB: { id: string; label: string };
+  status: string;
+  thru: number;
+  playerATotal: number | null;
+  playerBTotal: number | null;
 };
 
 export type HoleScoreStatus = {
@@ -57,6 +70,57 @@ export function computeRunningScores(
   return entries.map((entry) =>
     computeRunningScore(entry.id, entry.label, scores, holeNumbers, parByHole)
   );
+}
+
+export function computeMatchRunningScore(
+  playerA: { id: string; label: string },
+  playerB: { id: string; label: string },
+  scores: Record<string, Record<number, number>>,
+  holeNumbers: number[],
+  holeCount: number,
+  parByHole: Record<number, number> = {}
+): MatchRunningScore {
+  const scoresA = new Map<number, number>();
+  const scoresB = new Map<number, number>();
+
+  for (const hole of holeNumbers) {
+    const a = scores[playerA.id]?.[hole];
+    const b = scores[playerB.id]?.[hole];
+    if (a != null) scoresA.set(hole, a);
+    if (b != null) scoresB.set(hole, b);
+  }
+
+  const result = computeSinglesMatch(scoresA, scoresB, holeNumbers);
+  const runningA = computeRunningScore(
+    playerA.id,
+    playerA.label,
+    scores,
+    holeNumbers,
+    parByHole
+  );
+  const runningB = computeRunningScore(
+    playerB.id,
+    playerB.label,
+    scores,
+    holeNumbers,
+    parByHole
+  );
+
+  return {
+    playerA,
+    playerB,
+    status: formatNamedMatchStatus(
+      playerA.label,
+      playerB.label,
+      result.holesUp,
+      result.holesPlayed,
+      holeCount,
+      result.isComplete
+    ),
+    thru: result.holesPlayed,
+    playerATotal: runningA.total,
+    playerBTotal: runningB.total,
+  };
 }
 
 export function findStartingHoleIndex(

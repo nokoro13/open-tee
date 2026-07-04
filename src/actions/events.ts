@@ -14,6 +14,13 @@ import {
 import type { EventFormat } from "@/lib/event-formats";
 import { getEventFormat } from "@/lib/event-formats";
 import { generateEventSlug } from "@/lib/slug";
+import type { StartFormat } from "@/lib/start-format";
+import {
+  DEFAULT_FIRST_TEE_TIME,
+  DEFAULT_SHOTGUN_START_TIME,
+  DEFAULT_TEE_TIME_INTERVAL_MINUTES,
+  validateStartFormatSettings,
+} from "@/lib/start-format";
 
 export type EventFormInput = {
   name: string;
@@ -29,6 +36,10 @@ export type EventFormInput = {
   description?: string;
   teamAName?: string;
   teamBName?: string;
+  startFormat: StartFormat;
+  shotgunStartTime?: string | null;
+  firstTeeTime?: string | null;
+  teeTimeIntervalMinutes?: number | null;
 };
 
 export type ActionResult =
@@ -64,7 +75,35 @@ function parseEventInput(input: EventFormInput): EventFormInput | ActionResult {
     }
   }
 
+  const startFormatError = validateStartFormatSettings({
+    startFormat: input.startFormat,
+    shotgunStartTime: input.shotgunStartTime ?? null,
+    firstTeeTime: input.firstTeeTime ?? null,
+    teeTimeIntervalMinutes: input.teeTimeIntervalMinutes ?? null,
+  });
+  if (startFormatError) {
+    return { success: false, error: startFormatError };
+  }
+
   return input;
+}
+
+function startFormatValues(input: EventFormInput) {
+  return {
+    startFormat: input.startFormat,
+    shotgunStartTime:
+      input.startFormat === "shotgun"
+        ? input.shotgunStartTime?.trim() || DEFAULT_SHOTGUN_START_TIME
+        : null,
+    firstTeeTime:
+      input.startFormat === "tee_times"
+        ? input.firstTeeTime?.trim() || DEFAULT_FIRST_TEE_TIME
+        : null,
+    teeTimeIntervalMinutes:
+      input.startFormat === "tee_times"
+        ? input.teeTimeIntervalMinutes ?? DEFAULT_TEE_TIME_INTERVAL_MINUTES
+        : null,
+  };
 }
 
 async function persistScorecard(
@@ -135,6 +174,7 @@ export async function createEvent(
         parsed.format === "ryder_cup" ? parsed.teamAName?.trim() || null : null,
       teamBName:
         parsed.format === "ryder_cup" ? parsed.teamBName?.trim() || null : null,
+      ...startFormatValues(parsed),
       status: "draft",
     })
     .returning();
@@ -185,6 +225,7 @@ export async function updateEvent(
         parsed.format === "ryder_cup" ? parsed.teamAName?.trim() || null : null,
       teamBName:
         parsed.format === "ryder_cup" ? parsed.teamBName?.trim() || null : null,
+      ...startFormatValues(parsed),
       updatedAt: new Date(),
     })
     .where(and(eq(events.id, id), eq(events.orgId, org.id)));
@@ -202,13 +243,6 @@ export async function deleteEvent(id: string): Promise<ActionResult> {
 
   if (!existing) {
     return { success: false, error: "Event not found." };
-  }
-
-  if (existing.status !== "draft") {
-    return {
-      success: false,
-      error: "Only draft events can be deleted.",
-    };
   }
 
   await getDb()

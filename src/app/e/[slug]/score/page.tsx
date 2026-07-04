@@ -7,8 +7,8 @@ import {
   getScoresForEvent,
   getPublishedEventForScoring,
   isScoringEditable,
+  resolveScoringAccess,
   scoresToMap,
-  validateScoringCode,
 } from "@/lib/scoring";
 import {
   ScoreEntryForm,
@@ -75,7 +75,8 @@ export default async function ScorePage({ params, searchParams }: ScorePageProps
     );
   }
 
-  if (!validateScoringCode(event, code)) {
+  const access = await resolveScoringAccess(event.id, event, code);
+  if (!access) {
     return (
       <ScorePageShell slug={slug}>
         <div className="space-y-4">
@@ -88,15 +89,30 @@ export default async function ScorePage({ params, searchParams }: ScorePageProps
     );
   }
 
-  const [groups, scores] = await Promise.all([
-    getScoreEntryGroups(event.id, event.format),
-    getScoresForEvent(event.id),
-  ]);
+  const allGroups = await getScoreEntryGroups(event.id, event.format);
+  const allowGroupSwitch = access.type === "marshal";
+  const visibleGroups =
+    access.type === "group"
+      ? allGroups.filter((group) => group.id === access.groupId)
+      : allGroups;
+
+  if (visibleGroups.length === 0) {
+    return (
+      <ScorePageShell slug={slug}>
+        <div className="rounded-2xl border border-border/70 bg-card px-6 py-10 text-center text-sm text-muted-foreground shadow-sm">
+          No players or groups are available for this scoring code yet. Ask the
+          organizer to confirm your pairing assignment.
+        </div>
+      </ScorePageShell>
+    );
+  }
+
+  const [scores] = await Promise.all([getScoresForEvent(event.id)]);
 
   const scoreMap = scoresToMap(
     scores,
     event.format,
-    groups.map((g) => ({ id: g.id, matchType: g.matchType ?? null }))
+    allGroups.map((g) => ({ id: g.id, matchType: g.matchType ?? null }))
   );
   const initialScores: Record<string, Record<number, number>> = {};
   for (const [key, holes] of scoreMap.entries()) {
@@ -118,9 +134,11 @@ export default async function ScorePage({ params, searchParams }: ScorePageProps
       holes={event.holes}
       holeNumbers={getHoleNumbers(event.holes)}
       parByHole={parByHole}
-      groups={groups}
+      groups={visibleGroups}
       initialScores={initialScores}
       readOnly={readOnly}
+      allowGroupSwitch={allowGroupSwitch}
+      lockedGroupId={access.type === "group" ? access.groupId : undefined}
     />
   );
 }

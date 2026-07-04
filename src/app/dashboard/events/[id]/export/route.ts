@@ -31,6 +31,9 @@ export async function GET(_request: Request, { params }: ExportRouteProps) {
     reg.paymentStatus,
     reg.pairingGroup?.label ?? "",
     reg.pairingGroup?.teeTime ?? "",
+    reg.pairingGroup?.startingHole != null
+      ? String(reg.pairingGroup.startingHole)
+      : "",
     reg.createdAt.toISOString(),
   ]);
 
@@ -42,6 +45,7 @@ export async function GET(_request: Request, { params }: ExportRouteProps) {
       "Payment Status",
       "Group",
       "Tee Time",
+      "Starting Hole",
       "Registered At",
     ],
     rows

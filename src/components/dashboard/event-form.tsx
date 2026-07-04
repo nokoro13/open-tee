@@ -5,7 +5,6 @@ import { useState, useTransition } from "react";
 
 import {
   createEvent,
-  deleteEvent,
   updateEvent,
   type EventFormInput,
 } from "@/actions/events";
@@ -13,6 +12,7 @@ import {
   CoursePicker,
   type CourseSelection,
 } from "@/components/dashboard/course-picker";
+import { DeleteEventButton } from "@/components/dashboard/delete-event-button";
 import type { Event, EventHole } from "@/db/schema";
 import { Button } from "@/components/ui/button";
 import {
@@ -50,9 +50,15 @@ import {
   getEventFormatLabel,
   type EventFormat,
 } from "@/lib/event-formats";
+import {
+  defaultStartFormatFieldValues,
+  StartFormatFields,
+  type StartFormatFieldValues,
+} from "@/components/dashboard/start-format-fields";
 
 type EventFormProps = {
   event?: Event & { eventHoles?: EventHole[] };
+  defaultFormat?: EventFormat;
 };
 
 const defaultCourseSelection = (): CourseSelection => ({
@@ -76,9 +82,10 @@ const defaultValues: Omit<EventFormInput, keyof CourseSelection> & CourseSelecti
   description: "",
   teamAName: DEFAULT_TEAM_A_NAME,
   teamBName: DEFAULT_TEAM_B_NAME,
+  ...defaultStartFormatFieldValues(),
 };
 
-export function EventForm({ event }: EventFormProps) {
+export function EventForm({ event, defaultFormat }: EventFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -99,6 +106,10 @@ export function EventForm({ event }: EventFormProps) {
       : defaultCourseSelection()
   );
 
+  const [startFormatValues, setStartFormatValues] = useState<StartFormatFieldValues>(
+    () => defaultStartFormatFieldValues(event)
+  );
+
   const [form, setForm] = useState(() =>
     event
       ? {
@@ -115,7 +126,7 @@ export function EventForm({ event }: EventFormProps) {
       : {
           name: defaultValues.name,
           date: defaultValues.date,
-          format: defaultValues.format,
+          format: defaultFormat ?? defaultValues.format,
           holes: defaultValues.holes,
           maxPlayers: defaultValues.maxPlayers,
           entryFeeDollars: defaultValues.entryFeeDollars,
@@ -128,6 +139,7 @@ export function EventForm({ event }: EventFormProps) {
   function buildPayload(): EventFormInput {
     return {
       ...form,
+      ...startFormatValues,
       courseName: courseSelection.courseName,
       externalCourseId: courseSelection.externalCourseId,
       nineSide: courseSelection.nineSide,
@@ -166,19 +178,6 @@ export function EventForm({ event }: EventFormProps) {
 
       if (event) {
         router.refresh();
-      }
-    });
-  }
-
-  function handleDelete() {
-    if (!event) return;
-    if (!confirm("Delete this draft event? This cannot be undone.")) return;
-
-    setError(null);
-    startTransition(async () => {
-      const result = await deleteEvent(event.id);
-      if ("success" in result && !result.success) {
-        setError(result.error);
       }
     });
   }
@@ -278,6 +277,21 @@ export function EventForm({ event }: EventFormProps) {
           </Field>
         </div>
 
+        <div className="rounded-xl border border-border/70 bg-muted/10 p-4 sm:p-5">
+          <div className="mb-4">
+            <h3 className="text-sm font-semibold">Start schedule</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Choose shotgun or tee times, then assign groups in pairings after
+              publishing.
+            </p>
+          </div>
+          <StartFormatFields
+            values={startFormatValues}
+            onChange={setStartFormatValues}
+            disabled={isPending}
+          />
+        </div>
+
         {form.format === "ryder_cup" && (
           <div className="grid gap-5 sm:grid-cols-2">
             <Field>
@@ -373,17 +387,12 @@ export function EventForm({ event }: EventFormProps) {
               : "Create draft event"}
         </Button>
 
-        {event && event.status === "draft" && (
-          <Button
-            type="button"
-            variant="destructive"
-            size="lg"
-            className="h-11 w-full sm:w-auto"
-            disabled={isPending}
-            onClick={handleDelete}
-          >
-            Delete draft
-          </Button>
+        {event && (
+          <DeleteEventButton
+            eventId={event.id}
+            eventName={event.name}
+            status={event.status}
+          />
         )}
       </div>
     </form>

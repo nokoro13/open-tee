@@ -31,9 +31,10 @@ import {
   getDefaultScoreForHole,
   ScoreStepper,
 } from "@/components/public/score-stepper";
-import type { RunningScore } from "@/lib/score-entry-utils";
+import type { MatchRunningScore, RunningScore } from "@/lib/score-entry-utils";
 import type { ScoreEntryGroup } from "@/lib/scoring";
 import {
+  computeMatchRunningScore,
   computeRunningScores,
   countCompletedHoles,
   findStartingHoleIndex,
@@ -43,6 +44,7 @@ import {
 import {
   getEventFormatLabel,
   getScoreEntrySubtitle,
+  isMatchPlayFormat,
   isTeamHoleScoring,
 } from "@/lib/event-formats";
 import {
@@ -63,6 +65,8 @@ type ScoreEntryFormProps = {
   groups: ScoreEntryGroup[];
   initialScores: Record<string, Record<number, number>>;
   readOnly: boolean;
+  allowGroupSwitch?: boolean;
+  lockedGroupId?: string;
 };
 
 type SlideDirection = "forward" | "back";
@@ -139,6 +143,71 @@ function RunningScoreCard({
   );
 }
 
+function MatchStatusCard({
+  match,
+  compact,
+}: {
+  match: MatchRunningScore;
+  compact?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-2xl border border-border/70 bg-card shadow-sm",
+        compact ? "p-3" : "p-4"
+      )}
+    >
+      <p
+        className={cn(
+          "font-medium text-muted-foreground",
+          compact ? "text-xs" : "text-sm"
+        )}
+      >
+        Match status
+      </p>
+      <p
+        className={cn(
+          "mt-2 font-semibold leading-tight tracking-tight",
+          compact ? "text-lg" : "text-xl sm:text-2xl"
+        )}
+      >
+        {match.status}
+      </p>
+      <div
+        className={cn(
+          "mt-3 grid grid-cols-3 gap-2 text-center",
+          compact ? "text-xs" : "text-sm"
+        )}
+      >
+        <div>
+          <p className="truncate font-medium">{match.playerA.label}</p>
+          <p className="mt-1 font-semibold tabular-nums">
+            {match.playerATotal ?? "—"}
+          </p>
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            Strokes
+          </p>
+        </div>
+        <div>
+          <p className="font-semibold tabular-nums">{match.thru}</p>
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            Holes
+          </p>
+        </div>
+        <div>
+          <p className="truncate font-medium">{match.playerB.label}</p>
+          <p className="mt-1 font-semibold tabular-nums">
+            {match.playerBTotal ?? "—"}
+          </p>
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            Strokes
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ScoreEntryForm({
   slug,
   code,
@@ -150,6 +219,8 @@ export function ScoreEntryForm({
   groups,
   initialScores,
   readOnly,
+  allowGroupSwitch = false,
+  lockedGroupId,
 }: ScoreEntryFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -158,7 +229,11 @@ export function ScoreEntryForm({
   const [showScorecard, setShowScorecard] = useState(false);
   const [slideDirection, setSlideDirection] = useState<SlideDirection>("forward");
 
-  const [selectedGroupId, setSelectedGroupId] = useState(groups[0]?.id ?? "");
+  const defaultGroupId =
+    lockedGroupId && groups.some((group) => group.id === lockedGroupId)
+      ? lockedGroupId
+      : (groups[0]?.id ?? "");
+  const [selectedGroupId, setSelectedGroupId] = useState(defaultGroupId);
   const [scores, setScores] = useState(initialScores);
 
   const selectedGroup = groups.find((g) => g.id === selectedGroupId);
@@ -200,6 +275,20 @@ export function ScoreEntryForm({
     parByHole
   );
 
+  const isMatchPlay =
+    isMatchPlayFormat(format) && scoreEntries.length === 2 && !isTeamHoleScoring(format);
+  const matchRunningScore =
+    isMatchPlay && scoreEntries[0] && scoreEntries[1]
+      ? computeMatchRunningScore(
+          scoreEntries[0],
+          scoreEntries[1],
+          scores,
+          holeNumbers,
+          totalHoles,
+          parByHole
+        )
+      : null;
+
   const holeStatuses = getHoleStatuses(
     holeNumbers,
     entryIds,
@@ -233,6 +322,7 @@ export function ScoreEntryForm({
   }
 
   function handleGroupChange(groupId: string) {
+    if (!allowGroupSwitch) return;
     const newGroup = groups.find((g) => g.id === groupId);
     if (!newGroup) return;
 
@@ -354,6 +444,46 @@ export function ScoreEntryForm({
     readOnly,
     onSelectHole: handleSelectHole,
   };
+
+  const groupLabelBlock = (
+    <div className="shrink-0 space-y-2">
+      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        Group
+      </p>
+      {allowGroupSwitch ? (
+        <Select
+          value={selectedGroupId}
+          disabled={isPending}
+          onValueChange={(value) => value && handleGroupChange(value)}
+        >
+          <SelectTrigger className="h-9 w-full bg-card">
+            <SelectValue placeholder="Select group">
+              {selectedGroup?.label}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {groups.map((group) => (
+              <SelectItem key={group.id} value={group.id}>
+                {group.label}
+                {group.players.length > 1
+                  ? ` (${group.players.length} players)`
+                  : ""}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ) : (
+        <div className="rounded-lg border border-border bg-card px-3 py-2">
+          <p className="font-medium">{selectedGroup?.label}</p>
+          {selectedGroup && selectedGroup.players.length > 0 && (
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">
+              {selectedGroup.players.map((player) => player.name).join(", ")}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
 
   const actionBar = (
     <div className="flex items-center gap-2 sm:gap-3">
@@ -537,37 +667,16 @@ export function ScoreEntryForm({
             </div>
           </div>
 
-          <div className="shrink-0 space-y-2">
-            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Group
-            </label>
-            <Select
-              value={selectedGroupId}
-              disabled={isPending}
-              onValueChange={(value) => value && handleGroupChange(value)}
-            >
-              <SelectTrigger className="h-9 w-full bg-card">
-                <SelectValue placeholder="Select group">
-                  {selectedGroup?.label}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {groups.map((group) => (
-                  <SelectItem key={group.id} value={group.id}>
-                    {group.label}
-                    {group.players.length > 1
-                      ? ` (${group.players.length} players)`
-                      : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {groupLabelBlock}
 
           <div className="shrink-0 space-y-2">
-            {runningScores.map((running) => (
-              <RunningScoreCard key={running.id} running={running} compact />
-            ))}
+            {matchRunningScore ? (
+              <MatchStatusCard match={matchRunningScore} compact />
+            ) : (
+              runningScores.map((running) => (
+                <RunningScoreCard key={running.id} running={running} compact />
+              ))
+            )}
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/70 bg-card p-3 shadow-sm">
@@ -576,36 +685,23 @@ export function ScoreEntryForm({
         </aside>
 
         {/* Mobile stats + group */}
-        <div className="shrink-0 space-y-2 lg:hidden">
-          <Select
-            value={selectedGroupId}
-            disabled={isPending}
-            onValueChange={(value) => value && handleGroupChange(value)}
-          >
-            <SelectTrigger className="h-9 w-full bg-card">
-              <SelectValue placeholder="Select group">
-                {selectedGroup?.label}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {groups.map((group) => (
-                <SelectItem key={group.id} value={group.id}>
-                  {group.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="shrink-0 space-y-2 lg:hidden">{groupLabelBlock}</div>
 
-          <div
-            className={cn(
-              "grid gap-2",
-              runningScores.length > 1 ? "grid-cols-2" : "grid-cols-1"
-            )}
-          >
-            {runningScores.map((running) => (
-              <RunningScoreCard key={running.id} running={running} />
-            ))}
-          </div>
+        <div className="shrink-0 space-y-2 lg:hidden">
+          {matchRunningScore ? (
+            <MatchStatusCard match={matchRunningScore} />
+          ) : (
+            <div
+              className={cn(
+                "grid gap-2",
+                runningScores.length > 1 ? "grid-cols-2" : "grid-cols-1"
+              )}
+            >
+              {runningScores.map((running) => (
+                <RunningScoreCard key={running.id} running={running} />
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Hole entry */}
@@ -627,15 +723,19 @@ export function ScoreEntryForm({
                   All {totalHoles} holes scored for {selectedGroup?.label}
                 </p>
                 <div className="mt-6 space-y-2">
-                  {runningScores.map((running) => (
-                    <p
-                      key={running.id}
-                      className="text-lg font-medium tabular-nums"
-                    >
-                      {running.label}: {running.total}
-                      {running.toParDisplay ? ` (${running.toParDisplay})` : ""}
-                    </p>
-                  ))}
+                  {matchRunningScore ? (
+                    <p className="text-lg font-medium">{matchRunningScore.status}</p>
+                  ) : (
+                    runningScores.map((running) => (
+                      <p
+                        key={running.id}
+                        className="text-lg font-medium tabular-nums"
+                      >
+                        {running.label}: {running.total}
+                        {running.toParDisplay ? ` (${running.toParDisplay})` : ""}
+                      </p>
+                    ))
+                  )}
                 </div>
                 <ButtonLink
                   href={`/e/${slug}/leaderboard`}
@@ -683,14 +783,7 @@ export function ScoreEntryForm({
                       )}
                     </p>
 
-                    <div
-                      className={cn(
-                        "mt-4 grid w-full max-w-lg gap-4 sm:mt-6 sm:gap-6 lg:mt-8 lg:gap-8",
-                        scoreEntries.length > 1
-                          ? "grid-cols-2 sm:grid-cols-2"
-                          : "grid-cols-1 place-items-center"
-                      )}
-                    >
+                    <div className="mt-4 flex w-full max-w-xl flex-wrap items-start justify-center gap-8 sm:mt-6 sm:gap-12 lg:mt-8">
                       {scoreEntries.map((entry) => (
                         <ScoreStepper
                           key={entry.id}
@@ -778,7 +871,7 @@ export function ScoringCodeForm({ slug }: ScoringCodeFormProps) {
           Enter scoring code
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Ask the organizer for the code to enter scores
+          Enter the code for your group from the organizer
         </p>
       </div>
       <form onSubmit={handleSubmit} className="space-y-4 p-6">

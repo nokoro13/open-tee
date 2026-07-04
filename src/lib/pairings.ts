@@ -9,8 +9,10 @@ export type PairingGroupWithPlayers = {
   id: string;
   label: string;
   teeTime: string | null;
+  startingHole: number | null;
   matchType: string | null;
   sortOrder: number;
+  scoringCode: string | null;
   players: {
     id: string;
     name: string;
@@ -30,6 +32,7 @@ export type EventPairings = {
     handicap: string | null;
     paymentStatus: string;
     teamSide: string | null;
+    scoringCode: string | null;
   }[];
 };
 
@@ -66,8 +69,10 @@ export async function getEventPairings(
       id: group.id,
       label: group.label,
       teeTime: group.teeTime,
+      startingHole: group.startingHole,
       matchType: group.matchType,
       sortOrder: group.sortOrder,
+      scoringCode: group.scoringCode,
       players: group.registrations.map((reg) => ({
         id: reg.id,
         name: reg.name,
@@ -84,6 +89,7 @@ export async function getEventPairings(
       handicap: reg.handicap,
       paymentStatus: reg.paymentStatus,
       teamSide: reg.teamSide,
+      scoringCode: reg.scoringCode,
     })),
   };
 }

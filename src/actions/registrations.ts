@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { getDb } from "@/db";
 import { registrations } from "@/db/schema";
 import { sendRegistrationConfirmationEmail } from "@/lib/email";
+import { syncRegistrationScoringCode } from "@/actions/scoring";
 import { getEventFormatLabel } from "@/lib/event-formats";
 import {
   getPublishedEventBySlug,
@@ -90,14 +91,21 @@ export async function registerForEvent(
           updatedAt: new Date(),
         })
         .where(eq(registrations.id, existing.id));
+      await syncRegistrationScoringCode(existing.id);
     } else {
-      await getDb().insert(registrations).values({
-        eventId: event.id,
-        name: parsed.name,
-        email: parsed.email,
-        handicap: parsed.handicap ?? null,
-        paymentStatus: "comped",
-      });
+      const [registration] = await getDb()
+        .insert(registrations)
+        .values({
+          eventId: event.id,
+          name: parsed.name,
+          email: parsed.email,
+          handicap: parsed.handicap ?? null,
+          paymentStatus: "comped",
+        })
+        .returning({ id: registrations.id });
+      if (registration) {
+        await syncRegistrationScoringCode(registration.id);
+      }
     }
 
     try {
@@ -208,6 +216,8 @@ export async function handleRegistrationPaid(
       updatedAt: new Date(),
     })
     .where(eq(registrations.id, registrationId));
+
+  await syncRegistrationScoringCode(registrationId);
 
   const event = registration.event;
   const appUrl = getAppUrl();

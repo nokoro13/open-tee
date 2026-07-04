@@ -43,15 +43,24 @@ export function ScoreStepper({
   }
 
   return (
-    <div className={cn("relative inline-flex shrink-0", className)}>
-      <div
+    <div className={cn("flex flex-col items-center", className)}>
+      <p
         className={cn(
-          "flex flex-col items-center rounded-[2rem] bg-gradient-to-b from-primary/15 to-primary/5 shadow-inner",
-          large
-            ? "w-18 px-2 py-3 sm:w-24 sm:px-3 sm:py-6"
-            : "w-[4.5rem] px-2 py-3"
+          "mb-3 max-w-[9rem] text-center font-semibold leading-tight sm:max-w-[11rem]",
+          large ? "text-sm sm:text-base" : "text-sm"
         )}
       >
+        {label}
+      </p>
+      <div className="relative inline-flex shrink-0">
+        <div
+          className={cn(
+            "flex flex-col items-center rounded-[2rem] bg-gradient-to-b from-primary/15 to-primary/5 shadow-inner",
+            large
+              ? "w-18 px-2 py-3 sm:w-24 sm:px-3 sm:py-6"
+              : "w-[4.5rem] px-2 py-3"
+          )}
+        >
         <button
           type="button"
           aria-label={`Increase ${label} score`}
@@ -89,7 +98,7 @@ export function ScoreStepper({
             className={cn("text-muted-foreground", large ? "size-5 sm:size-6" : "size-5")}
           />
         </button>
-      </div>
+        </div>
       {hint && (
         <span
           className={cn(
@@ -100,6 +109,7 @@ export function ScoreStepper({
           {hint}
         </span>
       )}
+      </div>
     </div>
   );
 }

@@ -135,7 +135,7 @@ export const EVENT_FORMATS = [
   {
     value: "match_play",
     label: "Match play",
-    description: "Head-to-head — most holes won wins the match.",
+    description: "USGA singles match play — most holes won wins the match.",
     category: "match",
     entryMode: "individual_hole",
     leaderboardMode: "match",
@@ -150,17 +150,18 @@ export const EVENT_FORMATS = [
   {
     value: "head_to_head",
     label: "Head to head",
-    description: "Two-player stroke play — lowest total wins.",
+    description:
+      "USGA singles match play — two players compete hole by hole; most holes won wins the match.",
     category: "match",
     entryMode: "individual_hole",
-    leaderboardMode: "individual_stroke",
-    sortDirection: "asc",
+    leaderboardMode: "match",
+    sortDirection: "desc",
     defaultGroupSize: 2,
     minGroupSize: 2,
     maxGroupSize: 2,
-    totalColumnLabel: "Total",
-    entityColumnLabel: "Player",
-    showToPar: true,
+    totalColumnLabel: "Status",
+    entityColumnLabel: "Match",
+    showToPar: false,
   },
   {
     value: "ryder_cup",
@@ -201,6 +202,10 @@ export function getEventFormatLabel(value: string): string {
 
 export function getLeaderboardMode(format: string): LeaderboardMode {
   return getEventFormat(format)?.leaderboardMode ?? "individual_stroke";
+}
+
+export function isMatchPlayFormat(format: string): boolean {
+  return getLeaderboardMode(format) === "match";
 }
 
 export function getSortDirection(format: string): SortDirection {

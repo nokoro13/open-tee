@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 import { getEventParMap, formatScoreToPar } from "@/lib/scorecard";
 import { dedupeScoresByHole, sumDedupedStrokes } from "@/lib/score-aggregation";
@@ -37,6 +37,11 @@ export type LeaderboardEntry = {
   toPar: number | null;
   toParDisplay: string | null;
   isComplete: boolean;
+  matchPlayers?: {
+    playerAName: string;
+    playerBName: string;
+    leader: "a" | "b" | null;
+  };
 };
 
 export type RyderCupSummary = {
@@ -97,6 +102,63 @@ export function validateScoringCode(
   if (!code || !event.scoringCode) return false;
   if (event.scoringStatus === "disabled") return false;
   return event.scoringCode.toUpperCase() === code.toUpperCase();
+}
+
+export type ScoringAccess =
+  | { type: "marshal" }
+  | { type: "group"; groupId: string };
+
+export async function resolveScoringAccess(
+  eventId: string,
+  event: { scoringCode: string | null; scoringStatus: string },
+  code: string | undefined
+): Promise<ScoringAccess | null> {
+  if (!code?.trim() || event.scoringStatus === "disabled") return null;
+
+  const normalized = code.trim().toUpperCase();
+
+  if (event.scoringCode && event.scoringCode.toUpperCase() === normalized) {
+    return { type: "marshal" };
+  }
+
+  const groups = await getDb().query.pairingGroups.findMany({
+    where: eq(pairingGroups.eventId, eventId),
+    columns: { id: true, scoringCode: true },
+  });
+
+  const matchedGroup = groups.find(
+    (group) => group.scoringCode?.toUpperCase() === normalized
+  );
+  if (matchedGroup) {
+    return { type: "group", groupId: matchedGroup.id };
+  }
+
+  const unassigned = await getDb().query.registrations.findMany({
+    where: and(
+      eq(registrations.eventId, eventId),
+      isNull(registrations.pairingGroupId)
+    ),
+    columns: { id: true, scoringCode: true, paymentStatus: true },
+  });
+
+  const matchedPlayer = unassigned.find(
+    (player) =>
+      player.paymentStatus !== "refunded" &&
+      player.scoringCode?.toUpperCase() === normalized
+  );
+  if (matchedPlayer) {
+    return { type: "group", groupId: matchedPlayer.id };
+  }
+
+  return null;
+}
+
+export function canEditScoringGroup(
+  access: ScoringAccess,
+  groupId: string
+): boolean {
+  if (access.type === "marshal") return true;
+  return access.groupId === groupId;
 }
 
 export function assignRanks(
@@ -361,6 +423,15 @@ async function buildMatchLeaderboard(
         result.isComplete
       );
 
+      const leader: "a" | "b" | null =
+        result.holesPlayed === 0
+          ? null
+          : result.holesUp > 0
+            ? "a"
+            : result.holesUp < 0
+              ? "b"
+              : null;
+
       return {
         id: group.id,
         name: `${playerA.name} vs ${playerB.name}`,
@@ -371,6 +442,11 @@ async function buildMatchLeaderboard(
         toPar: null,
         toParDisplay: null,
         isComplete: result.isComplete,
+        matchPlayers: {
+          playerAName: playerA.name,
+          playerBName: playerB.name,
+          leader,
+        },
       };
     });
 
