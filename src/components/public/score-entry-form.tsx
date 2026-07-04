@@ -74,21 +74,24 @@ type SlideDirection = "forward" | "back";
 function RunningScoreCard({
   running,
   compact,
+  mobile,
 }: {
   running: RunningScore;
   compact?: boolean;
+  mobile?: boolean;
 }) {
   return (
     <div
       className={cn(
         "rounded-2xl border border-border/70 bg-card shadow-sm",
-        compact ? "p-3" : "p-4"
+        compact ? "p-3" : "p-4",
+        mobile && "p-3"
       )}
     >
       <p
         className={cn(
           "truncate font-medium text-muted-foreground",
-          compact ? "text-xs" : "text-sm"
+          mobile ? "text-sm" : compact ? "text-xs" : "text-sm"
         )}
       >
         {running.label}
@@ -98,12 +101,17 @@ function RunningScoreCard({
           <p
             className={cn(
               "font-semibold tabular-nums leading-none tracking-tight",
-              compact ? "text-2xl" : "text-3xl sm:text-4xl"
+              mobile ? "text-3xl" : compact ? "text-2xl" : "text-3xl sm:text-4xl"
             )}
           >
             {running.total ?? "—"}
           </p>
-          <p className="mt-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+          <p
+            className={cn(
+              "mt-1 font-medium uppercase tracking-wider text-muted-foreground",
+              mobile ? "text-xs" : "text-[10px]"
+            )}
+          >
             Total
           </p>
         </div>
@@ -112,13 +120,18 @@ function RunningScoreCard({
             <p
               className={cn(
                 "font-semibold tabular-nums leading-none tracking-tight",
-                compact ? "text-2xl" : "text-3xl sm:text-4xl",
+                mobile ? "text-3xl" : compact ? "text-2xl" : "text-3xl sm:text-4xl",
                 running.toPar != null && running.toPar < 0 && "text-primary"
               )}
             >
               {running.toParDisplay}
             </p>
-            <p className="mt-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            <p
+              className={cn(
+                "mt-1 font-medium uppercase tracking-wider text-muted-foreground",
+                mobile ? "text-xs" : "text-[10px]"
+              )}
+            >
               vs par
             </p>
           </div>
@@ -129,12 +142,17 @@ function RunningScoreCard({
           <p
             className={cn(
               "font-semibold tabular-nums leading-none tracking-tight",
-              compact ? "text-2xl" : "text-3xl sm:text-4xl"
+              mobile ? "text-3xl" : compact ? "text-2xl" : "text-3xl sm:text-4xl"
             )}
           >
             {running.thru}
           </p>
-          <p className="mt-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+          <p
+            className={cn(
+              "mt-1 font-medium uppercase tracking-wider text-muted-foreground",
+              mobile ? "text-xs" : "text-[10px]"
+            )}
+          >
             Thru
           </p>
         </div>
@@ -146,60 +164,90 @@ function RunningScoreCard({
 function MatchStatusCard({
   match,
   compact,
+  mobile,
 }: {
   match: MatchRunningScore;
   compact?: boolean;
+  mobile?: boolean;
 }) {
   return (
     <div
       className={cn(
         "rounded-2xl border border-border/70 bg-card shadow-sm",
-        compact ? "p-3" : "p-4"
+        compact ? "p-3" : "p-4",
+        mobile && "p-3"
       )}
     >
       <p
         className={cn(
           "font-medium text-muted-foreground",
-          compact ? "text-xs" : "text-sm"
+          mobile ? "text-sm" : compact ? "text-xs" : "text-sm"
         )}
       >
         Match status
       </p>
       <p
         className={cn(
-          "mt-2 font-semibold leading-tight tracking-tight",
-          compact ? "text-lg" : "text-xl sm:text-2xl"
+          "mt-1.5 font-semibold leading-tight tracking-tight",
+          mobile ? "text-xl" : compact ? "text-lg" : "text-xl sm:text-2xl"
         )}
       >
         {match.status}
       </p>
       <div
         className={cn(
-          "mt-3 grid grid-cols-3 gap-2 text-center",
-          compact ? "text-xs" : "text-sm"
+          "mt-2.5 grid grid-cols-3 gap-2 text-center",
+          mobile ? "text-sm" : compact ? "text-xs" : "text-sm"
         )}
       >
         <div>
-          <p className="truncate font-medium">{match.playerA.label}</p>
-          <p className="mt-1 font-semibold tabular-nums">
+          <p className="truncate font-semibold">{match.playerA.label}</p>
+          <p
+            className={cn(
+              "mt-1 font-semibold tabular-nums",
+              mobile && "text-2xl"
+            )}
+          >
             {match.playerATotal ?? "—"}
           </p>
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          <p
+            className={cn(
+              "font-medium uppercase tracking-wider text-muted-foreground",
+              mobile ? "text-xs" : "text-[10px]"
+            )}
+          >
             Strokes
           </p>
         </div>
         <div>
-          <p className="font-semibold tabular-nums">{match.thru}</p>
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          <p className={cn("font-semibold tabular-nums", mobile && "text-2xl")}>
+            {match.thru}
+          </p>
+          <p
+            className={cn(
+              "font-medium uppercase tracking-wider text-muted-foreground",
+              mobile ? "text-xs" : "text-[10px]"
+            )}
+          >
             Holes
           </p>
         </div>
         <div>
-          <p className="truncate font-medium">{match.playerB.label}</p>
-          <p className="mt-1 font-semibold tabular-nums">
+          <p className="truncate font-semibold">{match.playerB.label}</p>
+          <p
+            className={cn(
+              "mt-1 font-semibold tabular-nums",
+              mobile && "text-2xl"
+            )}
+          >
             {match.playerBTotal ?? "—"}
           </p>
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          <p
+            className={cn(
+              "font-medium uppercase tracking-wider text-muted-foreground",
+              mobile ? "text-xs" : "text-[10px]"
+            )}
+          >
             Strokes
           </p>
         </div>
@@ -445,9 +493,14 @@ export function ScoreEntryForm({
     onSelectHole: handleSelectHole,
   };
 
-  const groupLabelBlock = (
-    <div className="shrink-0 space-y-2">
-      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+  const groupLabelBlock = (mobile = false) => (
+    <div className="shrink-0 space-y-1.5">
+      <p
+        className={cn(
+          "font-semibold uppercase tracking-wider text-muted-foreground",
+          mobile ? "text-sm" : "text-xs"
+        )}
+      >
         Group
       </p>
       {allowGroupSwitch ? (
@@ -456,7 +509,7 @@ export function ScoreEntryForm({
           disabled={isPending}
           onValueChange={(value) => value && handleGroupChange(value)}
         >
-          <SelectTrigger className="h-9 w-full bg-card">
+          <SelectTrigger className={cn("w-full bg-card", mobile ? "h-11 text-base" : "h-9")}>
             <SelectValue placeholder="Select group">
               {selectedGroup?.label}
             </SelectValue>
@@ -473,10 +526,22 @@ export function ScoreEntryForm({
           </SelectContent>
         </Select>
       ) : (
-        <div className="rounded-lg border border-border bg-card px-3 py-2">
-          <p className="font-medium">{selectedGroup?.label}</p>
+        <div
+          className={cn(
+            "rounded-xl border border-border bg-card",
+            mobile ? "px-3.5 py-2.5" : "rounded-lg px-3 py-2"
+          )}
+        >
+          <p className={cn("font-semibold", mobile ? "text-lg" : "font-medium")}>
+            {selectedGroup?.label}
+          </p>
           {selectedGroup && selectedGroup.players.length > 0 && (
-            <p className="mt-0.5 truncate text-xs text-muted-foreground">
+            <p
+              className={cn(
+                "mt-0.5 text-muted-foreground",
+                mobile ? "text-sm leading-snug" : "truncate text-xs"
+              )}
+            >
               {selectedGroup.players.map((player) => player.name).join(", ")}
             </p>
           )}
@@ -491,7 +556,7 @@ export function ScoreEntryForm({
         type="button"
         variant="outline"
         size="icon"
-        className="size-10 shrink-0 rounded-full sm:size-11"
+        className="size-11 shrink-0 rounded-full sm:size-11"
         disabled={isPending || activeHoleIndex <= 0}
         onClick={() => navigateToIndex(activeHoleIndex - 1, "back")}
         aria-label="Previous hole"
@@ -502,7 +567,7 @@ export function ScoreEntryForm({
       <Button
         type="button"
         variant="outline"
-        className="size-10 shrink-0 px-2.5 lg:hidden sm:px-3"
+        className="size-11 shrink-0 px-3 lg:hidden"
         onClick={() => setShowScorecard(true)}
       >
         <LayoutGrid className="size-4" />
@@ -513,7 +578,7 @@ export function ScoreEntryForm({
         <Button
           type="button"
           size="lg"
-          className="h-10 min-w-0 flex-1 text-sm sm:h-11 sm:text-base"
+          className="h-12 min-w-0 flex-1 text-base font-semibold sm:h-11"
           disabled={isPending}
           onClick={handleSave}
         >
@@ -547,7 +612,7 @@ export function ScoreEntryForm({
         type="button"
         variant="outline"
         size="icon"
-        className="size-10 shrink-0 rounded-full sm:size-11"
+        className="size-11 shrink-0 rounded-full sm:size-11"
         disabled={isPending || activeHoleIndex >= totalHoles - 1}
         onClick={() => navigateToIndex(activeHoleIndex + 1, "forward")}
         aria-label="Next hole"
@@ -575,8 +640,8 @@ export function ScoreEntryForm({
           </Link>
 
           <div className="min-w-0 flex-1 lg:hidden">
-            <p className="truncate font-semibold tracking-tight">{eventName}</p>
-            <p className="truncate text-xs text-muted-foreground sm:text-sm">
+            <p className="truncate text-base font-semibold tracking-tight">{eventName}</p>
+            <p className="truncate text-sm text-muted-foreground">
               {getScoreEntrySubtitle(format, selectedGroup?.matchType)}
             </p>
           </div>
@@ -608,13 +673,13 @@ export function ScoreEntryForm({
         {/* Progress — mobile */}
         <div className="border-t border-border/50 px-4 pb-2 pt-1.5 lg:hidden">
           <div className="mx-auto flex max-w-6xl items-center gap-2">
-            <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
               <div
                 className="h-full rounded-full bg-primary transition-all duration-500 ease-out"
                 style={{ width: `${progressPct}%` }}
               />
             </div>
-            <span className="shrink-0 text-xs font-medium tabular-nums text-muted-foreground">
+            <span className="shrink-0 text-sm font-semibold tabular-nums text-muted-foreground">
               {progressPct}%
             </span>
           </div>
@@ -630,7 +695,7 @@ export function ScoreEntryForm({
       )}
 
       {/* Main layout */}
-      <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col gap-3 overflow-hidden px-4 py-2 sm:gap-6 sm:px-6 sm:py-3 lg:grid lg:grid-cols-[minmax(280px,320px)_1fr] lg:gap-5 lg:py-4">
+      <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col overflow-hidden px-3 py-1.5 sm:px-6 sm:py-3 lg:grid lg:grid-cols-[minmax(280px,320px)_1fr] lg:gap-5 lg:py-4">
         {/* Sidebar — desktop */}
         <aside className="hidden min-h-0 flex-col gap-3 overflow-hidden lg:flex">
           <div className="shrink-0 space-y-1.5">
@@ -667,7 +732,7 @@ export function ScoreEntryForm({
             </div>
           </div>
 
-          {groupLabelBlock}
+          {groupLabelBlock()}
 
           <div className="shrink-0 space-y-2">
             {matchRunningScore ? (
@@ -684,33 +749,38 @@ export function ScoreEntryForm({
           </div>
         </aside>
 
-        {/* Mobile stats + group */}
-        <div className="shrink-0 space-y-2 lg:hidden">{groupLabelBlock}</div>
-
-        <div className="shrink-0 space-y-2 lg:hidden">
-          {matchRunningScore ? (
-            <MatchStatusCard match={matchRunningScore} />
-          ) : (
-            <div
-              className={cn(
-                "grid gap-2",
-                runningScores.length > 1 ? "grid-cols-2" : "grid-cols-1"
-              )}
-            >
-              {runningScores.map((running) => (
-                <RunningScoreCard key={running.id} running={running} />
-              ))}
-            </div>
-          )}
-        </div>
+        <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-hidden lg:contents">
+          {/* Mobile — group + match/running scores */}
+          <div className="shrink-0 space-y-1.5 lg:hidden">
+            {groupLabelBlock(true)}
+            {matchRunningScore ? (
+              <MatchStatusCard match={matchRunningScore} compact mobile />
+            ) : (
+              <div
+                className={cn(
+                  "grid gap-2",
+                  runningScores.length > 1 ? "grid-cols-2" : "grid-cols-1"
+                )}
+              >
+                {runningScores.map((running) => (
+                  <RunningScoreCard
+                    key={running.id}
+                    running={running}
+                    compact
+                    mobile
+                  />
+                ))}
+              </div>
+            )}
+          </div>
 
         {/* Hole entry */}
         <section
-          className="flex min-h-0 flex-1 flex-col"
+          className="flex min-h-0 flex-1 flex-col overflow-hidden"
           onTouchStart={(e) => handleTouchStart(e.touches[0]?.clientX ?? 0)}
           onTouchEnd={(e) => handleTouchEnd(e.changedTouches[0]?.clientX ?? 0)}
         >
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm ring-1 ring-black/[0.02]">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm ring-1 ring-black/2">
             {roundComplete && !readOnly ? (
               <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-4 py-6 text-center sm:px-6 sm:py-12">
                 <div className="flex size-20 items-center justify-center rounded-full bg-primary/10 text-primary shadow-inner">
@@ -757,58 +827,61 @@ export function ScoreEntryForm({
                 <div
                   key={`hole-${activeHole}-${slideDirection}`}
                   className={cn(
-                    "flex min-h-0 flex-1 flex-col px-3 py-3 sm:px-8 sm:py-6 lg:py-4",
+                    "grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] px-3 py-2 sm:px-8 sm:py-4 lg:flex lg:flex-col lg:items-center lg:justify-center lg:py-4",
                     slideClass
                   )}
                 >
-                  <div className="flex min-h-0 flex-1 flex-col items-center justify-center">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground sm:text-xs">
+                  <div className="shrink-0 border-b border-border/50 pb-1.5 text-center lg:border-0 lg:pb-0 lg:w-full">
+                    <p className="hidden text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground sm:text-xs lg:block">
                       Current hole
                     </p>
 
-                    <div className="mt-2 flex items-baseline gap-2 sm:mt-3 sm:gap-3">
-                      <span className="font-heading text-5xl font-semibold tabular-nums tracking-tight sm:text-6xl lg:text-7xl">
+                    <div className="flex items-baseline justify-center gap-2 lg:mt-3">
+                      <span className="font-heading text-4xl font-semibold tabular-nums tracking-tight sm:text-6xl lg:text-7xl">
                         {activeHole}
                       </span>
-                      <span className="text-base text-muted-foreground sm:text-lg">
+                      <span className="text-base font-medium text-muted-foreground sm:text-lg">
                         / {totalHoles}
                       </span>
                     </div>
 
-                    <p className="mt-1 text-sm text-muted-foreground lg:text-base">
+                    <p className="mt-0.5 text-sm text-muted-foreground sm:text-sm lg:text-base">
                       {activePar != null ? (
                         <>Par {activePar}</>
                       ) : (
                         <>Default par {getDefaultScoreForHole(parByHole, activeHole)}</>
                       )}
                     </p>
+                  </div>
 
-                    <div className="mt-4 flex w-full max-w-xl flex-wrap items-start justify-center gap-8 sm:mt-6 sm:gap-12 lg:mt-8">
-                      {scoreEntries.map((entry) => (
-                        <ScoreStepper
-                          key={entry.id}
-                          label={entry.label}
-                          value={getEffectiveScore(entry.id, activeHole)}
-                          par={activePar}
-                          disabled={readOnly || isPending}
-                          size="large"
-                          onChange={(value) =>
-                            setScore(entry.id, activeHole, value)
-                          }
-                        />
-                      ))}
-                    </div>
+                  <div className="flex min-h-0 flex-col justify-center gap-2 overflow-y-auto overscroll-contain py-1.5 lg:mt-8 lg:min-h-0 lg:flex-none lg:flex-row lg:flex-wrap lg:items-start lg:justify-center lg:gap-12 lg:overflow-visible lg:py-0">
+                    {scoreEntries.map((entry) => (
+                      <ScoreStepper
+                        key={entry.id}
+                        label={entry.label}
+                        value={getEffectiveScore(entry.id, activeHole)}
+                        par={activePar}
+                        disabled={readOnly || isPending}
+                        size="large"
+                        layout="responsive"
+                        onChange={(value) =>
+                          setScore(entry.id, activeHole, value)
+                        }
+                      />
+                    ))}
+                  </div>
 
+                  <div className="shrink-0 text-center">
                     {justSaved && (
-                      <div className="mt-3 flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-4 py-1.5 text-xs font-medium text-primary animate-in fade-in duration-200 sm:mt-8 sm:px-5 sm:py-2.5 sm:text-sm">
-                        <Check className="size-3.5 sm:size-4" />
+                      <div className="mx-auto flex w-fit items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-4 py-2 text-sm font-medium text-primary animate-in fade-in duration-200 sm:px-5 lg:mt-8">
+                        <Check className="size-4" />
                         Hole {activeHole} saved
                       </div>
                     )}
 
                     {error && (
                       <p
-                        className="mt-3 text-center text-sm text-destructive sm:mt-6"
+                        className="mt-1 text-base text-destructive sm:mt-2 lg:mt-6"
                         role="alert"
                       >
                         {error}
@@ -827,11 +900,12 @@ export function ScoreEntryForm({
             )}
           </div>
         </section>
+        </div>
       </div>
 
       {/* Mobile footer */}
       {!roundComplete && (
-        <footer className="z-30 shrink-0 border-t border-border/80 bg-background/95 px-4 py-2 backdrop-blur-md sm:py-3 lg:hidden">
+        <footer className="z-30 shrink-0 border-t border-border/80 bg-background/95 px-4 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-md sm:py-3 lg:hidden">
           <div className="mx-auto max-w-lg">{actionBar}</div>
         </footer>
       )}
