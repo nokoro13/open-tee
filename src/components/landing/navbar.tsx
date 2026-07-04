@@ -39,7 +39,7 @@ export function Navbar() {
             <Flag className="size-4" />
           </div>
           <span className="font-heading text-base font-semibold tracking-tight sm:text-lg">
-            OpenTee
+            OpenRound
           </span>
         </Link>
 
@@ -97,7 +97,7 @@ export function Navbar() {
                   <div className="flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
                     <Flag className="size-3.5" />
                   </div>
-                  OpenTee
+                  OpenRound
                 </SheetTitle>
               </SheetHeader>
 

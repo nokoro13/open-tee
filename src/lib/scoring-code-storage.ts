@@ -1,4 +1,4 @@
-const STORAGE_PREFIX = "opentee-scoring-code";
+const STORAGE_PREFIX = "openround-scoring-code";
 
 export function saveScoringCode(slug: string, code: string): void {
   if (typeof window === "undefined") return;

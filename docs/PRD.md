@@ -1,15 +1,15 @@
-# OpenTee — Product Requirements Document
+# OpenRound — Product Requirements Document
 
 **Version:** 0.1  
 **Last updated:** June 30, 2026  
 **Status:** Draft  
-**Owner:** OpenTee team
+**Owner:** OpenRound team
 
 ---
 
 ## 1. Executive summary
 
-OpenTee is a **mobile-first web platform** for hosting and managing golf tournaments. Organizers create events, players register and pay online, and scores flow to a live leaderboard — all in the browser, with no app download.
+OpenRound is a **mobile-first web platform** for hosting and managing golf tournaments. Organizers create events, players register and pay online, and scores flow to a live leaderboard — all in the browser, with no app download.
 
 This PRD defines the **MVP (v1)** required to deliver on the core promise shown on the marketing site, plus a phased roadmap for Pro and Enterprise tiers.
 
@@ -34,7 +34,7 @@ Organizers (club pros, charity directors, association admins) need a single tool
 
 - Charity outings, corporate scrambles, and club member events happen every week across the US
 - Incumbents exist (Golf Genius, GolfStatus, etc.) but many small/mid events still run on manual tools
-- OpenTee wins by being **fast to set up, mobile-native, and priced per event** for occasional organizers
+- OpenRound wins by being **fast to set up, mobile-native, and priced per event** for occasional organizers
 
 ---
 
@@ -119,7 +119,7 @@ Organizers (club pros, charity directors, association admins) need a single tool
 | **Leaderboard** | Public URL; gross scores; mobile-optimized |
 | **Organizer dashboard** | Registration list, pairing view, scoring status, basic export (CSV) |
 | **Email** | Registration confirmation; optional reminder 24h before event |
-| **Billing** | Pay OpenTee platform fee when event goes live (Starter tier) |
+| **Billing** | Pay OpenRound platform fee when event goes live (Starter tier) |
 
 ### Explicitly out of scope for v1
 
@@ -156,7 +156,7 @@ Organizers (club pros, charity directors, association admins) need a single tool
 | O-7 | As an organizer, I can export registration data to CSV. | P1 |
 | O-8 | As an organizer, I can send a reminder email to registered players. | P1 |
 | O-9 | As an organizer, I can comp a player (free entry without payment). | P1 |
-| O-10 | As an organizer, I pay OpenTee when I publish my event. | P0 |
+| O-10 | As an organizer, I pay OpenRound when I publish my event. | P0 |
 
 ### Player
 
@@ -265,9 +265,9 @@ Organizer views registration list
 
 ### 9.3 Registration & payments
 
-- Public URL pattern: `opentee.com/e/[slug]`
+- Public URL pattern: `openround.club/e/[slug]`
 - Stripe Checkout for entry fees (Stripe Connect for payouts — evaluate in MVP vs v1.1)
-- Platform billing: organizer pays OpenTee fee on publish (Stripe)
+- Platform billing: organizer pays OpenRound fee on publish (Stripe)
 - Registration record: player name, email, payment status, registered at
 - Capacity enforcement — block registration when full
 - Refunds: manual via Stripe dashboard in v1 (in-app refunds P2)
@@ -292,7 +292,7 @@ Organizer views registration list
 
 ### 9.6 Leaderboard (public)
 
-- Public URL: `opentee.com/e/[slug]/leaderboard`
+- Public URL: `openround.club/e/[slug]/leaderboard`
 - No login required
 - Auto-refresh (polling every 5–10s acceptable in v1)
 - Mobile layout: top 10 visible without horizontal scroll
@@ -302,7 +302,7 @@ Organizer views registration list
 
 - Transactional email only in v1 (Resend or Postmark)
 - Templates: registration confirmation, optional event reminder
-- From address: `events@opentee.com` or similar
+- From address: `events@openround.club` or similar
 
 ### 9.8 Organizer dashboard
 
@@ -481,7 +481,7 @@ Aligned with the existing codebase (Next.js 16, React 19, shadcn, Tailwind v4):
 ## 17. Open questions
 
 1. **Primary launch segment:** Charity scrambles vs club member events vs association tournaments?
-2. **Payout model:** Does OpenTee hold entry fees and pay out clubs, or do clubs connect their own Stripe?
+2. **Payout model:** Does OpenRound hold entry fees and pay out clubs, or do clubs connect their own Stripe?
 3. **Player accounts:** Anonymous registration only in v1, or optional “create account to see history”?
 4. **Scoring access control:** Open magic link vs per-group PIN?
 5. **Comp entries:** Organizer-only in dashboard, or registration code?

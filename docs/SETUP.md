@@ -1,4 +1,4 @@
-# OpenTee — Local Development Setup
+# OpenRound — Local Development Setup
 
 ## Prerequisites
 

@@ -101,7 +101,7 @@ const steps = [
 const testimonials = [
   {
     quote:
-      "We went from spreadsheets and phone calls to a fully managed charity outing. OpenTee saved us dozens of hours.",
+      "We went from spreadsheets and phone calls to a fully managed charity outing. OpenRound saved us dozens of hours.",
     name: "Sarah Mitchell",
     initials: "SM",
     role: "Tournament Director, Pine Valley Charity Classic",
@@ -170,9 +170,9 @@ const pricingPlans = [
 
 const faqs = [
   {
-    question: "What tournament formats does OpenTee support?",
+    question: "What tournament formats does OpenRound support?",
     answer:
-      "OpenTee supports stroke play, Stableford, scramble, best ball, match play, and custom formats. You can configure flights, handicaps, and tiebreaker rules for each event.",
+      "OpenRound supports stroke play, Stableford, scramble, best ball, match play, and custom formats. You can configure flights, handicaps, and tiebreaker rules for each event.",
   },
   {
     question: "Can players register and pay online?",
@@ -185,14 +185,14 @@ const faqs = [
       "No. Volunteers and players enter scores from any smartphone browser — no app install needed. Course staff can also use a tablet or desktop scoring station.",
   },
   {
-    question: "Can I use OpenTee for charity and corporate events?",
+    question: "Can I use OpenRound for charity and corporate events?",
     answer:
-      "Absolutely. Many customers run charity outings, corporate scrambles, and association championships on OpenTee. Sponsor packages and donation tracking are built in.",
+      "Absolutely. Many customers run charity outings, corporate scrambles, and association championships on OpenRound. Sponsor packages and donation tracking are built in.",
   },
   {
     question: "Do I need to download an app?",
     answer:
-      "No. OpenTee is fully web-based — open it in Safari, Chrome, or any mobile browser. There is nothing to install from an app store. The interface is built mobile-first because most players and directors use their phones on tournament day.",
+      "No. OpenRound is fully web-based — open it in Safari, Chrome, or any mobile browser. There is nothing to install from an app store. The interface is built mobile-first because most players and directors use their phones on tournament day.",
   },
   {
     question: "Is there a free trial?",
@@ -227,7 +227,7 @@ export function LandingPage() {
                 <span className="text-primary">spreadsheet chaos</span>
               </h1>
               <p className="mt-4 text-base leading-relaxed text-muted-foreground text-balance sm:mt-6 sm:text-lg lg:text-xl">
-                OpenTee gives clubs, pros, and event organizers everything they
+                OpenRound gives clubs, pros, and event organizers everything they
                 need to run registration, pairings, live scoring, and payments
                 — a mobile-first web platform that works beautifully on any
                 device, no download required.
@@ -290,7 +290,7 @@ export function LandingPage() {
             <SectionHeader
               badge="Features"
               title="Everything you need to run a world-class event"
-              description="From the first registration to the final trophy presentation, OpenTee handles the details so you can focus on the experience."
+              description="From the first registration to the final trophy presentation, OpenRound handles the details so you can focus on the experience."
             />
 
             <div className="mt-10 grid gap-4 sm:mt-16 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
@@ -382,7 +382,7 @@ export function LandingPage() {
             <SectionHeader
               badge="How it works"
               title="From setup to celebration in three steps"
-              description="Whether it's your first outing or your fiftieth, OpenTee gets you live fast."
+              description="Whether it's your first outing or your fiftieth, OpenRound gets you live fast."
             />
 
             <div className="mt-10 grid gap-4 sm:mt-16 sm:gap-6 lg:grid-cols-3">
@@ -430,7 +430,7 @@ export function LandingPage() {
                   Built for phones — no app store required
                 </h2>
                 <p className="mt-3 text-sm leading-relaxed opacity-80 sm:mt-4 sm:text-base">
-                  OpenTee runs entirely in the browser. Most users are on their
+                  OpenRound runs entirely in the browser. Most users are on their
                   phones during tournament day, so every flow — registration,
                   scoring, pairings — is designed for mobile first.
                 </p>
@@ -650,7 +650,7 @@ export function LandingPage() {
             <div className="mt-8 flex flex-col gap-3 sm:mt-10 sm:flex-row sm:flex-wrap sm:gap-4 lg:hidden">
               <Badge variant="outline" className="w-fit gap-2 py-1.5">
                 <Globe className="size-3.5" />
-                opentee.com/help
+                openround.club/help
               </Badge>
               <Badge variant="outline" className="w-fit gap-2 py-1.5">
                 <MapPin className="size-3.5" />
@@ -674,7 +674,7 @@ export function LandingPage() {
                     Ready to tee off your next tournament?
                   </h2>
                   <p className="mx-auto mt-3 max-w-lg text-sm leading-relaxed opacity-80 sm:mt-4 sm:text-base">
-                    Join thousands of organizers who trust OpenTee to deliver
+                    Join thousands of organizers who trust OpenRound to deliver
                     seamless events. Start building your tournament today.
                   </p>
                   <div className="mt-8 flex w-full flex-col gap-3 sm:mt-10 sm:w-auto sm:flex-row sm:justify-center">

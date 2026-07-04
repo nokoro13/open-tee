@@ -39,7 +39,7 @@ export async function startPublishCheckout(
         price_data: {
           currency: "usd",
           product_data: {
-            name: "OpenTee Starter — Event publish",
+            name: "OpenRound Starter — Event publish",
             description: `Publish "${event.name}" and open registration`,
           },
           unit_amount: feeCents,

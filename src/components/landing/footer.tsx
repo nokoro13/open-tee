@@ -32,7 +32,7 @@ export function Footer() {
                 <Flag className="size-4" />
               </div>
               <span className="font-heading text-lg font-semibold tracking-tight">
-                OpenTee
+                OpenRound
               </span>
             </Link>
             <p className="mt-4 max-w-xs text-sm leading-relaxed text-muted-foreground">
@@ -108,7 +108,7 @@ export function Footer() {
 
         <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
           <p className="text-center text-sm text-muted-foreground sm:text-left">
-            © {new Date().getFullYear()} OpenTee. All rights reserved.
+            © {new Date().getFullYear()} OpenRound. All rights reserved.
           </p>
           <div className="flex flex-wrap justify-center gap-4 sm:gap-6">
             {["Twitter", "LinkedIn", "Instagram"].map((social) => (

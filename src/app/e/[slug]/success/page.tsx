@@ -51,7 +51,7 @@ export default async function RegistrationSuccessPage({
             <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
               <Flag className="size-4" />
             </div>
-            <span className="font-heading text-base font-semibold">OpenTee</span>
+            <span className="font-heading text-base font-semibold">OpenRound</span>
           </Link>
         </div>
       </header>

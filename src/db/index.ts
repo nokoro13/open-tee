@@ -19,12 +19,12 @@ export type Db = ReturnType<typeof createDb>;
 
 declare global {
   // eslint-disable-next-line no-var
-  var __openteeDb: Db | undefined;
+  var __openroundDb: Db | undefined;
 }
 
 export function getDb() {
-  if (!globalThis.__openteeDb) {
-    globalThis.__openteeDb = createDb();
+  if (!globalThis.__openroundDb) {
+    globalThis.__openroundDb = createDb();
   }
-  return globalThis.__openteeDb;
+  return globalThis.__openroundDb;
 }

@@ -19,7 +19,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "OpenTee — Golf Tournament Hosting & Management",
+  title: "OpenRound — Golf Tournament Hosting & Management",
   description:
     "The mobile-first web platform for hosting and managing golf tournaments. Registration, live scoring, pairings, and payments — no app download required.",
 };

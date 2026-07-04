@@ -570,7 +570,7 @@ export function ScoreEntryForm({
               <Flag className="size-4" />
             </div>
             <span className="hidden font-heading text-sm font-semibold sm:inline">
-              OpenTee
+              OpenRound
             </span>
           </Link>
 
@@ -899,7 +899,7 @@ export function ScoringPageHeader({ slug }: { slug: string }) {
           <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <Flag className="size-4" />
           </div>
-          <span className="font-heading text-base font-semibold">OpenTee</span>
+          <span className="font-heading text-base font-semibold">OpenRound</span>
         </Link>
         <span className="text-sm text-muted-foreground">· Scoring</span>
         <Link

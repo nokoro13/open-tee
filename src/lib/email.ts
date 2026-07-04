@@ -16,7 +16,7 @@ function getResend(): Resend {
 }
 
 function getFromAddress(): string {
-  return process.env.EMAIL_FROM ?? "OpenTee <onboarding@resend.dev>";
+  return process.env.EMAIL_FROM ?? "OpenRound <onboarding@resend.dev>";
 }
 
 async function sendEmail(
@@ -100,7 +100,7 @@ export async function sendPublishConfirmationEmail({
   await sendEmail({
     from: getFromAddress(),
     to,
-    subject: `${eventName} is live on OpenTee`,
+    subject: `${eventName} is live on OpenRound`,
     html: `
       <div style="font-family: sans-serif; max-width: 560px; line-height: 1.5;">
         <h1 style="font-size: 20px;">Your event is published!</h1>

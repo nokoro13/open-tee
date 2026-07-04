@@ -53,7 +53,7 @@ export default async function PublicEventPage({
             <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
               <Flag className="size-4" />
             </div>
-            <span className="font-heading text-base font-semibold">OpenTee</span>
+            <span className="font-heading text-base font-semibold">OpenRound</span>
           </Link>
         </div>
       </header>
@@ -145,7 +145,7 @@ export default async function PublicEventPage({
         )}
 
         <p className="mt-6 text-center text-xs text-muted-foreground">
-          Powered by OpenTee · Mobile-friendly, no app required
+          Powered by OpenRound · Mobile-friendly, no app required
         </p>
       </main>
     </div>
