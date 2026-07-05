@@ -1,5 +1,5 @@
-import { DashboardMobilePreview } from "@/components/landing/previews/dashboard-mobile-preview";
 import { DashboardPreview } from "@/components/landing/previews/dashboard-preview";
+import { ScoreShowcasePhone } from "@/components/landing/previews/score-showcase-phone";
 
 export function ResponsiveDashboardPreview() {
   return (
@@ -8,7 +8,7 @@ export function ResponsiveDashboardPreview() {
         <DashboardPreview />
       </div>
       <div className="md:hidden">
-        <DashboardMobilePreview />
+        <ScoreShowcasePhone className="mx-auto w-60 sm:w-66" />
       </div>
     </>
   );
