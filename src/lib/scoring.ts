@@ -8,6 +8,7 @@ import {
   computeFoursomesMatch,
   computeSinglesMatch,
   enrichStrokeEntry,
+  formatLeaderMatchStatus,
   formatMatchStatus,
   formatRyderPoints,
   sumStablefordPoints,
@@ -416,12 +417,6 @@ async function buildMatchLeaderboard(
       const scoresA = playerScoreMap(scores, playerA.id);
       const scoresB = playerScoreMap(scores, playerB.id);
       const result = computeSinglesMatch(scoresA, scoresB, holeNumbers);
-      const status = formatMatchStatus(
-        result.holesUp,
-        result.holesPlayed,
-        holeCount,
-        result.isComplete
-      );
 
       const leader: "a" | "b" | null =
         result.holesPlayed === 0
@@ -431,6 +426,14 @@ async function buildMatchLeaderboard(
             : result.holesUp < 0
               ? "b"
               : null;
+
+      const status = formatLeaderMatchStatus(
+        result.holesUp,
+        leader,
+        result.holesPlayed,
+        holeCount,
+        result.isComplete
+      );
 
       return {
         id: group.id,

@@ -193,6 +193,18 @@ export function formatMatchStatus(
   return holesUp > 0 ? `${margin} up` : `${margin} down`;
 }
 
+/** Match status from the leader's perspective (positive always means leader is up). */
+export function formatLeaderMatchStatus(
+  holesUp: number,
+  leader: "a" | "b" | null,
+  holesPlayed: number,
+  holeCount: number,
+  isComplete: boolean
+): string {
+  const fromLeader = leader === "b" ? -holesUp : holesUp;
+  return formatMatchStatus(fromLeader, holesPlayed, holeCount, isComplete);
+}
+
 export function formatNamedMatchStatus(
   playerAName: string,
   playerBName: string,
