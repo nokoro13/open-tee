@@ -163,6 +163,18 @@ export function isRoundComplete(
   return countCompletedHoles(holeNumbers, entryIds, scores) === holeNumbers.length;
 }
 
+export function getConfirmedHoles(
+  holeNumbers: number[],
+  entryIds: string[],
+  scores: Record<string, Record<number, number>>
+): Set<number> {
+  return new Set(
+    holeNumbers.filter((hole) =>
+      entryIds.every((id) => scores[id]?.[hole] != null)
+    )
+  );
+}
+
 export function getHoleStatuses(
   holeNumbers: number[],
   entryIds: string[],

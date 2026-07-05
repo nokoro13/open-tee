@@ -44,6 +44,7 @@ import {
   computeRunningScores,
   countCompletedHoles,
   findStartingHoleIndex,
+  getConfirmedHoles,
   getHoleStatuses,
   isRoundComplete,
 } from "@/lib/score-entry-utils";
@@ -307,6 +308,10 @@ export function ScoreEntryForm({
 
   const entryIds = scoreEntries.map((e) => e.id);
 
+  const [confirmedHoles, setConfirmedHoles] = useState(() =>
+    getConfirmedHoles(holeNumbers, entryIds, initialScores)
+  );
+
   const [activeHoleIndex, setActiveHoleIndex] = useState(() =>
     findStartingHoleIndex(holeNumbers, entryIds, initialScores)
   );
@@ -357,9 +362,9 @@ export function ScoreEntryForm({
     scoreEntries
   );
 
-  const activeHoleSaved = holeStatuses[activeHoleIndex]?.saved ?? false;
+  const activeHoleConfirmed = confirmedHoles.has(activeHole);
   const showChangeScoresOverlay =
-    !readOnly && activeHoleSaved && !justSaved && !changeScoresUnlocked;
+    !readOnly && activeHoleConfirmed && !justSaved && !changeScoresUnlocked;
 
   const getEffectiveScore = useCallback(
     (entityId: string, hole: number) => {
@@ -396,6 +401,7 @@ export function ScoreEntryForm({
 
     setSelectedGroupId(groupId);
     setActiveHoleIndex(findStartingHoleIndex(holeNumbers, newEntries, scores));
+    setConfirmedHoles(getConfirmedHoles(holeNumbers, newEntries, scores));
     setError(null);
     setJustSaved(false);
   }
@@ -455,6 +461,7 @@ export function ScoreEntryForm({
         }
       }
       setScores(nextScores);
+      setConfirmedHoles((prev) => new Set([...prev, activeHole]));
       setJustSaved(true);
       router.refresh();
 

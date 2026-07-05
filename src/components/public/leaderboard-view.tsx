@@ -58,16 +58,31 @@ function MatchEntryNames({
     return <p className="font-medium">{entry.name}</p>;
   }
 
-  const playerAClass =
-    match.leader === "a" ? "font-semibold text-primary" : "font-medium";
-  const playerBClass =
-    match.leader === "b" ? "font-semibold text-primary" : "font-medium";
+  if (match.leader === "a") {
+    return (
+      <p className="font-medium">
+        <span className="font-semibold text-primary">{match.playerAName}</span>
+        <span className="text-muted-foreground"> vs </span>
+        <span className="font-semibold text-destructive">{match.playerBName}</span>
+      </p>
+    );
+  }
+
+  if (match.leader === "b") {
+    return (
+      <p className="font-medium">
+        <span className="font-semibold text-primary">{match.playerBName}</span>
+        <span className="text-muted-foreground"> vs </span>
+        <span className="font-semibold text-destructive">{match.playerAName}</span>
+      </p>
+    );
+  }
 
   return (
     <p className="font-medium">
-      <span className={playerAClass}>{match.playerAName}</span>
+      <span>{match.playerAName}</span>
       <span className="text-muted-foreground"> vs </span>
-      <span className={playerBClass}>{match.playerBName}</span>
+      <span>{match.playerBName}</span>
     </p>
   );
 }
@@ -284,20 +299,14 @@ export function LeaderboardView({
           </CardContent>
         </Card>
 
-        <div className="mt-6 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-          {scoringAvailable && (
+        {scoringAvailable && (
+          <div className="mt-6 flex justify-center">
             <ButtonLink href={scoreHref} variant="default" className="h-10 w-full sm:w-auto">
               <ClipboardList className="size-4" />
               {scorecardLabel}
             </ButtonLink>
-          )}
-          <Link
-            href={`/e/${slug}`}
-            className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-          >
-            Event page
-          </Link>
-        </div>
+          </div>
+        )}
       </main>
     </div>
   );
