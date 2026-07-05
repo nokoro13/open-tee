@@ -61,7 +61,7 @@ function HorizontalControls({
         <Minus className="size-5 text-foreground/70" />
       </button>
       <span
-        className="min-w-[2.5ch] select-none px-1.5 text-center text-3xl font-semibold tabular-nums tracking-tight"
+        className="min-w-[2.5ch] select-none px-1.5 text-center text-lg font-semibold tabular-nums tracking-tight"
         aria-live="polite"
       >
         {value}
@@ -164,7 +164,7 @@ export function ScoreStepper({
     >
       <MobilePlayerAvatar name={label} index={playerIndex} />
       <div className="min-w-0 flex-1">
-        <p className="text-lg font-semibold leading-snug">{label}</p>
+        <p className="text-md font-semibold leading-snug">{label}</p>
         {resultLabel ? (
           <span
             className={cn(

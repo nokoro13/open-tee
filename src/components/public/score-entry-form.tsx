@@ -901,13 +901,6 @@ export function ScoreEntryForm({
                   </div>
 
                   <div className="shrink-0 border-t border-border/40 px-4 py-2.5 text-center lg:border-0 lg:px-0">
-                    {justSaved && (
-                      <div className="mx-auto flex w-fit items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-4 py-2 text-sm font-semibold text-primary animate-in fade-in duration-200 lg:mt-8">
-                        <Check className="size-4" />
-                        Hole {activeHole} saved
-                      </div>
-                    )}
-
                     {error && (
                       <p className="mt-1 text-base text-destructive lg:mt-6" role="alert">
                         {error}
