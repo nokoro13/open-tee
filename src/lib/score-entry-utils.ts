@@ -22,11 +22,20 @@ export type MatchRunningScore = {
   playerBTotal: number | null;
 };
 
+export type HoleScoreEntry = {
+  id: string;
+  label: string;
+  strokes?: number;
+};
+
 export type HoleScoreStatus = {
   hole: number;
   par?: number;
   saved: boolean;
+  /** Primary / single-player score (first entry). */
   strokes?: number;
+  /** All players' scores for this hole when scoring as a group or match. */
+  entries?: HoleScoreEntry[];
 };
 
 export function computeRunningScore(
@@ -159,16 +168,23 @@ export function getHoleStatuses(
   entryIds: string[],
   scores: Record<string, Record<number, number>>,
   parByHole: Record<number, number>,
-  primaryEntityId: string
+  scoreEntries?: Array<{ id: string; label: string }>
 ): HoleScoreStatus[] {
   return holeNumbers.map((hole) => {
-    const strokes = scores[primaryEntityId]?.[hole];
+    const entries = scoreEntries?.map((entry) => ({
+      id: entry.id,
+      label: entry.label,
+      strokes: scores[entry.id]?.[hole],
+    }));
+    const primaryId = entryIds[0] ?? "";
+    const strokes = scores[primaryId]?.[hole];
     const saved = entryIds.every((id) => scores[id]?.[hole] != null);
     return {
       hole,
       par: parByHole[hole],
       saved,
       strokes,
+      entries: entries && entries.length > 1 ? entries : undefined,
     };
   });
 }

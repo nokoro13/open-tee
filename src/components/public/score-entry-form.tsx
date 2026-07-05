@@ -28,6 +28,11 @@ import {
   ScorecardOverlay,
 } from "@/components/public/scorecard-grid";
 import {
+  MobileContextBar,
+  MobileHoleHero,
+  MobileRoundDetailsSheet,
+} from "@/components/public/mobile-scoring-ui";
+import {
   getDefaultScoreForHole,
   ScoreStepper,
 } from "@/components/public/score-stepper";
@@ -275,6 +280,7 @@ export function ScoreEntryForm({
   const [error, setError] = useState<string | null>(null);
   const [justSaved, setJustSaved] = useState(false);
   const [showScorecard, setShowScorecard] = useState(false);
+  const [showRoundDetails, setShowRoundDetails] = useState(false);
   const [slideDirection, setSlideDirection] = useState<SlideDirection>("forward");
 
   const defaultGroupId =
@@ -342,7 +348,7 @@ export function ScoreEntryForm({
     entryIds,
     scores,
     parByHole,
-    entryIds[0] ?? ""
+    scoreEntries
   );
 
   const getEffectiveScore = useCallback(
@@ -578,7 +584,7 @@ export function ScoreEntryForm({
         <Button
           type="button"
           size="lg"
-          className="h-12 min-w-0 flex-1 text-base font-semibold sm:h-11"
+          className="h-12 min-w-0 flex-1 text-base font-semibold shadow-md shadow-primary/20 sm:h-11"
           disabled={isPending}
           onClick={handleSave}
         >
@@ -623,9 +629,9 @@ export function ScoreEntryForm({
   );
 
   return (
-    <div className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-gradient-to-b from-muted/40 via-background to-muted/20">
+    <div className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-background lg:bg-linear-to-b lg:from-muted/40 lg:via-background lg:to-muted/20">
       {/* Header */}
-      <header className="z-30 shrink-0 border-b border-border/80 bg-background/90 backdrop-blur-md">
+      <header className="z-30 shrink-0 border-b border-border/80 bg-background/95 backdrop-blur-md">
         <div className="mx-auto flex h-12 max-w-6xl items-center gap-2 px-4 lg:h-14 sm:gap-3 sm:px-6">
           <Link
             href="/"
@@ -671,16 +677,16 @@ export function ScoreEntryForm({
         </div>
 
         {/* Progress — mobile */}
-        <div className="border-t border-border/50 px-4 pb-2 pt-1.5 lg:hidden">
-          <div className="mx-auto flex max-w-6xl items-center gap-2">
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+        <div className="border-t border-border/50 px-4 pb-2.5 pt-2 lg:hidden">
+          <div className="mx-auto flex max-w-6xl items-center gap-3">
+            <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
               <div
                 className="h-full rounded-full bg-primary transition-all duration-500 ease-out"
                 style={{ width: `${progressPct}%` }}
               />
             </div>
-            <span className="shrink-0 text-sm font-semibold tabular-nums text-muted-foreground">
-              {progressPct}%
+            <span className="shrink-0 text-sm font-semibold tabular-nums">
+              {activeHole}/{totalHoles}
             </span>
           </div>
         </div>
@@ -695,7 +701,7 @@ export function ScoreEntryForm({
       )}
 
       {/* Main layout */}
-      <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col overflow-hidden px-3 py-1.5 sm:px-6 sm:py-3 lg:grid lg:grid-cols-[minmax(280px,320px)_1fr] lg:gap-5 lg:py-4">
+      <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col overflow-hidden px-3 py-2 sm:px-6 sm:py-3 lg:grid lg:grid-cols-[minmax(280px,320px)_1fr] lg:gap-5 lg:py-4">
         {/* Sidebar — desktop */}
         <aside className="hidden min-h-0 flex-col gap-3 overflow-hidden lg:flex">
           <div className="shrink-0 space-y-1.5">
@@ -749,29 +755,22 @@ export function ScoreEntryForm({
           </div>
         </aside>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-hidden lg:contents">
-          {/* Mobile — group + match/running scores */}
-          <div className="shrink-0 space-y-1.5 lg:hidden">
-            {groupLabelBlock(true)}
-            {matchRunningScore ? (
-              <MatchStatusCard match={matchRunningScore} compact mobile />
-            ) : (
-              <div
-                className={cn(
-                  "grid gap-2",
-                  runningScores.length > 1 ? "grid-cols-2" : "grid-cols-1"
-                )}
-              >
-                {runningScores.map((running) => (
-                  <RunningScoreCard
-                    key={running.id}
-                    running={running}
-                    compact
-                    mobile
-                  />
-                ))}
-              </div>
-            )}
+        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden lg:contents">
+          {/* Mobile context bar */}
+          <div className="shrink-0 lg:hidden">
+            <MobileContextBar
+              allowGroupSwitch={allowGroupSwitch}
+              selectedGroupId={selectedGroupId}
+              selectedGroup={selectedGroup}
+              groups={groups}
+              isPending={isPending}
+              onGroupChange={handleGroupChange}
+              matchRunningScore={matchRunningScore}
+              runningScores={runningScores}
+              completedHoles={completedHoles}
+              totalHoles={totalHoles}
+              onOpenDetails={() => setShowRoundDetails(true)}
+            />
           </div>
 
         {/* Hole entry */}
@@ -780,7 +779,7 @@ export function ScoreEntryForm({
           onTouchStart={(e) => handleTouchStart(e.touches[0]?.clientX ?? 0)}
           onTouchEnd={(e) => handleTouchEnd(e.changedTouches[0]?.clientX ?? 0)}
         >
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm ring-1 ring-black/2">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/60 bg-card shadow-md lg:shadow-sm lg:ring-1 lg:ring-black/2">
             {roundComplete && !readOnly ? (
               <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-4 py-6 text-center sm:px-6 sm:py-12">
                 <div className="flex size-20 items-center justify-center rounded-full bg-primary/10 text-primary shadow-inner">
@@ -827,25 +826,32 @@ export function ScoreEntryForm({
                 <div
                   key={`hole-${activeHole}-${slideDirection}`}
                   className={cn(
-                    "grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] px-3 py-2 sm:px-8 sm:py-4 lg:flex lg:flex-col lg:items-center lg:justify-center lg:py-4",
+                    "flex min-h-0 flex-1 flex-col lg:flex lg:flex-col lg:items-center lg:justify-center lg:px-8 lg:py-4",
                     slideClass
                   )}
                 >
-                  <div className="shrink-0 border-b border-border/50 pb-1.5 text-center lg:border-0 lg:pb-0 lg:w-full">
-                    <p className="hidden text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground sm:text-xs lg:block">
+                  <div className="lg:hidden">
+                    <MobileHoleHero
+                      activeHole={activeHole}
+                      totalHoles={totalHoles}
+                      par={activePar ?? getDefaultScoreForHole(parByHole, activeHole)}
+                    />
+                  </div>
+
+                  {/* Desktop hole header */}
+                  <div className="hidden shrink-0 text-center lg:block lg:w-full">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                       Current hole
                     </p>
-
-                    <div className="flex items-baseline justify-center gap-2 lg:mt-3">
-                      <span className="font-heading text-4xl font-semibold tabular-nums tracking-tight sm:text-6xl lg:text-7xl">
+                    <div className="mt-3 flex items-baseline justify-center gap-2">
+                      <span className="font-heading text-6xl font-semibold tabular-nums tracking-tight lg:text-7xl">
                         {activeHole}
                       </span>
-                      <span className="text-base font-medium text-muted-foreground sm:text-lg">
+                      <span className="text-lg text-muted-foreground">
                         / {totalHoles}
                       </span>
                     </div>
-
-                    <p className="mt-0.5 text-sm text-muted-foreground sm:text-sm lg:text-base">
+                    <p className="mt-1 text-base text-muted-foreground">
                       {activePar != null ? (
                         <>Par {activePar}</>
                       ) : (
@@ -854,8 +860,8 @@ export function ScoreEntryForm({
                     </p>
                   </div>
 
-                  <div className="flex min-h-0 flex-col justify-center gap-2 overflow-y-auto overscroll-contain py-1.5 lg:mt-8 lg:min-h-0 lg:flex-none lg:flex-row lg:flex-wrap lg:items-start lg:justify-center lg:gap-12 lg:overflow-visible lg:py-0">
-                    {scoreEntries.map((entry) => (
+                  <div className="flex min-h-0 flex-1 flex-col divide-y divide-border/40 overflow-y-auto overscroll-contain lg:mt-8 lg:min-h-0 lg:flex-none lg:flex-row lg:flex-wrap lg:items-start lg:justify-center lg:gap-12 lg:divide-y-0 lg:overflow-visible">
+                    {scoreEntries.map((entry, index) => (
                       <ScoreStepper
                         key={entry.id}
                         label={entry.label}
@@ -864,6 +870,7 @@ export function ScoreEntryForm({
                         disabled={readOnly || isPending}
                         size="large"
                         layout="responsive"
+                        playerIndex={index}
                         onChange={(value) =>
                           setScore(entry.id, activeHole, value)
                         }
@@ -871,19 +878,16 @@ export function ScoreEntryForm({
                     ))}
                   </div>
 
-                  <div className="shrink-0 text-center">
+                  <div className="shrink-0 border-t border-border/40 px-4 py-2.5 text-center lg:border-0 lg:px-0">
                     {justSaved && (
-                      <div className="mx-auto flex w-fit items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-4 py-2 text-sm font-medium text-primary animate-in fade-in duration-200 sm:px-5 lg:mt-8">
+                      <div className="mx-auto flex w-fit items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-4 py-2 text-sm font-semibold text-primary animate-in fade-in duration-200 lg:mt-8">
                         <Check className="size-4" />
                         Hole {activeHole} saved
                       </div>
                     )}
 
                     {error && (
-                      <p
-                        className="mt-1 text-base text-destructive sm:mt-2 lg:mt-6"
-                        role="alert"
-                      >
+                      <p className="mt-1 text-base text-destructive lg:mt-6" role="alert">
                         {error}
                       </p>
                     )}
@@ -905,7 +909,7 @@ export function ScoreEntryForm({
 
       {/* Mobile footer */}
       {!roundComplete && (
-        <footer className="z-30 shrink-0 border-t border-border/80 bg-background/95 px-4 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-md sm:py-3 lg:hidden">
+        <footer className="z-30 shrink-0 border-t border-border/80 bg-background/98 px-3 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] shadow-[0_-4px_24px_-8px_rgba(0,0,0,0.08)] backdrop-blur-lg lg:hidden">
           <div className="mx-auto max-w-lg">{actionBar}</div>
         </footer>
       )}
@@ -915,6 +919,29 @@ export function ScoreEntryForm({
         onClose={() => setShowScorecard(false)}
         {...scorecardProps}
       />
+
+      <MobileRoundDetailsSheet
+        open={showRoundDetails}
+        onOpenChange={setShowRoundDetails}
+        title="Round details"
+        subtitle={`${selectedGroup?.label ?? "Group"} · ${getScoreEntrySubtitle(format, selectedGroup?.matchType)}`}
+      >
+        {groupLabelBlock()}
+        {matchRunningScore ? (
+          <MatchStatusCard match={matchRunningScore} />
+        ) : (
+          <div
+            className={cn(
+              "grid gap-3",
+              runningScores.length > 1 ? "grid-cols-2" : "grid-cols-1"
+            )}
+          >
+            {runningScores.map((running) => (
+              <RunningScoreCard key={running.id} running={running} />
+            ))}
+          </div>
+        )}
+      </MobileRoundDetailsSheet>
     </div>
   );
 }

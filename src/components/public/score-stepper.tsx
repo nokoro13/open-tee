@@ -2,7 +2,11 @@
 
 import { Minus, Plus } from "lucide-react";
 
-import { formatHoleScoreLabel } from "@/lib/scorecard";
+import {
+  MobilePlayerAvatar,
+  scoreResultLabel,
+  scoreResultTone,
+} from "@/components/public/mobile-scoring-ui";
 import { cn } from "@/lib/utils";
 
 const MIN_SCORE = 1;
@@ -15,8 +19,8 @@ type ScoreStepperProps = {
   disabled?: boolean;
   onChange: (value: number) => void;
   size?: "default" | "large";
-  /** horizontal = name beside controls; responsive = horizontal on mobile, vertical on lg+ */
   layout?: "vertical" | "horizontal" | "responsive";
+  playerIndex?: number;
   className?: string;
 };
 
@@ -27,80 +31,71 @@ export function getDefaultScoreForHole(
   return parByHole[hole] ?? 4;
 }
 
-function StepperControls({
+function HorizontalControls({
   label,
   value,
   disabled,
-  horizontal,
   large,
   onAdjust,
 }: {
   label: string;
   value: number;
   disabled?: boolean;
-  horizontal: boolean;
+  large: boolean;
+  onAdjust: (delta: number) => void;
+}) {
+  const buttonClass = cn(
+    "flex shrink-0 items-center justify-center rounded-full border border-border/50 bg-background shadow-sm transition-all hover:border-primary/40 hover:bg-muted active:scale-95 disabled:opacity-40",
+    "size-12"
+  );
+
+  return (
+    <div className="flex shrink-0 items-center gap-1 rounded-full border border-border/40 bg-linear-to-b from-muted/30 to-muted/10 p-1 shadow-inner">
+      <button
+        type="button"
+        aria-label={`Decrease ${label} score`}
+        disabled={disabled || value <= MIN_SCORE}
+        onClick={() => onAdjust(-1)}
+        className={buttonClass}
+      >
+        <Minus className="size-5 text-foreground/70" />
+      </button>
+      <span
+        className="min-w-[2.5ch] select-none px-1.5 text-center text-3xl font-semibold tabular-nums tracking-tight"
+        aria-live="polite"
+      >
+        {value}
+      </span>
+      <button
+        type="button"
+        aria-label={`Increase ${label} score`}
+        disabled={disabled || value >= MAX_SCORE}
+        onClick={() => onAdjust(1)}
+        className={buttonClass}
+      >
+        <Plus className="size-5 text-foreground/70" />
+      </button>
+    </div>
+  );
+}
+
+function VerticalControls({
+  label,
+  value,
+  disabled,
+  large,
+  onAdjust,
+}: {
+  label: string;
+  value: number;
+  disabled?: boolean;
   large: boolean;
   onAdjust: (delta: number) => void;
 }) {
   const buttonClass = cn(
     "flex shrink-0 items-center justify-center rounded-full border border-border/60 bg-background shadow-sm transition-all hover:border-primary/30 hover:bg-muted active:scale-95 disabled:opacity-40",
-    horizontal ? "size-12" : large ? "size-10 sm:size-14" : "size-10"
+    large ? "size-10 sm:size-14" : "size-10"
   );
-
-  const iconClass = cn(
-    "text-muted-foreground",
-    horizontal ? "size-5" : large ? "size-5 sm:size-6" : "size-5"
-  );
-
-  const minusButton = (
-    <button
-      type="button"
-      aria-label={`Decrease ${label} score`}
-      disabled={disabled || value <= MIN_SCORE}
-      onClick={() => onAdjust(-1)}
-      className={buttonClass}
-    >
-      <Minus className={iconClass} />
-    </button>
-  );
-
-  const plusButton = (
-    <button
-      type="button"
-      aria-label={`Increase ${label} score`}
-      disabled={disabled || value >= MAX_SCORE}
-      onClick={() => onAdjust(1)}
-      className={buttonClass}
-    >
-      <Plus className={iconClass} />
-    </button>
-  );
-
-  const scoreValue = (
-    <span
-      className={cn(
-        "select-none font-semibold tabular-nums tracking-tight",
-        horizontal
-          ? "min-w-[2.5ch] px-1.5 text-center text-3xl"
-          : large
-            ? "py-2 text-4xl sm:py-3 sm:text-6xl"
-            : "py-3 text-4xl"
-      )}
-      aria-live="polite"
-    >
-      {value}
-    </span>
-  );
-
-  if (horizontal) {
-    return (
-      <div className="flex shrink-0 items-center gap-1.5 rounded-full bg-linear-to-b from-primary/15 to-primary/5 p-1.5 shadow-inner">
-        {minusButton}
-        {scoreValue}
-        {plusButton}
-      </div>
-    );
-  }
 
   return (
     <div
@@ -109,9 +104,33 @@ function StepperControls({
         large ? "w-18 px-2 py-3 sm:w-24 sm:px-3 sm:py-6" : "w-18 px-2 py-3"
       )}
     >
-      {plusButton}
-      {scoreValue}
-      {minusButton}
+      <button
+        type="button"
+        aria-label={`Increase ${label} score`}
+        disabled={disabled || value >= MAX_SCORE}
+        onClick={() => onAdjust(1)}
+        className={buttonClass}
+      >
+        <Plus className={cn("text-muted-foreground", large ? "size-5 sm:size-6" : "size-5")} />
+      </button>
+      <span
+        className={cn(
+          "select-none font-semibold tabular-nums tracking-tight",
+          large ? "py-2 text-4xl sm:py-3 sm:text-6xl" : "py-3 text-4xl"
+        )}
+        aria-live="polite"
+      >
+        {value}
+      </span>
+      <button
+        type="button"
+        aria-label={`Decrease ${label} score`}
+        disabled={disabled || value <= MIN_SCORE}
+        onClick={() => onAdjust(-1)}
+        className={buttonClass}
+      >
+        <Minus className={cn("text-muted-foreground", large ? "size-5 sm:size-6" : "size-5")} />
+      </button>
     </div>
   );
 }
@@ -124,15 +143,48 @@ export function ScoreStepper({
   onChange,
   size = "default",
   layout = "vertical",
+  playerIndex = 0,
   className,
 }: ScoreStepperProps) {
-  const hint = par != null ? formatHoleScoreLabel(value, par) : null;
   const large = size === "large";
+  const resultLabel = par != null ? scoreResultLabel(value, par) : null;
+  const resultTone = par != null ? scoreResultTone(value, par) : "";
 
   function adjust(delta: number) {
     if (disabled) return;
     onChange(Math.min(MAX_SCORE, Math.max(MIN_SCORE, value + delta)));
   }
+
+  const mobileRow = (
+    <div
+      className={cn(
+        "flex min-h-[4.5rem] max-h-[6rem] flex-1 items-center gap-3 px-4 py-3",
+        className
+      )}
+    >
+      <MobilePlayerAvatar name={label} index={playerIndex} />
+      <div className="min-w-0 flex-1">
+        <p className="text-lg font-semibold leading-snug">{label}</p>
+        {resultLabel ? (
+          <span
+            className={cn(
+              "mt-1 inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold",
+              resultTone
+            )}
+          >
+            {resultLabel}
+          </span>
+        ) : null}
+      </div>
+      <HorizontalControls
+        label={label}
+        value={value}
+        disabled={disabled}
+        large={large}
+        onAdjust={adjust}
+      />
+    </div>
+  );
 
   const horizontalRow = (
     <div
@@ -142,16 +194,15 @@ export function ScoreStepper({
       )}
     >
       <div className="min-w-0 flex-1">
-        <p className="truncate text-lg font-semibold leading-snug">{label}</p>
-        {hint ? (
-          <p className="mt-0.5 text-sm font-medium text-muted-foreground">{hint}</p>
+        <p className="text-lg font-semibold leading-snug">{label}</p>
+        {resultLabel ? (
+          <p className="mt-0.5 text-sm font-medium text-muted-foreground">{resultLabel}</p>
         ) : null}
       </div>
-      <StepperControls
+      <HorizontalControls
         label={label}
         value={value}
         disabled={disabled}
-        horizontal
         large={large}
         onAdjust={adjust}
       />
@@ -168,33 +219,20 @@ export function ScoreStepper({
       >
         {label}
       </p>
-      <div className="relative inline-flex shrink-0">
-        <StepperControls
-          label={label}
-          value={value}
-          disabled={disabled}
-          horizontal={false}
-          large={large}
-          onAdjust={adjust}
-        />
-        {hint && (
-          <span
-            className={cn(
-              "absolute top-1/2 left-full ml-2 -translate-y-1/2 whitespace-nowrap rounded-full bg-muted/60 px-2 py-0.5 text-muted-foreground sm:ml-3 sm:px-2.5",
-              large ? "text-xs sm:text-sm" : "text-xs"
-            )}
-          >
-            {hint}
-          </span>
-        )}
-      </div>
+      <VerticalControls
+        label={label}
+        value={value}
+        disabled={disabled}
+        large={large}
+        onAdjust={adjust}
+      />
     </div>
   );
 
   if (layout === "responsive") {
     return (
       <>
-        <div className="w-full shrink-0 lg:hidden">{horizontalRow}</div>
+        <div className="flex w-full min-h-0 flex-1 lg:hidden">{mobileRow}</div>
         <div className="hidden lg:block">{verticalColumn}</div>
       </>
     );
