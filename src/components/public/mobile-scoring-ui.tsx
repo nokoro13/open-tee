@@ -115,7 +115,7 @@ export function MobileContextBar({
             </SelectContent>
           </Select>
         ) : (
-          <p className="text-base font-semibold leading-tight">
+          <p className="text-base font-semibold leading-tight text-foreground">
             {selectedGroup?.label}
           </p>
         )}
@@ -153,7 +153,7 @@ export function MobileHoleHero({ activeHole, totalHoles, par }: MobileHoleHeroPr
             Current hole
           </p>
           <div className="mt-1 flex items-baseline gap-2">
-            <span className="font-heading text-5xl font-semibold tabular-nums leading-none tracking-tight">
+            <span className="font-heading text-5xl font-semibold tabular-nums leading-none tracking-tight text-foreground">
               {activeHole}
             </span>
             <span className="pb-1 text-base font-medium text-muted-foreground">
@@ -165,7 +165,7 @@ export function MobileHoleHero({ activeHole, totalHoles, par }: MobileHoleHeroPr
           <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             Par
           </p>
-          <p className="font-heading text-3xl font-semibold tabular-nums leading-none">
+          <p className="font-heading text-3xl font-semibold tabular-nums leading-none text-foreground">
             {par}
           </p>
         </div>

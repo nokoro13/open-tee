@@ -1,5 +1,6 @@
 "use client";
 
+import { useAuth } from "@clerk/nextjs";
 import { Flag, Menu } from "lucide-react";
 import Link from "next/link";
 
@@ -31,6 +32,8 @@ const navLinks = [
 ];
 
 export function Navbar() {
+  const { isLoaded, isSignedIn } = useAuth();
+
   return (
     <header className="sticky top-0 z-50 border-b border-border/60 bg-background/85 backdrop-blur-md supports-backdrop-filter:bg-background/70">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:h-16 sm:px-6">
@@ -62,21 +65,33 @@ export function Navbar() {
         </NavigationMenu>
 
         <div className="flex items-center gap-1.5 sm:gap-2">
-          <ButtonLink
-            variant="ghost"
-            size="sm"
-            href="/sign-in"
-            className="hidden sm:inline-flex"
-          >
-            Sign in
-          </ButtonLink>
-          <ButtonLink
-            size="sm"
-            href="/sign-up"
-            className="hidden sm:inline-flex"
-          >
-            Get started
-          </ButtonLink>
+          {isLoaded && isSignedIn ? (
+            <ButtonLink
+              size="sm"
+              href="/dashboard"
+              className="hidden sm:inline-flex"
+            >
+              Dashboard
+            </ButtonLink>
+          ) : (
+            <>
+              <ButtonLink
+                variant="ghost"
+                size="sm"
+                href="/sign-in"
+                className="hidden sm:inline-flex"
+              >
+                Sign in
+              </ButtonLink>
+              <ButtonLink
+                size="sm"
+                href="/sign-up"
+                className="hidden sm:inline-flex"
+              >
+                Get started
+              </ButtonLink>
+            </>
+          )}
 
           <Sheet>
             <SheetTrigger
@@ -120,18 +135,29 @@ export function Navbar() {
               <Separator />
 
               <div className="flex flex-col gap-2 px-4 py-4">
-                <Link
-                  href="/sign-in"
-                  className={cn(buttonVariants({ variant: "outline" }), "w-full")}
-                >
-                  Sign in
-                </Link>
-                <Link
-                  href="/sign-up"
-                  className={cn(buttonVariants(), "w-full")}
-                >
-                  Get started
-                </Link>
+                {isLoaded && isSignedIn ? (
+                  <Link
+                    href="/dashboard"
+                    className={cn(buttonVariants(), "w-full")}
+                  >
+                    Dashboard
+                  </Link>
+                ) : (
+                  <>
+                    <Link
+                      href="/sign-in"
+                      className={cn(buttonVariants({ variant: "outline" }), "w-full")}
+                    >
+                      Sign in
+                    </Link>
+                    <Link
+                      href="/sign-up"
+                      className={cn(buttonVariants(), "w-full")}
+                    >
+                      Get started
+                    </Link>
+                  </>
+                )}
               </div>
             </SheetContent>
           </Sheet>

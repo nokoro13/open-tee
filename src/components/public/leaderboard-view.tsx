@@ -45,6 +45,7 @@ type LeaderboardViewProps = {
   slug: string;
   initialData: LeaderboardPayload;
   pollIntervalMs?: number;
+  embed?: boolean;
 };
 
 function MatchEntryNames({
@@ -91,6 +92,7 @@ export function LeaderboardView({
   slug,
   initialData,
   pollIntervalMs = 8000,
+  embed = false,
 }: LeaderboardViewProps) {
   const [data, setData] = useState(initialData);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -103,6 +105,7 @@ export function LeaderboardView({
 
   useEffect(() => {
     if (initialData.event.scoringStatus === "disabled") return;
+    if (pollIntervalMs <= 0) return;
 
     async function refresh() {
       try {
@@ -141,14 +144,23 @@ export function LeaderboardView({
     <div className="min-h-full bg-muted/20">
       <header className="border-b border-border bg-background">
         <div className="mx-auto flex h-14 max-w-lg items-center justify-between gap-2 px-4 sm:h-16">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <Flag className="size-4" />
+          {embed ? (
+            <div className="flex items-center gap-2">
+              <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                <Flag className="size-4" />
+              </div>
+              <span className="font-heading text-base font-semibold">OpenRound</span>
             </div>
-            <span className="font-heading text-base font-semibold">OpenRound</span>
-          </Link>
+          ) : (
+            <Link href="/" className="flex items-center gap-2">
+              <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                <Flag className="size-4" />
+              </div>
+              <span className="font-heading text-base font-semibold">OpenRound</span>
+            </Link>
+          )}
           <div className="flex items-center gap-2">
-            {scoringAvailable && (
+            {scoringAvailable && !embed && (
               <ButtonLink
                 href={scoreHref}
                 variant="outline"
@@ -170,7 +182,7 @@ export function LeaderboardView({
         </div>
       </header>
 
-      {scoringAvailable && (
+      {scoringAvailable && !embed && (
         <div className="border-b border-border bg-muted/30 px-4 py-3 sm:hidden">
           <ButtonLink href={scoreHref} className="h-10 w-full">
             <ClipboardList className="size-4" />

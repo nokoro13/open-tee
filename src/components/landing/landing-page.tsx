@@ -8,6 +8,7 @@ import {
   Globe,
   Mail,
   MapPin,
+  Printer,
   Smartphone,
   Trophy,
   Users,
@@ -15,9 +16,15 @@ import {
 
 import { FeatureList } from "@/components/landing/feature-list";
 import { Footer } from "@/components/landing/footer";
-import { ImagePlaceholder } from "@/components/landing/image-placeholder";
 import { Navbar } from "@/components/landing/navbar";
 import { SectionHeader } from "@/components/landing/section-header";
+import { ResponsiveDashboardPreview } from "@/components/landing/previews/responsive-dashboard-preview";
+import { EventSetupPreview } from "@/components/landing/previews/event-setup-preview";
+import { LeaderboardPreview } from "@/components/landing/previews/leaderboard-preview";
+import { MobileShowcase } from "@/components/landing/previews/mobile-showcase";
+import { PartnerBadges } from "@/components/landing/previews/partner-badges";
+import { PrintableScorecardPreview } from "@/components/landing/previews/printable-scorecard-preview";
+import { RegistrationPreview } from "@/components/landing/previews/registration-preview";
 import {
   Accordion,
   AccordionContent,
@@ -256,11 +263,7 @@ export function LandingPage() {
 
             <div className="relative mx-auto mt-10 max-w-5xl sm:mt-16">
               <div className="absolute -inset-2 rounded-2xl bg-primary/5 blur-2xl sm:-inset-4" />
-              <ImagePlaceholder
-                label="Dashboard preview"
-                aspectRatio="wide"
-                className="relative shadow-xl ring-1 ring-border/50 sm:shadow-2xl"
-              />
+              <ResponsiveDashboardPreview />
             </div>
           </div>
         </section>
@@ -272,14 +275,7 @@ export function LandingPage() {
               Trusted by clubs and organizers across the country
             </p>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-6">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <ImagePlaceholder
-                  key={i}
-                  label={`Partner logo ${i + 1}`}
-                  aspectRatio="video"
-                  className="h-10 rounded-lg sm:h-12 [&_svg]:size-4 sm:[&_svg]:size-5"
-                />
-              ))}
+              <PartnerBadges />
             </div>
           </div>
         </section>
@@ -338,19 +334,11 @@ export function LandingPage() {
                   ]}
                 />
               </div>
-              <ImagePlaceholder
-                label="Live scoring screenshot"
-                aspectRatio="video"
-                className="shadow-lg ring-1 ring-border/50 lg:shadow-xl"
-              />
+              <LeaderboardPreview />
             </div>
 
             <div className="grid items-center gap-8 lg:grid-cols-2 lg:gap-16">
-              <ImagePlaceholder
-                label="Registration page screenshot"
-                aspectRatio="video"
-                className="shadow-lg ring-1 ring-border/50 lg:order-1 lg:shadow-xl"
-              />
+              <RegistrationPreview />
               <div>
                 <Badge variant="secondary" className="mb-4">
                   Registration
@@ -372,6 +360,33 @@ export function LandingPage() {
                   ]}
                 />
               </div>
+            </div>
+
+            <div className="grid items-center gap-8 lg:grid-cols-2 lg:gap-16">
+              <div>
+                <Badge variant="secondary" className="mb-4">
+                  <Printer className="size-3" />
+                  Printable scorecards
+                </Badge>
+                <h2 className="text-2xl font-semibold tracking-tight text-balance sm:text-3xl lg:text-4xl">
+                  Tournament-ready scorecards, one click away
+                </h2>
+                <p className="mt-3 text-sm leading-relaxed text-muted-foreground sm:mt-4 sm:text-base">
+                  Generate professional scorecards from your pairings with
+                  yardages, handicap strokes, and QR codes that link straight to
+                  mobile scoring — ready to print before the first tee time.
+                </p>
+                <FeatureList
+                  className="mt-6 sm:mt-8"
+                  items={[
+                    "Print all groups or individual scorecards",
+                    "Course yardages, par, and stroke index built in",
+                    "Handicap dots calculated automatically",
+                    "QR codes for instant digital score entry",
+                  ]}
+                />
+              </div>
+              <PrintableScorecardPreview />
             </div>
           </div>
         </section>
@@ -404,11 +419,7 @@ export function LandingPage() {
 
             <Card className="mt-10 overflow-hidden border-border/60 p-0 sm:mt-16">
               <CardContent className="p-0">
-                <ImagePlaceholder
-                  label="Setup workflow screenshot"
-                  aspectRatio="wide"
-                  className="rounded-none border-0"
-                />
+                <EventSetupPreview />
               </CardContent>
             </Card>
           </div>
@@ -460,18 +471,7 @@ export function LandingPage() {
                 </ButtonLink>
               </div>
 
-              <div className="flex items-end justify-center gap-3 sm:gap-4">
-                <ImagePlaceholder
-                  label="Mobile web screen"
-                  aspectRatio="portrait"
-                  className="w-[140px] border-primary-foreground/20 bg-primary-foreground/5 sm:w-[180px] lg:w-[200px] [&_span]:text-[10px] [&_span]:text-primary-foreground/50 sm:[&_span]:text-xs [&_svg]:size-6 [&_svg]:text-primary-foreground/40 sm:[&_svg]:size-8"
-                />
-                <ImagePlaceholder
-                  label="Mobile web screen"
-                  aspectRatio="portrait"
-                  className="hidden w-[140px] border-primary-foreground/20 bg-primary-foreground/5 sm:block sm:w-[180px] lg:w-[200px] [&_span]:text-[10px] [&_span]:text-primary-foreground/50 sm:[&_span]:text-xs [&_svg]:size-6 [&_svg]:text-primary-foreground/40 sm:[&_svg]:size-8"
-                />
-              </div>
+              <MobileShowcase />
 
               <ButtonLink
                 variant="secondary"

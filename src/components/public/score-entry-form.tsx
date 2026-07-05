@@ -74,6 +74,7 @@ type ScoreEntryFormProps = {
   readOnly: boolean;
   allowGroupSwitch?: boolean;
   lockedGroupId?: string;
+  demoMode?: boolean;
 };
 
 type SlideDirection = "forward" | "back";
@@ -276,6 +277,7 @@ export function ScoreEntryForm({
   readOnly,
   allowGroupSwitch = false,
   lockedGroupId,
+  demoMode = false,
 }: ScoreEntryFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -319,8 +321,9 @@ export function ScoreEntryForm({
   const touchStartX = useRef<number | null>(null);
 
   useEffect(() => {
+    if (demoMode) return;
     saveScoringCode(slug, code);
-  }, [slug, code]);
+  }, [slug, code, demoMode]);
 
   useEffect(() => {
     setChangeScoresUnlocked(false);
@@ -433,6 +436,29 @@ export function ScoreEntryForm({
     }
 
     startTransition(async () => {
+      if (demoMode) {
+        const nextScores = { ...scores };
+        if (teamEntry) {
+          for (const side of selectedGroup.entrySides) {
+            const val = getEffectiveScore(side.id, activeHole);
+            nextScores[side.id] = { ...nextScores[side.id], [activeHole]: val };
+          }
+        } else {
+          for (const player of selectedGroup.players) {
+            const val = getEffectiveScore(player.id, activeHole);
+            nextScores[player.id] = { ...nextScores[player.id], [activeHole]: val };
+          }
+        }
+        setScores(nextScores);
+        setConfirmedHoles((prev) => new Set([...prev, activeHole]));
+        setJustSaved(true);
+
+        if (activeHoleIndex < totalHoles - 1) {
+          setTimeout(() => navigateToIndex(activeHoleIndex + 1, "forward"), 450);
+        }
+        return;
+      }
+
       const result = await saveHoleScores({
         slug,
         code,
@@ -646,21 +672,37 @@ export function ScoreEntryForm({
   );
 
   return (
-    <div className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-background lg:bg-linear-to-b lg:from-muted/40 lg:via-background lg:to-muted/20">
+    <div
+      className={cn(
+        "flex flex-col overflow-hidden bg-background lg:bg-linear-to-b lg:from-muted/40 lg:via-background lg:to-muted/20",
+        demoMode ? "h-full max-h-full" : "h-dvh max-h-dvh"
+      )}
+    >
       {/* Header */}
       <header className="z-30 shrink-0 border-b border-border/80 bg-background/95 backdrop-blur-md">
         <div className="mx-auto flex h-12 max-w-6xl items-center gap-2 px-4 lg:h-14 sm:gap-3 sm:px-6">
-          <Link
-            href="/"
-            className="flex items-center gap-2 rounded-lg transition-opacity hover:opacity-80"
-          >
-            <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
-              <Flag className="size-4" />
+          {demoMode ? (
+            <div className="flex items-center gap-2">
+              <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
+                <Flag className="size-4" />
+              </div>
+              <span className="hidden font-heading text-sm font-semibold sm:inline">
+                OpenRound
+              </span>
             </div>
-            <span className="hidden font-heading text-sm font-semibold sm:inline">
-              OpenRound
-            </span>
-          </Link>
+          ) : (
+            <Link
+              href="/"
+              className="flex items-center gap-2 rounded-lg transition-opacity hover:opacity-80"
+            >
+              <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
+                <Flag className="size-4" />
+              </div>
+              <span className="hidden font-heading text-sm font-semibold sm:inline">
+                OpenRound
+              </span>
+            </Link>
+          )}
 
           <div className="min-w-0 flex-1 lg:hidden">
             <p className="truncate text-base font-semibold tracking-tight">{eventName}</p>
@@ -674,22 +716,26 @@ export function ScoreEntryForm({
               Hole {activeHoleIndex + 1} / {totalHoles}
             </span>
 
-            <ButtonLink
-              href={`/e/${slug}/leaderboard`}
-              variant="outline"
-              size="sm"
-              className="hidden sm:inline-flex"
-            >
-              <Trophy className="size-4" />
-              Leaderboard
-            </ButtonLink>
-            <Link
-              href={`/e/${slug}/leaderboard`}
-              className="flex size-10 items-center justify-center rounded-full text-primary hover:bg-primary/10 sm:hidden"
-              aria-label="Leaderboard"
-            >
-              <Trophy className="size-5" />
-            </Link>
+            {!demoMode && (
+              <>
+                <ButtonLink
+                  href={`/e/${slug}/leaderboard`}
+                  variant="outline"
+                  size="sm"
+                  className="hidden sm:inline-flex"
+                >
+                  <Trophy className="size-4" />
+                  Leaderboard
+                </ButtonLink>
+                <Link
+                  href={`/e/${slug}/leaderboard`}
+                  className="flex size-10 items-center justify-center rounded-full text-primary hover:bg-primary/10 sm:hidden"
+                  aria-label="Leaderboard"
+                >
+                  <Trophy className="size-5" />
+                </Link>
+              </>
+            )}
           </div>
         </div>
 
@@ -823,13 +869,15 @@ export function ScoreEntryForm({
                     ))
                   )}
                 </div>
-                <ButtonLink
-                  href={`/e/${slug}/leaderboard`}
-                  size="lg"
-                  className="mt-8 h-12 px-10"
-                >
-                  View leaderboard
-                </ButtonLink>
+                {!demoMode && (
+                  <ButtonLink
+                    href={`/e/${slug}/leaderboard`}
+                    size="lg"
+                    className="mt-8 h-12 px-10"
+                  >
+                    View leaderboard
+                  </ButtonLink>
+                )}
                 <button
                   type="button"
                   onClick={() => setShowScorecard(true)}

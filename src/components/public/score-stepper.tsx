@@ -20,6 +20,7 @@ type ScoreStepperProps = {
   onChange: (value: number) => void;
   size?: "default" | "large";
   layout?: "vertical" | "horizontal" | "responsive";
+  forceMobileLayout?: boolean;
   playerIndex?: number;
   className?: string;
 };
@@ -61,7 +62,7 @@ function HorizontalControls({
         <Minus className="size-5 text-foreground/70" />
       </button>
       <span
-        className="min-w-[2.5ch] select-none px-1.5 text-center text-lg font-semibold tabular-nums tracking-tight"
+        className="min-w-[2.5ch] select-none px-1.5 text-center text-lg font-semibold tabular-nums tracking-tight text-foreground"
         aria-live="polite"
       >
         {value}
@@ -143,6 +144,7 @@ export function ScoreStepper({
   onChange,
   size = "default",
   layout = "vertical",
+  forceMobileLayout = false,
   playerIndex = 0,
   className,
 }: ScoreStepperProps) {
@@ -164,7 +166,7 @@ export function ScoreStepper({
     >
       <MobilePlayerAvatar name={label} index={playerIndex} />
       <div className="min-w-0 flex-1">
-        <p className="text-md font-semibold leading-snug">{label}</p>
+        <p className="text-md font-semibold leading-snug text-foreground">{label}</p>
         {resultLabel ? (
           <span
             className={cn(
@@ -230,6 +232,9 @@ export function ScoreStepper({
   );
 
   if (layout === "responsive") {
+    if (forceMobileLayout) {
+      return mobileRow;
+    }
     return (
       <>
         <div className="flex w-full min-h-0 flex-1 lg:hidden">{mobileRow}</div>

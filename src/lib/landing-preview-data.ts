@@ -1,0 +1,252 @@
+import type { Event, EventHole } from "@/db/schema";
+import type { LeaderboardEntry } from "@/lib/scoring";
+import type {
+  PrintableScorecard,
+  PrintableScorecardEvent,
+} from "@/lib/printable-scorecard";
+import type { ScorecardHoleSnapshot } from "@/lib/scorecard";
+
+export const PREVIEW_ORG_NAME = "Riverside Golf Club";
+export const PREVIEW_SLUG = "spring-charity-scramble";
+
+const previewTimestamp = new Date("2026-01-15T12:00:00Z");
+
+function baseEvent(overrides: Partial<Event> = {}): Event {
+  return {
+    id: "preview-event-1",
+    orgId: "preview-org",
+    slug: PREVIEW_SLUG,
+    name: "Spring Charity Scramble",
+    date: "2026-05-16",
+    courseName: "Pine Valley Golf Club",
+    externalCourseId: null,
+    nineSide: null,
+    format: "scramble",
+    holes: "18",
+    maxPlayers: 144,
+    entryFeeCents: 12500,
+    status: "published",
+    description:
+      "Join us for our annual charity outing supporting local youth golf programs. Lunch, awards, and a silent auction included.",
+    registrationOpens: null,
+    registrationCloses: null,
+    platformPaidAt: previewTimestamp,
+    stripePlatformSessionId: null,
+    scoringStatus: "open",
+    scoringCode: "MARSH1",
+    scoringFinalizedAt: null,
+    teamAName: null,
+    teamBName: null,
+    startFormat: "shotgun",
+    shotgunStartTime: "8:00 AM",
+    firstTeeTime: null,
+    teeTimeIntervalMinutes: 10,
+    createdAt: previewTimestamp,
+    updatedAt: previewTimestamp,
+    ...overrides,
+  };
+}
+
+export const previewDashboardEvents: Event[] = [
+  baseEvent(),
+  baseEvent({
+    id: "preview-event-2",
+    name: "Member-Guest Stroke Play",
+    date: "2026-06-21",
+    courseName: "Riverside Golf Club",
+    format: "stroke",
+    entryFeeCents: 8500,
+    status: "published",
+  }),
+  baseEvent({
+    id: "preview-event-3",
+    name: "Club Championship Qualifier",
+    date: "2026-07-12",
+    courseName: "Oakmont Country Club",
+    format: "match_play",
+    entryFeeCents: 0,
+    status: "draft",
+  }),
+];
+
+export const previewRegistrationEvent = {
+  organization: { name: PREVIEW_ORG_NAME },
+  event: baseEvent(),
+  registrationCount: 98,
+  spotsLeft: 46,
+  soldOut: false,
+  registrationClosed: false,
+};
+
+export const previewLeaderboardPayload = {
+  event: {
+    name: "Spring Charity Scramble",
+    slug: PREVIEW_SLUG,
+    format: "stroke",
+    holes: "18",
+    scoringStatus: "open",
+    courseName: "Pine Valley Golf Club",
+  },
+  entries: [
+    {
+      id: "lb-1",
+      rank: 1,
+      name: "Jordan Smith",
+      thru: 14,
+      total: 52,
+      totalDisplay: "52",
+      toPar: -2,
+      toParDisplay: "-2",
+      isComplete: false,
+    },
+    {
+      id: "lb-2",
+      rank: 2,
+      name: "Alex Chen",
+      thru: 14,
+      total: 53,
+      totalDisplay: "53",
+      toPar: -1,
+      toParDisplay: "-1",
+      isComplete: false,
+    },
+    {
+      id: "lb-3",
+      rank: 3,
+      name: "Taylor Brooks",
+      thru: 13,
+      total: 54,
+      totalDisplay: "54",
+      toPar: 0,
+      toParDisplay: "E",
+      isComplete: false,
+    },
+    {
+      id: "lb-4",
+      rank: 4,
+      name: "Morgan Lee",
+      thru: 14,
+      total: 55,
+      totalDisplay: "55",
+      toPar: 1,
+      toParDisplay: "+1",
+      isComplete: false,
+    },
+    {
+      id: "lb-5",
+      rank: 5,
+      name: "Casey Rivera",
+      thru: 12,
+      total: 56,
+      totalDisplay: "56",
+      toPar: 2,
+      toParDisplay: "+2",
+      isComplete: false,
+    },
+  ] satisfies LeaderboardEntry[],
+  updatedAt: previewTimestamp.toISOString(),
+};
+
+export const previewDraftEvent: Event = baseEvent({
+  id: "preview-draft-event",
+  slug: "summer-member-guest",
+  name: "Summer Member-Guest",
+  date: "2026-08-09",
+  courseName: "Riverside Golf Club",
+  format: "best_ball",
+  maxPlayers: 72,
+  entryFeeCents: 15000,
+  status: "draft",
+  scoringStatus: "disabled",
+  description: "Two-person best ball format with gross and net divisions.",
+});
+
+export const previewDraftEventHoles: EventHole[] = Array.from(
+  { length: 18 },
+  (_, index) => ({
+    id: `preview-hole-${index + 1}`,
+    eventId: "preview-draft-event",
+    holeNumber: index + 1,
+    par: index % 5 === 0 ? 5 : index % 3 === 0 ? 3 : 4,
+    yardage: 350 + index * 12,
+    strokeIndex: index + 1,
+    createdAt: previewTimestamp,
+  })
+);
+
+export const previewParByHole: Record<number, number> = Object.fromEntries(
+  previewDraftEventHoles.map((hole) => [hole.holeNumber, hole.par])
+);
+
+export const PARTNER_CLUBS = [
+  "Pine Valley GC",
+  "Riverside CC",
+  "Oakmont Club",
+  "Pebble Beach",
+  "Augusta National",
+  "St Andrews Links",
+] as const;
+
+const previewScorecardHoles: ScorecardHoleSnapshot[] = Array.from(
+  { length: 18 },
+  (_, index) => ({
+    holeNumber: index + 1,
+    par: index % 5 === 0 ? 5 : index % 3 === 0 ? 3 : 4,
+    yardage: 350 + index * 12,
+    strokeIndex: index + 1,
+  })
+);
+
+export const previewPrintableScorecardEvent: PrintableScorecardEvent = {
+  id: "preview-event-1",
+  slug: PREVIEW_SLUG,
+  name: "Spring Charity Scramble",
+  courseName: "Pine Valley Golf Club",
+  date: "2026-05-16",
+  format: "scramble",
+  formatLabel: "Scramble",
+  holes: "18",
+  holeData: previewScorecardHoles,
+};
+
+export const previewPrintableScorecard: PrintableScorecard = {
+  groupId: "preview-group-1",
+  groupLabel: "Group 1 · Hole 1",
+  scheduleLine: "8:00 AM · Hole 1 · 05/16/2026",
+  scoringCode: "G1SCOR",
+  scoringUrl: `https://openround.app/e/${PREVIEW_SLUG}/score?code=G1SCOR`,
+  displayScoreUrl: `openround.app/e/${PREVIEW_SLUG}/score`,
+  players: [
+    {
+      id: "preview-player-1",
+      name: "Jordan Smith",
+      handicap: "12.4",
+      courseHandicap: 11,
+      strokesByHole: [1, 0, 1, 0, 0, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 0, 1],
+    },
+    {
+      id: "preview-player-2",
+      name: "Alex Chen",
+      handicap: "8.2",
+      courseHandicap: 8,
+      strokesByHole: [1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
+    },
+    {
+      id: "preview-player-3",
+      name: "Taylor Brooks",
+      handicap: "18.0",
+      courseHandicap: 16,
+      strokesByHole: [1, 1, 1, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1],
+    },
+    {
+      id: "preview-player-4",
+      name: "Morgan Lee",
+      handicap: "6.5",
+      courseHandicap: 6,
+      strokesByHole: [1, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0],
+    },
+  ],
+  showTeamRow: true,
+  teamRowLabel: "Team Scramble Score",
+  minPlayerRows: 4,
+};

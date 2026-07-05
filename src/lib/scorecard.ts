@@ -8,6 +8,7 @@ export type ScorecardHoleSnapshot = {
   holeNumber: number;
   par: number;
   yardage?: number | null;
+  strokeIndex?: number | null;
 };
 
 export type EventParMap = Map<number, number>;
@@ -58,6 +59,7 @@ export function buildScorecardSnapshot(
       holeNumber: index + 1,
       par: hole.par,
       yardage: hole.yardage ?? null,
+      strokeIndex: hole.handicap_index ?? null,
     }));
   }
 
@@ -71,6 +73,7 @@ export function buildScorecardSnapshot(
     holeNumber: index + 1,
     par: hole.par,
     yardage: hole.yardage ?? null,
+    strokeIndex: hole.handicap_index ?? null,
   }));
 }
 
@@ -110,6 +113,7 @@ export async function getEventScorecard(
     holeNumber: hole.holeNumber,
     par: hole.par,
     yardage: hole.yardage,
+    strokeIndex: hole.strokeIndex,
   }));
 }
 
@@ -147,6 +151,7 @@ export async function replaceEventScorecard(
         holeNumber: hole.holeNumber,
         par: hole.par,
         yardage: hole.yardage ?? null,
+        strokeIndex: hole.strokeIndex ?? null,
       }))
     );
 }

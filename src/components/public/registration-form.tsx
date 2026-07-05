@@ -22,6 +22,7 @@ type RegistrationFormProps = {
   spotsLeft: number;
   soldOut: boolean;
   registrationClosed: boolean;
+  demoMode?: boolean;
 };
 
 export function RegistrationForm({
@@ -30,6 +31,7 @@ export function RegistrationForm({
   spotsLeft,
   soldOut,
   registrationClosed,
+  demoMode = false,
 }: RegistrationFormProps) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -43,6 +45,7 @@ export function RegistrationForm({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (demoMode) return;
     setError(null);
 
     startTransition(async () => {

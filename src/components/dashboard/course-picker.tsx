@@ -149,6 +149,7 @@ export function CoursePicker({
       holeNumber: index + 1,
       par: hole.par,
       yardage: hole.yardage ?? null,
+      strokeIndex: hole.handicap_index ?? null,
     }));
 
     setScorecard(snapshot);
@@ -359,6 +360,16 @@ export function CoursePicker({
               >
                 <div className="font-medium">{hole.holeNumber}</div>
                 <div className="text-muted-foreground">Par {hole.par}</div>
+                {hole.yardage != null && (
+                  <div className="text-[10px] text-muted-foreground">
+                    {hole.yardage} yds
+                  </div>
+                )}
+                {hole.strokeIndex != null && (
+                  <div className="text-[10px] text-muted-foreground">
+                    HCP {hole.strokeIndex}
+                  </div>
+                )}
               </div>
             ))}
           </div>

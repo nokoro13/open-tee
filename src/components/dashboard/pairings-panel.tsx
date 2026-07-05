@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { AlertTriangle, Plus, Trash2, Users } from "lucide-react";
+import { AlertTriangle, Plus, Printer, Trash2, Users } from "lucide-react";
 
 import {
   assignRegistrationTeamSide,
@@ -16,6 +16,7 @@ import { CopyRegistrationLink } from "@/components/dashboard/copy-registration-l
 import { SendScoringLinkButton } from "@/components/dashboard/send-scoring-link-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ButtonLink } from "@/components/ui/button-link";
 import {
   Card,
   CardContent,
@@ -157,6 +158,18 @@ export function PairingsPanel({
           </CardDescription>
         </div>
         <div className="flex flex-col gap-2 sm:items-end">
+          {showScoringLinks && pairings.groups.some((group) => group.players.length > 0) && (
+            <ButtonLink
+              variant="outline"
+              size="sm"
+              href={`/print/events/${eventId}/scorecards`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Printer />
+              Print all scorecards
+            </ButtonLink>
+          )}
           {startFormat === "shotgun" && pairings.groups.length > 0 && (
             <Button
               type="button"
@@ -216,6 +229,8 @@ export function PairingsPanel({
                       className="rounded-lg border border-border bg-muted/20 p-4"
                     >
                       <GroupHeader
+                        eventId={eventId}
+                        groupId={group.id}
                         label={group.label}
                         teeTime={group.teeTime}
                         startingHole={group.startingHole}
@@ -306,9 +321,21 @@ export function PairingsPanel({
                       />
                       {showScoringLinks && player.scoringCode && (
                         <div className="space-y-1.5 border-t border-border px-3 pb-3">
-                          <p className="text-xs font-medium text-muted-foreground">
-                            Scoring link
-                          </p>
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-xs font-medium text-muted-foreground">
+                              Scoring link
+                            </p>
+                            <ButtonLink
+                              variant="outline"
+                              size="sm"
+                              href={`/print/events/${eventId}/scorecards/${player.id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              <Printer />
+                              Print scorecard
+                            </ButtonLink>
+                          </div>
                           <CopyRegistrationLink
                             url={getGroupScorePageUrl(
                               appUrl,
@@ -331,6 +358,8 @@ export function PairingsPanel({
 }
 
 type GroupHeaderProps = {
+  eventId: string;
+  groupId: string;
   label: string;
   teeTime: string | null;
   startingHole: number | null;
@@ -352,6 +381,8 @@ type GroupHeaderProps = {
 };
 
 function GroupHeader({
+  eventId,
+  groupId,
   label,
   teeTime,
   startingHole,
@@ -478,14 +509,26 @@ function GroupHeader({
 
       {showScoringLink && scoringUrl && (
         <div className="space-y-1.5 border-t border-border pt-3">
-          <p className="text-xs font-medium text-muted-foreground">
-            Scoring link
-            {scoringCode ? (
-              <span className="ml-2 font-mono text-[11px] tracking-wider text-foreground">
-                {scoringCode}
-              </span>
-            ) : null}
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-medium text-muted-foreground">
+              Scoring link
+              {scoringCode ? (
+                <span className="ml-2 font-mono text-[11px] tracking-wider text-foreground">
+                  {scoringCode}
+                </span>
+              ) : null}
+            </p>
+            <ButtonLink
+              variant="outline"
+              size="sm"
+              href={`/print/events/${eventId}/scorecards/${groupId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Printer />
+              Print scorecard
+            </ButtonLink>
+          </div>
           <CopyRegistrationLink url={scoringUrl} />
         </div>
       )}

@@ -109,6 +109,7 @@ export const eventHoles = pgTable(
     holeNumber: integer("hole_number").notNull(),
     par: integer("par").notNull(),
     yardage: integer("yardage"),
+    strokeIndex: integer("stroke_index"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
