@@ -28,6 +28,7 @@ import {
   ScorecardOverlay,
 } from "@/components/public/scorecard-grid";
 import {
+  ChangeScoresOverlay,
   MobileContextBar,
   MobileHoleHero,
   MobileRoundDetailsSheet,
@@ -279,6 +280,7 @@ export function ScoreEntryForm({
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [justSaved, setJustSaved] = useState(false);
+  const [changeScoresUnlocked, setChangeScoresUnlocked] = useState(false);
   const [showScorecard, setShowScorecard] = useState(false);
   const [showRoundDetails, setShowRoundDetails] = useState(false);
   const [slideDirection, setSlideDirection] = useState<SlideDirection>("forward");
@@ -315,6 +317,10 @@ export function ScoreEntryForm({
     saveScoringCode(slug, code);
   }, [slug, code]);
 
+  useEffect(() => {
+    setChangeScoresUnlocked(false);
+  }, [activeHoleIndex]);
+
   const activeHole = holeNumbers[activeHoleIndex] ?? 1;
   const activePar = parByHole[activeHole];
   const totalHoles = holeNumbers.length;
@@ -350,6 +356,10 @@ export function ScoreEntryForm({
     parByHole,
     scoreEntries
   );
+
+  const activeHoleSaved = holeStatuses[activeHoleIndex]?.saved ?? false;
+  const showChangeScoresOverlay =
+    !readOnly && activeHoleSaved && !justSaved && !changeScoresUnlocked;
 
   const getEffectiveScore = useCallback(
     (entityId: string, hole: number) => {
@@ -585,7 +595,7 @@ export function ScoreEntryForm({
           type="button"
           size="lg"
           className="h-12 min-w-0 flex-1 text-base font-semibold shadow-md shadow-primary/20 sm:h-11"
-          disabled={isPending}
+          disabled={isPending || showChangeScoresOverlay}
           onClick={handleSave}
         >
           {isPending ? (
@@ -860,14 +870,14 @@ export function ScoreEntryForm({
                     </p>
                   </div>
 
-                  <div className="flex min-h-0 flex-1 flex-col divide-y divide-border/40 overflow-y-auto overscroll-contain lg:mt-8 lg:min-h-0 lg:flex-none lg:flex-row lg:flex-wrap lg:items-start lg:justify-center lg:gap-12 lg:divide-y-0 lg:overflow-visible">
+                  <div className="relative flex min-h-0 flex-1 flex-col divide-y divide-border/40 overflow-y-auto overscroll-contain lg:mt-8 lg:min-h-0 lg:flex-none lg:flex-row lg:flex-wrap lg:items-start lg:justify-center lg:gap-12 lg:divide-y-0 lg:overflow-visible">
                     {scoreEntries.map((entry, index) => (
                       <ScoreStepper
                         key={entry.id}
                         label={entry.label}
                         value={getEffectiveScore(entry.id, activeHole)}
                         par={activePar}
-                        disabled={readOnly || isPending}
+                        disabled={readOnly || isPending || showChangeScoresOverlay}
                         size="large"
                         layout="responsive"
                         playerIndex={index}
@@ -876,6 +886,11 @@ export function ScoreEntryForm({
                         }
                       />
                     ))}
+                    {showChangeScoresOverlay && (
+                      <ChangeScoresOverlay
+                        onUnlock={() => setChangeScoresUnlocked(true)}
+                      />
+                    )}
                   </div>
 
                   <div className="shrink-0 border-t border-border/40 px-4 py-2.5 text-center lg:border-0 lg:px-0">

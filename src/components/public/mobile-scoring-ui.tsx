@@ -193,6 +193,25 @@ export function MobilePlayerAvatar({ name, index }: MobilePlayerAvatarProps) {
   );
 }
 
+type ChangeScoresOverlayProps = {
+  onUnlock: () => void;
+};
+
+export function ChangeScoresOverlay({ onUnlock }: ChangeScoresOverlayProps) {
+  return (
+    <button
+      type="button"
+      onClick={onUnlock}
+      className="absolute inset-0 z-10 flex items-center justify-center bg-background/70 backdrop-blur-[3px] animate-in fade-in duration-200"
+      aria-label="Change scores for this hole"
+    >
+      <span className="rounded-full border border-border bg-card px-5 py-3 text-sm font-semibold text-foreground shadow-lg ring-1 ring-black/5 transition-transform active:scale-[0.98]">
+        Change scores?
+      </span>
+    </button>
+  );
+}
+
 type MobileRoundDetailsSheetProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
