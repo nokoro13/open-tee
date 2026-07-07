@@ -36,6 +36,11 @@ export type PrintableScorecardEvent = {
   slug: string;
   name: string;
   courseName: string;
+  courseAddress?: string | null;
+  teeName?: string | null;
+  courseRating?: string | null;
+  courseSlope?: number | null;
+  courseTotalYardage?: number | null;
   date: string;
   format: string;
   formatLabel: string;
@@ -364,6 +369,11 @@ export async function getPrintableScorecardBundle(
       slug: event.slug,
       name: event.name,
       courseName: event.courseName,
+      courseAddress: event.courseAddress,
+      teeName: event.teeName,
+      courseRating: event.courseRating,
+      courseSlope: event.courseSlope,
+      courseTotalYardage: event.courseTotalYardage,
       date: event.date,
       format: event.format,
       formatLabel: getEventFormatLabel(event.format),

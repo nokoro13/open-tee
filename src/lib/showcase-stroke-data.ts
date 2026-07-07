@@ -54,6 +54,13 @@ export const showcaseStrokeHoleNumbers = Array.from(
 
 export { previewParByHole as showcaseParByHole };
 
+export const showcaseYardageByHole: Record<number, number> = Object.fromEntries(
+  Array.from({ length: 18 }, (_, index) => {
+    const hole = index + 1;
+    return [hole, 350 + index * 12];
+  })
+);
+
 /** iPhone screen area below the notch at native 390px width (844 − 44pt). */
 export const SHOWCASE_SCORE_NATIVE_HEIGHT = 800;
 export const SHOWCASE_LEADERBOARD_NATIVE_HEIGHT = 640;

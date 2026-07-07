@@ -9,7 +9,11 @@ const NATIVE_HEIGHT = 620;
 export function LeaderboardPreview() {
   return (
     <PreviewBrowserFrame url="openround.app/e/spring-charity-scramble/leaderboard">
-      <PreviewScale nativeWidth={NATIVE_WIDTH} nativeHeight={NATIVE_HEIGHT}>
+      <PreviewScale
+        nativeWidth={NATIVE_WIDTH}
+        nativeHeight={NATIVE_HEIGHT}
+        interactive
+      >
         <div
           className="h-[620px] overflow-hidden bg-background"
           style={{ width: NATIVE_WIDTH }}

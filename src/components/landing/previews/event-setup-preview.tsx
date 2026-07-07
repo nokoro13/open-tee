@@ -1,31 +1,16 @@
-import { EventForm } from "@/components/dashboard/event-form";
+import { EventCreationWizard } from "@/components/dashboard/event-creation-wizard";
 import { PreviewBrowserFrame } from "@/components/landing/preview-browser-frame";
 import { PreviewDashboardShell } from "@/components/landing/preview-dashboard-shell";
 import {
   DESKTOP_NATIVE_WIDTH,
   PreviewScale,
 } from "@/components/landing/preview-scale";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { getEventFormatLabel } from "@/lib/event-formats";
-import {
-  previewDraftEvent,
-  previewDraftEventHoles,
-} from "@/lib/landing-preview-data";
+import { previewDraftEvent } from "@/lib/landing-preview-data";
 
 const NATIVE_HEIGHT = 720;
 
 export function EventSetupPreview() {
-  const draftEvent = {
-    ...previewDraftEvent,
-    eventHoles: previewDraftEventHoles,
-  };
-
   return (
     <PreviewBrowserFrame url="openround.app/dashboard/events/new?format=best_ball">
       <PreviewScale
@@ -37,29 +22,18 @@ export function EventSetupPreview() {
             title={`New ${getEventFormatLabel(previewDraftEvent.format)} event`}
             activePath="/dashboard/events/new"
           >
-            <div className="space-y-6">
+            <div className="mx-auto max-w-2xl space-y-6">
               <div>
                 <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
                   New {getEventFormatLabel(previewDraftEvent.format)} event
                 </h1>
                 <p className="mt-1 text-sm text-muted-foreground sm:text-base">
-                  Set up a draft tournament. You can change the format anytime
-                  while editing.
+                  Set up your event step by step. You can change anything while
+                  it&apos;s in draft.
                 </p>
               </div>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Event details</CardTitle>
-                  <CardDescription>
-                    Starting with {getEventFormatLabel(previewDraftEvent.format)}.
-                    You can edit this anytime while the event is in draft.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <EventForm event={draftEvent} />
-                </CardContent>
-              </Card>
+              <EventCreationWizard defaultFormat={previewDraftEvent.format} />
             </div>
           </PreviewDashboardShell>
         </div>

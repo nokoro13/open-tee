@@ -31,6 +31,7 @@ export type HoleScoreEntry = {
 export type HoleScoreStatus = {
   hole: number;
   par?: number;
+  yardage?: number;
   saved: boolean;
   /** Primary / single-player score (first entry). */
   strokes?: number;
@@ -180,7 +181,8 @@ export function getHoleStatuses(
   entryIds: string[],
   scores: Record<string, Record<number, number>>,
   parByHole: Record<number, number>,
-  scoreEntries?: Array<{ id: string; label: string }>
+  scoreEntries?: Array<{ id: string; label: string }>,
+  yardageByHole: Record<number, number> = {}
 ): HoleScoreStatus[] {
   return holeNumbers.map((hole) => {
     const entries = scoreEntries?.map((entry) => ({
@@ -194,6 +196,7 @@ export function getHoleStatuses(
     return {
       hole,
       par: parByHole[hole],
+      yardage: yardageByHole[hole],
       saved,
       strokes,
       entries: entries && entries.length > 1 ? entries : undefined,

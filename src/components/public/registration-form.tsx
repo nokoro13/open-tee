@@ -6,6 +6,7 @@ import {
   registerForEvent,
   type RegistrationInput,
 } from "@/actions/registrations";
+import { validateHandicapInput } from "@/lib/handicap-strokes";
 import { Button } from "@/components/ui/button";
 import {
   Field,
@@ -48,8 +49,17 @@ export function RegistrationForm({
     if (demoMode) return;
     setError(null);
 
+    const handicapResult = validateHandicapInput(form.handicap);
+    if (!handicapResult.valid) {
+      setError(handicapResult.error);
+      return;
+    }
+
     startTransition(async () => {
-      const result = await registerForEvent(slug, form);
+      const result = await registerForEvent(slug, {
+        ...form,
+        handicap: handicapResult.value ?? undefined,
+      });
       if ("success" in result && !result.success) {
         setError(result.error);
       }
@@ -113,11 +123,15 @@ export function RegistrationForm({
             id="reg-handicap"
             value={form.handicap}
             onChange={(e) => setForm({ ...form, handicap: e.target.value })}
-            placeholder="12.4"
+            placeholder="12.4 or +3"
             className="h-11 text-base sm:text-sm"
             disabled={disabled}
             inputMode="decimal"
           />
+          <FieldDescription>
+            Regular handicaps: enter the number only (e.g. 12). Plus handicaps
+            (better than scratch): use +3.
+          </FieldDescription>
         </Field>
       </FieldGroup>
 

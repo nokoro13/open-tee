@@ -1,11 +1,4 @@
-import { EventForm } from "@/components/dashboard/event-form";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { EventCreationWizard } from "@/components/dashboard/event-creation-wizard";
 import {
   getEventFormat,
   getEventFormatLabel,
@@ -27,31 +20,25 @@ export default async function NewEventPage({ searchParams }: NewEventPageProps) 
   const formatMeta = format ? getEventFormat(format) : undefined;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+    <div className="mx-auto w-full min-w-0 space-y-5 pb-2 sm:space-y-6">
+      <div className="min-w-0">
+        <h1 className="text-xl font-semibold tracking-tight sm:text-3xl">
           {formatMeta ? `New ${formatMeta.label} event` : "New event"}
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground sm:text-base">
+        <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
           {formatMeta
             ? formatMeta.description
-            : "Set up a draft tournament. You can change the format anytime while editing."}
+            : "Set up your event step by step. You can change anything while it's in draft."}
         </p>
+        {format && (
+          <p className="mt-2 text-sm text-muted-foreground">
+            Starting with {getEventFormatLabel(format)} — change it on the format step
+            if needed.
+          </p>
+        )}
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Event details</CardTitle>
-          <CardDescription>
-            {format
-              ? `Starting with ${getEventFormatLabel(format)}. You can edit this anytime while the event is in draft.`
-              : "You can edit this anytime while the event is in draft."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <EventForm defaultFormat={format} />
-        </CardContent>
-      </Card>
+      <EventCreationWizard defaultFormat={format} />
     </div>
   );
 }

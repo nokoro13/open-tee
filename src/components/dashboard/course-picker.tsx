@@ -3,9 +3,18 @@
 import { useEffect, useState } from "react";
 import { MapPin, Search, X } from "lucide-react";
 
-import type { ScorecardHoleSnapshot } from "@/lib/scorecard";
 import { totalPar } from "@/lib/scorecard";
-import type { OpenGolfCourseDetail, OpenGolfCourseSummary } from "@/lib/opengolfapi";
+import {
+  buildCourseSelection,
+  emptyCourseSelection,
+  type CourseSelection,
+} from "@/lib/course-selection";
+import {
+  formatTeeOptionLabel,
+  pickDefaultTeeKey,
+  type OpenGolfCourseDetail,
+  type OpenGolfCourseSummary,
+} from "@/lib/opengolfapi";
 import { Button } from "@/components/ui/button";
 import {
   Field,
@@ -21,18 +30,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-export type CourseSelection = {
-  courseName: string;
-  externalCourseId: string | null;
-  nineSide: "front" | "back" | null;
-  scorecardHoles: ScorecardHoleSnapshot[];
-};
+export type { CourseSelection } from "@/lib/course-selection";
 
 type CoursePickerProps = {
-  courseName: string;
-  externalCourseId: string | null;
-  nineSide: "front" | "back" | null;
-  initialScorecard?: ScorecardHoleSnapshot[];
+  selection: CourseSelection;
   holes: "9" | "18";
   onChange: (selection: CourseSelection) => void;
 };
@@ -42,16 +43,9 @@ function formatCourseLocation(course: OpenGolfCourseSummary): string {
   return parts.length > 0 ? parts.join(", ") : "Location unknown";
 }
 
-export function CoursePicker({
-  courseName,
-  externalCourseId,
-  nineSide,
-  initialScorecard = [],
-  holes,
-  onChange,
-}: CoursePickerProps) {
+export function CoursePicker({ selection, holes, onChange }: CoursePickerProps) {
   const [mode, setMode] = useState<"search" | "manual">(
-    externalCourseId ? "search" : "manual"
+    selection.externalCourseId ? "search" : "manual"
   );
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<OpenGolfCourseSummary[]>([]);
@@ -60,25 +54,41 @@ export function CoursePicker({
   const [selectedCourse, setSelectedCourse] = useState<OpenGolfCourseDetail | null>(
     null
   );
-  const [scorecard, setScorecard] = useState<ScorecardHoleSnapshot[]>(
-    initialScorecard
+  const [selectedTeeKey, setSelectedTeeKey] = useState<string | null>(
+    selection.selectedTeeKey ?? null
   );
-  const [side, setSide] = useState<"front" | "back">(nineSide ?? "front");
-  const [manualName, setManualName] = useState(courseName);
+  const [side, setSide] = useState<"front" | "back">(selection.nineSide ?? "front");
+  const [manualName, setManualName] = useState(selection.courseName);
   const [loadedCourseId, setLoadedCourseId] = useState<string | null>(
-    externalCourseId
+    selection.externalCourseId
   );
 
+  const scorecard = selection.scorecardHoles;
+
   useEffect(() => {
-    if (!externalCourseId || loadedCourseId === externalCourseId) return;
+    if (!selection.externalCourseId || loadedCourseId === selection.externalCourseId) {
+      return;
+    }
 
     async function loadCourse() {
       try {
-        const response = await fetch(`/api/courses/${externalCourseId}`);
+        const params = new URLSearchParams();
+        if (selection.selectedTeeKey) {
+          params.set("teeKey", selection.selectedTeeKey);
+        }
+        const queryString = params.toString();
+        const response = await fetch(
+          `/api/courses/${selection.externalCourseId}${queryString ? `?${queryString}` : ""}`
+        );
         if (!response.ok) return;
         const data = (await response.json()) as { course: OpenGolfCourseDetail };
         setSelectedCourse(data.course);
-        setLoadedCourseId(externalCourseId);
+        setLoadedCourseId(selection.externalCourseId);
+        setSelectedTeeKey(
+          selection.selectedTeeKey ??
+            pickDefaultTeeKey(data.course.tees) ??
+            null
+        );
         setMode("search");
       } catch {
         // Keep manual fallback
@@ -86,7 +96,11 @@ export function CoursePicker({
     }
 
     void loadCourse();
-  }, [externalCourseId, loadedCourseId]);
+  }, [
+    loadedCourseId,
+    selection.externalCourseId,
+    selection.selectedTeeKey,
+  ]);
 
   useEffect(() => {
     if (mode !== "search" || query.trim().length < 2) {
@@ -121,44 +135,30 @@ export function CoursePicker({
     };
   }, [query, mode]);
 
-  function applyScorecard(
+  function applySelection(
     course: OpenGolfCourseDetail,
+    teeKey: string | null,
     nextHoles: "9" | "18",
     nextSide: "front" | "back"
   ) {
-    if (!course.scorecard?.length) {
-      setScorecard([]);
-      onChange({
-        courseName: course.name,
-        externalCourseId: course.id,
-        nineSide: nextHoles === "9" ? nextSide : null,
-        scorecardHoles: [],
-      });
-      return;
-    }
+    onChange(
+      buildCourseSelection(course, teeKey, {
+        holes: nextHoles,
+        nineSide: nextSide,
+      })
+    );
+  }
 
-    const sorted = [...course.scorecard].sort((a, b) => a.hole - b.hole);
-    const slice =
-      nextHoles === "9"
-        ? nextSide === "back" && sorted.length >= 18
-          ? sorted.slice(9, 18)
-          : sorted.slice(0, 9)
-        : sorted.slice(0, 18);
-
-    const snapshot = slice.map((hole, index) => ({
-      holeNumber: index + 1,
-      par: hole.par,
-      yardage: hole.yardage ?? null,
-      strokeIndex: hole.handicap_index ?? null,
-    }));
-
-    setScorecard(snapshot);
-    onChange({
-      courseName: course.name,
-      externalCourseId: course.id,
-      nineSide: nextHoles === "9" ? nextSide : null,
-      scorecardHoles: snapshot,
-    });
+  async function loadCourseDetail(courseId: string, teeKey?: string | null) {
+    const params = new URLSearchParams();
+    if (teeKey) params.set("teeKey", teeKey);
+    const queryString = params.toString();
+    const response = await fetch(
+      `/api/courses/${courseId}${queryString ? `?${queryString}` : ""}`
+    );
+    if (!response.ok) throw new Error("Failed to load course");
+    const data = (await response.json()) as { course: OpenGolfCourseDetail };
+    return data.course;
   }
 
   async function handleSelectCourse(course: OpenGolfCourseSummary) {
@@ -167,54 +167,66 @@ export function CoursePicker({
     setSearchError(null);
 
     try {
-      const response = await fetch(`/api/courses/${course.id}`);
-      if (!response.ok) throw new Error("Failed to load course");
-      const data = (await response.json()) as { course: OpenGolfCourseDetail };
-      setSelectedCourse(data.course);
+      const detail = await loadCourseDetail(course.id);
+      const teeKey = pickDefaultTeeKey(detail.tees);
+      setSelectedCourse(detail);
       setLoadedCourseId(course.id);
-      applyScorecard(data.course, holes, side);
+      setSelectedTeeKey(teeKey);
+      applySelection(detail, teeKey, holes, side);
     } catch {
       setSearchError("Could not load course scorecard.");
+    }
+  }
+
+  async function handleTeeChange(teeKey: string) {
+    if (!selectedCourse) return;
+    setSelectedTeeKey(teeKey);
+    try {
+      const detail = await loadCourseDetail(selectedCourse.id, teeKey);
+      setSelectedCourse(detail);
+      applySelection(detail, teeKey, holes, side);
+    } catch {
+      setSearchError("Could not update tee selection.");
     }
   }
 
   function handleManualChange(name: string) {
     setManualName(name);
     setSelectedCourse(null);
-    setScorecard([]);
+    setSelectedTeeKey(null);
     onChange({
-      courseName: name,
-      externalCourseId: null,
-      nineSide: null,
-      scorecardHoles: [],
+      ...emptyCourseSelection(name),
     });
   }
 
   function switchToManual() {
     setMode("manual");
     setSelectedCourse(null);
-    setScorecard([]);
+    setSelectedTeeKey(null);
     setQuery("");
     setResults([]);
-    handleManualChange(manualName || courseName);
+    handleManualChange(manualName || selection.courseName);
   }
 
   function switchToSearch() {
     setMode("search");
-    setManualName(courseName);
+    setManualName(selection.courseName);
   }
 
   useEffect(() => {
-    if (selectedCourse) {
-      applyScorecard(selectedCourse, holes, side);
+    if (selectedCourse && selectedTeeKey) {
+      applySelection(selectedCourse, selectedTeeKey, holes, side);
     }
-  }, [holes, side, selectedCourse?.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- holes/side changes should rebuild scorecard
+  }, [holes, side]);
 
   const showNineSidePicker =
     mode === "search" &&
     selectedCourse != null &&
     holes === "9" &&
     (selectedCourse.scorecard?.length ?? 0) >= 9;
+
+  const teeOptions = selectedCourse?.tees ?? [];
 
   return (
     <div className="space-y-4">
@@ -279,7 +291,7 @@ export function CoursePicker({
           )}
 
           {results.length > 0 && (
-            <ul className="max-h-48 overflow-y-auto rounded-lg border border-border bg-background">
+            <ul className="max-h-56 overflow-y-auto overscroll-contain rounded-lg border border-border bg-background sm:max-h-48">
               {results.map((course) => (
                 <li key={course.id}>
                   <button
@@ -302,10 +314,53 @@ export function CoursePicker({
           )}
 
           {selectedCourse && (
-            <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm">
-              <p className="font-medium">{selectedCourse.name}</p>
-              {selectedCourse.address && (
-                <p className="text-muted-foreground">{selectedCourse.address}</p>
+            <div className="space-y-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm">
+              <div>
+                <p className="font-medium">{selectedCourse.name}</p>
+                {selectedCourse.address && (
+                  <p className="text-muted-foreground">{selectedCourse.address}</p>
+                )}
+                {(selectedCourse.phone || selectedCourse.website) && (
+                  <p className="text-xs text-muted-foreground">
+                    {[selectedCourse.phone, selectedCourse.website]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </p>
+                )}
+              </div>
+
+              {teeOptions.length > 0 && (
+                <Field>
+                  <FieldLabel>Tournament tees</FieldLabel>
+                  <Select
+                    value={selectedTeeKey ?? undefined}
+                    onValueChange={(value) => {
+                      if (value) void handleTeeChange(value);
+                    }}
+                  >
+                    <SelectTrigger className="h-11 w-full">
+                      <SelectValue placeholder="Select tees">
+                        {teeOptions.find((tee) => tee.tee_key === selectedTeeKey)
+                          ? formatTeeOptionLabel(
+                              teeOptions.find(
+                                (tee) => tee.tee_key === selectedTeeKey
+                              )!
+                            )
+                          : undefined}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {teeOptions.map((tee) => (
+                        <SelectItem key={tee.tee_key} value={tee.tee_key}>
+                          {formatTeeOptionLabel(tee)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FieldDescription>
+                    Yardages and rating on scorecards use the selected tee.
+                  </FieldDescription>
+                </Field>
               )}
             </div>
           )}
@@ -351,8 +406,9 @@ export function CoursePicker({
         <div className="rounded-lg border border-border bg-muted/20 p-3">
           <p className="mb-2 text-sm font-medium">
             Scorecard preview · Par {totalPar(scorecard)}
+            {selection.teeName ? ` · ${selection.teeName} tees` : ""}
           </p>
-          <div className="grid grid-cols-6 gap-1 text-center text-xs sm:grid-cols-9">
+          <div className="grid grid-cols-6 gap-1 text-center text-xs overscroll-contain sm:grid-cols-9">
             {scorecard.map((hole) => (
               <div
                 key={hole.holeNumber}

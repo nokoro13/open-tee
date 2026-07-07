@@ -1,13 +1,16 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { getDb } from "@/db";
 import { registrations } from "@/db/schema";
 import { sendRegistrationConfirmationEmail } from "@/lib/email";
+import { validateHandicapInput } from "@/lib/handicap-strokes";
 import { syncRegistrationScoringCode } from "@/actions/scoring";
 import { getEventFormatLabel } from "@/lib/event-formats";
+import { requireOrganization } from "@/lib/auth";
 import {
   getPublishedEventBySlug,
   getRegistrationCount,
@@ -16,6 +19,14 @@ import {
 import { getAppUrl, getStripe } from "@/lib/stripe";
 
 export type RegistrationInput = {
+  name: string;
+  email: string;
+  handicap?: string;
+};
+
+export type UpdateRegistrationInput = {
+  registrationId: string;
+  eventId: string;
   name: string;
   email: string;
   handicap?: string;
@@ -34,10 +45,16 @@ function parseRegistrationInput(
   if (!input.email.trim() || !input.email.includes("@")) {
     return { success: false, error: "A valid email is required." };
   }
+
+  const handicapResult = validateHandicapInput(input.handicap);
+  if (!handicapResult.valid) {
+    return { success: false, error: handicapResult.error };
+  }
+
   return {
     name: input.name.trim(),
     email: input.email.trim().toLowerCase(),
-    handicap: input.handicap?.trim() || undefined,
+    handicap: handicapResult.value ?? undefined,
   };
 }
 
@@ -191,6 +208,62 @@ export async function registerForEvent(
     .where(eq(registrations.id, registrationId!));
 
   redirect(session.url);
+}
+
+export async function updateRegistration(
+  input: UpdateRegistrationInput
+): Promise<ActionResult> {
+  const parsed = parseRegistrationInput(input);
+  if ("success" in parsed) {
+    return parsed;
+  }
+
+  const org = await requireOrganization();
+
+  const registration = await getDb().query.registrations.findFirst({
+    where: eq(registrations.id, input.registrationId),
+    with: { event: true },
+  });
+
+  if (!registration || registration.eventId !== input.eventId) {
+    return { success: false, error: "Registration not found." };
+  }
+
+  if (registration.event.orgId !== org.id) {
+    return { success: false, error: "Registration not found." };
+  }
+
+  if (parsed.email !== registration.email) {
+    const duplicate = await getDb().query.registrations.findFirst({
+      where: and(
+        eq(registrations.eventId, input.eventId),
+        eq(registrations.email, parsed.email),
+        ne(registrations.id, input.registrationId)
+      ),
+    });
+
+    if (duplicate) {
+      return {
+        success: false,
+        error: "Another registration already uses this email.",
+      };
+    }
+  }
+
+  await getDb()
+    .update(registrations)
+    .set({
+      name: parsed.name,
+      email: parsed.email,
+      handicap: parsed.handicap ?? null,
+      updatedAt: new Date(),
+    })
+    .where(eq(registrations.id, input.registrationId));
+
+  revalidatePath(`/dashboard/events/${input.eventId}`);
+  revalidatePath(`/print/events/${input.eventId}/scorecards`);
+
+  return { success: true };
 }
 
 export async function handleRegistrationPaid(

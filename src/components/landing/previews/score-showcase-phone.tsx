@@ -30,6 +30,7 @@ import {
   showcaseStrokeGroup,
   showcaseStrokeHoleNumbers,
   showcaseStrokeInitialScores,
+  showcaseYardageByHole,
 } from "@/lib/showcase-stroke-data";
 
 const ACTIVE_HOLE = 10;
@@ -48,6 +49,7 @@ function ScoreShowcaseContent() {
 
   const activeHole = ACTIVE_HOLE;
   const activePar = showcaseParByHole[activeHole] ?? 4;
+  const activeYardage = showcaseYardageByHole[activeHole];
   const totalHoles = showcaseStrokeHoleNumbers.length;
   const completedHoles = 9;
   const progressPct = Math.round((activeHole / totalHoles) * 100);
@@ -140,6 +142,7 @@ function ScoreShowcaseContent() {
               activeHole={activeHole}
               totalHoles={totalHoles}
               par={activePar}
+              yardage={activeYardage}
             />
 
             <div className="relative flex min-h-0 flex-1 flex-col justify-center divide-y divide-border/40 overflow-hidden">

@@ -8,12 +8,14 @@ import {
   updateEvent,
   type EventFormInput,
 } from "@/actions/events";
-import {
-  CoursePicker,
-  type CourseSelection,
-} from "@/components/dashboard/course-picker";
+import { CoursePicker } from "@/components/dashboard/course-picker";
 import { DeleteEventButton } from "@/components/dashboard/delete-event-button";
 import type { Event, EventHole } from "@/db/schema";
+import {
+  courseSelectionFromEvent,
+  emptyCourseSelection,
+  type CourseSelection,
+} from "@/lib/course-selection";
 import { Button } from "@/components/ui/button";
 import {
   Field,
@@ -61,21 +63,14 @@ type EventFormProps = {
   defaultFormat?: EventFormat;
 };
 
-const defaultCourseSelection = (): CourseSelection => ({
-  courseName: "",
-  externalCourseId: null,
-  nineSide: null,
-  scorecardHoles: [],
-});
+const defaultCourseSelection = (): CourseSelection => emptyCourseSelection();
 
-const defaultValues: Omit<EventFormInput, keyof CourseSelection> & CourseSelection = {
-  name: "",
-  date: "",
-  courseName: "",
-  externalCourseId: null,
-  nineSide: null,
-  scorecardHoles: [],
-  format: "scramble",
+const defaultValues: Omit<EventFormInput, keyof CourseSelection> & CourseSelection =
+  {
+    name: "",
+    date: "",
+    ...emptyCourseSelection(),
+    format: "scramble",
   holes: "18",
   maxPlayers: 72,
   entryFeeDollars: 0,
@@ -91,19 +86,7 @@ export function EventForm({ event, defaultFormat }: EventFormProps) {
   const [error, setError] = useState<string | null>(null);
 
   const [courseSelection, setCourseSelection] = useState<CourseSelection>(() =>
-    event
-      ? {
-          courseName: event.courseName,
-          externalCourseId: event.externalCourseId,
-          nineSide: event.nineSide,
-          scorecardHoles:
-            event.eventHoles?.map((hole) => ({
-              holeNumber: hole.holeNumber,
-              par: hole.par,
-              yardage: hole.yardage,
-            })) ?? [],
-        }
-      : defaultCourseSelection()
+    event ? courseSelectionFromEvent(event) : defaultCourseSelection()
   );
 
   const [startFormatValues, setStartFormatValues] = useState<StartFormatFieldValues>(
@@ -140,10 +123,7 @@ export function EventForm({ event, defaultFormat }: EventFormProps) {
     return {
       ...form,
       ...startFormatValues,
-      courseName: courseSelection.courseName,
-      externalCourseId: courseSelection.externalCourseId,
-      nineSide: courseSelection.nineSide,
-      scorecardHoles: courseSelection.scorecardHoles,
+      ...courseSelection,
       ...(form.format === "ryder_cup"
         ? {
             teamAName: form.teamAName,
@@ -213,10 +193,7 @@ export function EventForm({ event, defaultFormat }: EventFormProps) {
         <Field>
           <FieldLabel>Course</FieldLabel>
           <CoursePicker
-            courseName={courseSelection.courseName}
-            externalCourseId={courseSelection.externalCourseId}
-            nineSide={courseSelection.nineSide}
-            initialScorecard={courseSelection.scorecardHoles}
+            selection={courseSelection}
             holes={form.holes}
             onChange={setCourseSelection}
           />

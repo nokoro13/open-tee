@@ -124,6 +124,11 @@ export default async function ScorePage({ params, searchParams }: ScorePageProps
   const parByHole = Object.fromEntries(
     (event.eventHoles ?? []).map((hole) => [hole.holeNumber, hole.par])
   );
+  const yardageByHole = Object.fromEntries(
+    (event.eventHoles ?? [])
+      .filter((hole) => hole.yardage != null)
+      .map((hole) => [hole.holeNumber, hole.yardage!])
+  );
 
   return (
     <ScoreEntryForm
@@ -134,6 +139,7 @@ export default async function ScorePage({ params, searchParams }: ScorePageProps
       holes={event.holes}
       holeNumbers={getHoleNumbers(event.holes)}
       parByHole={parByHole}
+      yardageByHole={yardageByHole}
       groups={visibleGroups}
       initialScores={initialScores}
       readOnly={readOnly}

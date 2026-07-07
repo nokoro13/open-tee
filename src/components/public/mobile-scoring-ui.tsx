@@ -141,9 +141,15 @@ type MobileHoleHeroProps = {
   activeHole: number;
   totalHoles: number;
   par: number;
+  yardage?: number | null;
 };
 
-export function MobileHoleHero({ activeHole, totalHoles, par }: MobileHoleHeroProps) {
+export function MobileHoleHero({
+  activeHole,
+  totalHoles,
+  par,
+  yardage,
+}: MobileHoleHeroProps) {
   return (
     <div className="relative shrink-0 overflow-hidden rounded-t-2xl bg-linear-to-br from-primary/8 via-primary/4 to-transparent px-5 py-4">
       <div className="absolute -right-6 -top-6 size-24 rounded-full bg-primary/5" />
@@ -161,13 +167,25 @@ export function MobileHoleHero({ activeHole, totalHoles, par }: MobileHoleHeroPr
             </span>
           </div>
         </div>
-        <div className="rounded-2xl border border-primary/15 bg-background/80 px-4 py-2.5 text-center shadow-sm backdrop-blur-sm">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Par
-          </p>
-          <p className="font-heading text-3xl font-semibold tabular-nums leading-none text-foreground">
-            {par}
-          </p>
+        <div className="flex items-stretch gap-2">
+          {yardage != null && (
+            <div className="rounded-2xl border border-border/60 bg-background/80 px-3 py-2.5 text-center shadow-sm backdrop-blur-sm">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Yds
+              </p>
+              <p className="font-heading text-2xl font-semibold tabular-nums leading-none text-foreground">
+                {yardage}
+              </p>
+            </div>
+          )}
+          <div className="rounded-2xl border border-primary/15 bg-background/80 px-4 py-2.5 text-center shadow-sm backdrop-blur-sm">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Par
+            </p>
+            <p className="font-heading text-3xl font-semibold tabular-nums leading-none text-foreground">
+              {par}
+            </p>
+          </div>
         </div>
       </div>
     </div>

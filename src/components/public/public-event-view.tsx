@@ -14,6 +14,7 @@ import { formatEventDate, formatFee } from "@/lib/events";
 import { getEventFormatLabel } from "@/lib/event-formats";
 import { getStartFormatSummary } from "@/lib/start-format";
 import type { Event } from "@/db/schema";
+import { formatCourseLocation, formatTeeSummary } from "@/lib/course-selection";
 
 type PublicEventViewProps = {
   event: Event & { organization: { name: string } };
@@ -32,6 +33,9 @@ export function PublicEventView({
   registrationClosed,
   demoMode = false,
 }: PublicEventViewProps) {
+  const courseLocation = formatCourseLocation(event);
+  const teeSummary = formatTeeSummary(event);
+
   return (
     <div className="min-h-full bg-muted/20">
       <header className="border-b border-border bg-background">
@@ -63,9 +67,20 @@ export function PublicEventView({
             <Calendar className="size-4 shrink-0 text-primary" />
             {formatEventDate(event.date)}
           </div>
-          <div className="flex items-center gap-2.5 text-muted-foreground">
-            <MapPin className="size-4 shrink-0 text-primary" />
-            {event.courseName}
+          <div className="flex items-start gap-2.5 text-muted-foreground">
+            <MapPin className="mt-0.5 size-4 shrink-0 text-primary" />
+            <span>
+              <span className="block">{event.courseName}</span>
+              {event.courseAddress && (
+                <span className="mt-0.5 block text-xs">{event.courseAddress}</span>
+              )}
+              {courseLocation && !event.courseAddress && (
+                <span className="mt-0.5 block text-xs">{courseLocation}</span>
+              )}
+              {teeSummary && (
+                <span className="mt-0.5 block text-xs">{teeSummary}</span>
+              )}
+            </span>
           </div>
           <div className="flex items-center gap-2.5 text-muted-foreground">
             <Clock className="size-4 shrink-0 text-primary" />

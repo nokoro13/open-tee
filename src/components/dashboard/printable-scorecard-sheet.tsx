@@ -6,6 +6,7 @@ import {
   getHoleValue,
   sumRange,
 } from "@/lib/printable-scorecard";
+import { formatHandicapDisplay } from "@/lib/handicap-strokes";
 
 type PrintableScorecardSheetProps = {
   event: PrintableScorecardEvent;
@@ -216,7 +217,7 @@ export function PrintableScorecardSheet({
         if (column.kind === "hdcp") {
           return (
             <GridCell key={columnKey(column, `player-${options.rowIndex}`)}>
-              {options.player.handicap ?? ""}
+              {formatHandicapDisplay(options.player.handicap)}
             </GridCell>
           );
         }
@@ -301,6 +302,13 @@ export function PrintableScorecardSheet({
           <p className="mt-0.5 text-[10px] text-neutral-700">
             {event.courseName} · {event.formatLabel}
           </p>
+          {(event.courseAddress || event.teeName) && (
+            <p className="mt-0.5 text-[9px] text-neutral-600">
+              {[event.courseAddress, event.teeName && `${event.teeName} tees`, event.courseTotalYardage && `${event.courseTotalYardage.toLocaleString()} yds`, event.courseRating && event.courseSlope && `${event.courseRating}/${event.courseSlope}`]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          )}
           <p className="mt-1 break-all font-mono text-[10px] font-medium sm:text-[11px]">
             {scorecard.displayScoreUrl}
           </p>

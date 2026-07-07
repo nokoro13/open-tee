@@ -29,6 +29,16 @@ export type EventFormInput = {
   externalCourseId?: string | null;
   nineSide?: "front" | "back" | null;
   scorecardHoles?: ScorecardHoleSnapshot[];
+  courseAddress?: string | null;
+  courseCity?: string | null;
+  courseState?: string | null;
+  coursePhone?: string | null;
+  courseWebsite?: string | null;
+  selectedTeeKey?: string | null;
+  teeName?: string | null;
+  courseRating?: string | null;
+  courseSlope?: number | null;
+  courseTotalYardage?: number | null;
   format: EventFormat;
   holes: "9" | "18";
   maxPlayers: number;
@@ -118,6 +128,36 @@ async function persistScorecard(
   await replaceEventScorecard(eventId, []);
 }
 
+function courseMetadataValues(input: EventFormInput) {
+  if (!input.externalCourseId) {
+    return {
+      courseAddress: null,
+      courseCity: null,
+      courseState: null,
+      coursePhone: null,
+      courseWebsite: null,
+      selectedTeeKey: null,
+      teeName: null,
+      courseRating: null,
+      courseSlope: null,
+      courseTotalYardage: null,
+    };
+  }
+
+  return {
+    courseAddress: input.courseAddress ?? null,
+    courseCity: input.courseCity ?? null,
+    courseState: input.courseState ?? null,
+    coursePhone: input.coursePhone ?? null,
+    courseWebsite: input.courseWebsite ?? null,
+    selectedTeeKey: input.selectedTeeKey ?? null,
+    teeName: input.teeName ?? null,
+    courseRating: input.courseRating ?? null,
+    courseSlope: input.courseSlope ?? null,
+    courseTotalYardage: input.courseTotalYardage ?? null,
+  };
+}
+
 export async function getEventsForOrg(): Promise<Event[]> {
   const org = await requireOrganization();
   return getDb().query.events.findMany({
@@ -165,6 +205,7 @@ export async function createEvent(
       courseName: parsed.courseName.trim(),
       externalCourseId: parsed.externalCourseId ?? null,
       nineSide: parsed.nineSide ?? null,
+      ...courseMetadataValues(parsed),
       format: parsed.format,
       holes: parsed.holes,
       maxPlayers: parsed.maxPlayers,
@@ -216,6 +257,7 @@ export async function updateEvent(
       courseName: parsed.courseName.trim(),
       externalCourseId: parsed.externalCourseId ?? null,
       nineSide: parsed.nineSide ?? null,
+      ...courseMetadataValues(parsed),
       format: parsed.format,
       holes: parsed.holes,
       maxPlayers: parsed.maxPlayers,

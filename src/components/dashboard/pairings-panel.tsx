@@ -572,6 +572,10 @@ function PlayerRow({
 }: PlayerRowProps) {
   const selectValue = currentGroupId ?? "unassigned";
   const teamValue = player.teamSide ?? "none";
+  const selectedGroupLabel =
+    currentGroupId != null
+      ? groupOptions.find((group) => group.id === currentGroupId)?.label
+      : undefined;
 
   return (
     <div className="flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -628,7 +632,9 @@ function PlayerRow({
           }}
         >
           <SelectTrigger className="w-full min-w-36 sm:w-40">
-            <SelectValue placeholder="Assign group" />
+            <SelectValue placeholder="Assign group">
+              {selectedGroupLabel}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="unassigned">Unassigned</SelectItem>

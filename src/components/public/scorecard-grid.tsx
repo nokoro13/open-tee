@@ -161,7 +161,7 @@ function SingleHoleScore({
       </span>
       {hole.par != null && (
         <span className="mt-0.5 text-[9px] leading-none text-muted-foreground">
-          {hole.par}
+          {hole.yardage != null ? `${hole.par} · ${hole.yardage}` : hole.par}
         </span>
       )}
     </>

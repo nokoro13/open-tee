@@ -1,6 +1,7 @@
 import type { Registration } from "@/db/schema";
 import { Download } from "lucide-react";
 
+import { EditRegistrationSheet } from "@/components/dashboard/edit-registration-sheet";
 import { Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button-link";
 import {
@@ -10,6 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { formatHandicapDisplay } from "@/lib/handicap-strokes";
 
 const statusVariant: Record<
   Registration["paymentStatus"],
@@ -63,24 +65,27 @@ export function RegistrationsList({
         ) : (
           <ul className="divide-y divide-border">
             {registrations.map((reg) => (
-              <li key={reg.id} className="flex items-start justify-between gap-3 py-3 first:pt-0">
-                <div className="min-w-0">
+              <li
+                key={reg.id}
+                className="flex items-start justify-between gap-3 py-3 first:pt-0"
+              >
+                <div className="min-w-0 flex-1">
                   <p className="truncate font-medium">{reg.name}</p>
                   <p className="truncate text-sm text-muted-foreground">
                     {reg.email}
                   </p>
                   {reg.handicap && (
                     <p className="text-xs text-muted-foreground">
-                      Handicap: {reg.handicap}
+                      Handicap: {formatHandicapDisplay(reg.handicap)}
                     </p>
                   )}
                 </div>
-                <Badge
-                  variant={statusVariant[reg.paymentStatus]}
-                  className="shrink-0 capitalize"
-                >
-                  {reg.paymentStatus}
-                </Badge>
+                <div className="flex shrink-0 items-center gap-1">
+                  <EditRegistrationSheet eventId={eventId} registration={reg} />
+                  <Badge variant={statusVariant[reg.paymentStatus]} className="capitalize">
+                    {reg.paymentStatus}
+                  </Badge>
+                </div>
               </li>
             ))}
           </ul>

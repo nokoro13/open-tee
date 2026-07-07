@@ -69,6 +69,7 @@ type ScoreEntryFormProps = {
   holes: "9" | "18";
   holeNumbers: number[];
   parByHole: Record<number, number>;
+  yardageByHole?: Record<number, number>;
   groups: ScoreEntryGroup[];
   initialScores: Record<string, Record<number, number>>;
   readOnly: boolean;
@@ -272,6 +273,7 @@ export function ScoreEntryForm({
   holes,
   holeNumbers,
   parByHole,
+  yardageByHole = {},
   groups,
   initialScores,
   readOnly,
@@ -331,6 +333,7 @@ export function ScoreEntryForm({
 
   const activeHole = holeNumbers[activeHoleIndex] ?? 1;
   const activePar = parByHole[activeHole];
+  const activeYardage = yardageByHole[activeHole];
   const totalHoles = holeNumbers.length;
   const completedHoles = countCompletedHoles(holeNumbers, entryIds, scores);
   const roundComplete = isRoundComplete(holeNumbers, entryIds, scores);
@@ -362,7 +365,8 @@ export function ScoreEntryForm({
     entryIds,
     scores,
     parByHole,
-    scoreEntries
+    scoreEntries,
+    yardageByHole
   );
 
   const activeHoleConfirmed = confirmedHoles.has(activeHole);
@@ -900,6 +904,7 @@ export function ScoreEntryForm({
                       activeHole={activeHole}
                       totalHoles={totalHoles}
                       par={activePar ?? getDefaultScoreForHole(parByHole, activeHole)}
+                      yardage={activeYardage}
                     />
                   </div>
 
@@ -918,7 +923,10 @@ export function ScoreEntryForm({
                     </div>
                     <p className="mt-1 text-base text-muted-foreground">
                       {activePar != null ? (
-                        <>Par {activePar}</>
+                        <>
+                          Par {activePar}
+                          {activeYardage != null ? ` · ${activeYardage} yds` : ""}
+                        </>
                       ) : (
                         <>Default par {getDefaultScoreForHole(parByHole, activeHole)}</>
                       )}

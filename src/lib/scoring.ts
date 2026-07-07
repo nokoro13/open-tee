@@ -1,6 +1,7 @@
 import { and, eq, isNull } from "drizzle-orm";
 
-import { getEventParMap, formatScoreToPar } from "@/lib/scorecard";
+import { getEventParMap, formatScoreToPar, getEventScorecard } from "@/lib/scorecard";
+import { attachLeaderboardScorecards, type LeaderboardScorecard } from "@/lib/leaderboard-scorecard";
 import { dedupeScoresByHole, sumDedupedStrokes } from "@/lib/score-aggregation";
 import {
   computeBestBallTotal,
@@ -43,6 +44,7 @@ export type LeaderboardEntry = {
     playerBName: string;
     leader: "a" | "b" | null;
   };
+  scorecard?: LeaderboardScorecard | null;
 };
 
 export type RyderCupSummary = {
@@ -568,21 +570,44 @@ export async function buildLeaderboard(
 ): Promise<LeaderboardResult> {
   const mode = getLeaderboardMode(format);
 
+  let result: LeaderboardResult;
+
   switch (mode) {
     case "team_stroke":
-      return { entries: await buildTeamStrokeLeaderboard(eventId, holes) };
+      result = { entries: await buildTeamStrokeLeaderboard(eventId, holes) };
+      break;
     case "team_best_ball":
-      return { entries: await buildTeamBestBallLeaderboard(eventId, holes) };
+      result = { entries: await buildTeamBestBallLeaderboard(eventId, holes) };
+      break;
     case "stableford":
-      return { entries: await buildStablefordLeaderboard(eventId, holes) };
+      result = { entries: await buildStablefordLeaderboard(eventId, holes) };
+      break;
     case "match":
-      return { entries: await buildMatchLeaderboard(eventId, holes) };
+      result = { entries: await buildMatchLeaderboard(eventId, holes) };
+      break;
     case "ryder_cup":
-      return buildRyderCupLeaderboard(eventId, holes);
+      result = await buildRyderCupLeaderboard(eventId, holes);
+      break;
     case "individual_stroke":
     default:
-      return { entries: await buildIndividualStrokeLeaderboard(eventId, holes) };
+      result = { entries: await buildIndividualStrokeLeaderboard(eventId, holes) };
+      break;
   }
+
+  const eventHoles = await getEventScorecard(eventId);
+  result.entries = await attachLeaderboardScorecards(
+    result.entries,
+    eventId,
+    format,
+    holes,
+    eventHoles.map((hole) => ({
+      holeNumber: hole.holeNumber,
+      par: hole.par,
+      strokeIndex: hole.strokeIndex ?? null,
+    }))
+  );
+
+  return result;
 }
 
 function buildEntrySides(
