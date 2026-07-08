@@ -329,19 +329,22 @@ export async function openScoring(eventId: string): Promise<ActionResult> {
   }
 
   const marshalCode = event.scoringCode ?? (await createUniqueScoringCode(eventId));
+  const now = new Date();
 
   await getDb()
     .update(events)
     .set({
       scoringStatus: "open",
       scoringCode: marshalCode,
-      updatedAt: new Date(),
+      registrationCloses: now,
+      updatedAt: now,
     })
     .where(eq(events.id, eventId));
 
   await syncEventScoringCodes(eventId);
 
   revalidatePath(`/dashboard/events/${eventId}`);
+  revalidatePath(`/e/${event.slug}`);
   revalidatePath(`/e/${event.slug}/score`);
   revalidatePath(`/e/${event.slug}/leaderboard`);
   return { success: true };

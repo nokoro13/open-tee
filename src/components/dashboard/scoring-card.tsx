@@ -9,6 +9,17 @@ import {
   finalizeScoring,
   openScoring,
 } from "@/actions/scoring";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ButtonLink } from "@/components/ui/button-link";
@@ -52,6 +63,7 @@ export function ScoringCard({
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [openScoringDialogOpen, setOpenScoringDialogOpen] = useState(false);
 
   const marshalScoreUrl =
     scoringCode != null
@@ -102,6 +114,11 @@ export function ScoringCard({
     });
   }
 
+  function confirmOpenScoring() {
+    setOpenScoringDialogOpen(false);
+    runAction(() => openScoring(eventId));
+  }
+
   return (
     <Card className="border-primary/20">
       <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
@@ -131,16 +148,49 @@ export function ScoringCard({
         )}
 
         {scoringStatus === "disabled" && (
-          <Button
-            type="button"
-            size="lg"
-            className="h-11 w-full sm:w-auto"
-            disabled={isPending}
-            onClick={() => runAction(() => openScoring(eventId))}
-          >
-            <Play />
-            {isPending ? "Opening..." : "Open scoring"}
-          </Button>
+          <>
+            <p className="text-sm text-muted-foreground">
+              Opening scoring closes public registration and locks the start
+              schedule and pairings.
+            </p>
+            <AlertDialog
+              open={openScoringDialogOpen}
+              onOpenChange={setOpenScoringDialogOpen}
+            >
+              <Button
+                type="button"
+                size="lg"
+                className="h-11 w-full sm:w-auto"
+                disabled={isPending}
+                onClick={() => setOpenScoringDialogOpen(true)}
+              >
+                <Play />
+                {isPending ? "Opening..." : "Open scoring"}
+              </Button>
+              <AlertDialogContent className="sm:max-w-md">
+                <AlertDialogHeader>
+                  <AlertDialogMedia>
+                    <Play className="size-5" />
+                  </AlertDialogMedia>
+                  <AlertDialogTitle>Open scoring for this event?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This closes public registration and locks the start schedule
+                    and pairings. You can still enter scores and edit existing
+                    player details.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    disabled={isPending}
+                    onClick={confirmOpenScoring}
+                  >
+                    {isPending ? "Opening..." : "Open scoring"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </>
         )}
 
         {scoringStatus !== "disabled" && (

@@ -7,6 +7,7 @@ import { getEventById } from "@/actions/events";
 import { getDb } from "@/db";
 import { events, pairingGroups } from "@/db/schema";
 import { requireOrganization } from "@/lib/auth";
+import { assertEventSetupUnlocked } from "@/lib/event-setup-lock";
 import {
   computeTeeTimeForGroup,
   type StartFormatSettings,
@@ -67,6 +68,11 @@ export async function updateEventStartFormat(
     return { success: false, error: "Event not found." };
   }
 
+  const lockResult = assertEventSetupUnlocked(event.scoringStatus);
+  if (!lockResult.ok) {
+    return { success: false, error: lockResult.error };
+  }
+
   const validationError = validateStartFormatSettings(input);
   if (validationError) {
     return { success: false, error: validationError };
@@ -114,6 +120,11 @@ export async function autoAssignShotgunHoles(
 
   if (!event) {
     return { success: false, error: "Event not found." };
+  }
+
+  const lockResult = assertEventSetupUnlocked(event.scoringStatus);
+  if (!lockResult.ok) {
+    return { success: false, error: lockResult.error };
   }
 
   if (event.startFormat !== "shotgun") {

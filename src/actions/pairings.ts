@@ -12,6 +12,7 @@ import { syncTeeTimesForEvent } from "@/actions/start-format";
 import { getDb } from "@/db";
 import { pairingGroups, registrations } from "@/db/schema";
 import { requireOrganization } from "@/lib/auth";
+import { assertEventSetupUnlocked } from "@/lib/event-setup-lock";
 
 export type ActionResult =
   | { success: true }
@@ -40,11 +41,24 @@ async function requirePublishedEvent(
   return { ok: true, event };
 }
 
+function assertSetupUnlocked(
+  event: NonNullable<Awaited<ReturnType<typeof getEventById>>>
+): ActionResult | null {
+  const lockResult = assertEventSetupUnlocked(event.scoringStatus);
+  if (!lockResult.ok) {
+    return { success: false, error: lockResult.error };
+  }
+  return null;
+}
+
 export async function createPairingGroup(eventId: string): Promise<ActionResult> {
   const result = await requirePublishedEvent(eventId);
   if (!result.ok) {
     return { success: false, error: result.error };
   }
+
+  const locked = assertSetupUnlocked(result.event);
+  if (locked) return locked;
 
   const [countResult] = await getDb()
     .select({ count: sql<number>`count(*)::int` })
@@ -95,6 +109,9 @@ export async function updatePairingGroup(
     return { success: false, error: "Pairings are only available for published events." };
   }
 
+  const locked = assertSetupUnlocked(group.event);
+  if (locked) return locked;
+
   const label = input.label?.trim();
   if (input.label !== undefined && !label) {
     return { success: false, error: "Group label is required." };
@@ -142,6 +159,9 @@ export async function deletePairingGroup(groupId: string): Promise<ActionResult>
     return { success: false, error: "Pairings are only available for published events." };
   }
 
+  const locked = assertSetupUnlocked(group.event);
+  if (locked) return locked;
+
   await getDb().delete(pairingGroups).where(eq(pairingGroups.id, groupId));
 
   await syncTeeTimesForEvent(group.eventId);
@@ -168,6 +188,9 @@ export async function assignRegistrationToGroup(
   if (registration.event.status !== "published") {
     return { success: false, error: "Pairings are only available for published events." };
   }
+
+  const locked = assertSetupUnlocked(registration.event);
+  if (locked) return locked;
 
   if (pairingGroupId) {
     const group = await getDb().query.pairingGroups.findFirst({
@@ -218,6 +241,9 @@ export async function assignRegistrationTeamSide(
   if (registration.event.format !== "ryder_cup") {
     return { success: false, error: "Team sides are only used for Ryder Cup events." };
   }
+
+  const locked = assertSetupUnlocked(registration.event);
+  if (locked) return locked;
 
   await getDb()
     .update(registrations)

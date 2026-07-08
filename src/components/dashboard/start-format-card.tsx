@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { Clock } from "lucide-react";
+import { Clock, Lock } from "lucide-react";
 
 import { updateEventStartFormat } from "@/actions/start-format";
 import {
@@ -18,10 +18,16 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  eventSetupLockedMessage,
+  isEventSetupLocked,
+  type EventScoringStatus,
+} from "@/lib/event-setup-lock";
 import { getStartFormatSummary } from "@/lib/start-format";
 
 type StartFormatCardProps = {
   eventId: string;
+  scoringStatus: EventScoringStatus;
   event: {
     startFormat: "shotgun" | "tee_times";
     shotgunStartTime: string | null;
@@ -30,13 +36,18 @@ type StartFormatCardProps = {
   };
 };
 
-export function StartFormatCard({ eventId, event }: StartFormatCardProps) {
+export function StartFormatCard({
+  eventId,
+  scoringStatus,
+  event,
+}: StartFormatCardProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [values, setValues] = useState<StartFormatFieldValues>(() =>
     defaultStartFormatFieldValues(event)
   );
+  const setupLocked = isEventSetupLocked(scoringStatus);
 
   function handleSave() {
     setError(null);
@@ -74,10 +85,17 @@ export function StartFormatCard({ eventId, event }: StartFormatCardProps) {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {setupLocked && (
+          <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2.5 text-sm text-muted-foreground">
+            <Lock className="mt-0.5 size-4 shrink-0 text-amber-700" />
+            <span>{eventSetupLockedMessage(scoringStatus)}</span>
+          </div>
+        )}
+
         <StartFormatFields
           values={values}
           onChange={setValues}
-          disabled={isPending}
+          disabled={isPending || setupLocked}
         />
 
         {error && (
@@ -86,14 +104,16 @@ export function StartFormatCard({ eventId, event }: StartFormatCardProps) {
           </p>
         )}
 
-        <Button
-          type="button"
-          disabled={isPending}
-          onClick={handleSave}
-          className="h-11 w-full sm:w-auto"
-        >
-          {isPending ? "Saving..." : "Save start schedule"}
-        </Button>
+        {!setupLocked && (
+          <Button
+            type="button"
+            disabled={isPending}
+            onClick={handleSave}
+            className="h-11 w-full sm:w-auto"
+          >
+            {isPending ? "Saving..." : "Save start schedule"}
+          </Button>
+        )}
       </CardContent>
     </Card>
   );

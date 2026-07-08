@@ -28,16 +28,44 @@ export async function getRegistrationCount(eventId: string): Promise<number> {
 
 export function isRegistrationOpen(event: {
   status: string;
+  scoringStatus?: string;
   registrationOpens: Date | null;
   registrationCloses: Date | null;
 }): boolean {
   if (event.status !== "published") return false;
+  if (event.scoringStatus === "open" || event.scoringStatus === "finalized") {
+    return false;
+  }
 
   const now = new Date();
   if (event.registrationOpens && now < event.registrationOpens) return false;
   if (event.registrationCloses && now > event.registrationCloses) return false;
 
   return true;
+}
+
+export function getPublicRegistrationMessage(event: {
+  scoringStatus: string;
+  registrationOpens: Date | null;
+  registrationCloses: Date | null;
+  status: string;
+}): string {
+  if (event.scoringStatus === "open") {
+    return "Registration is closed — the tournament is underway.";
+  }
+  if (event.scoringStatus === "finalized") {
+    return "Registration is closed — this event has finished.";
+  }
+  if (!isRegistrationOpen(event)) {
+    const now = new Date();
+    if (event.registrationOpens && now < event.registrationOpens) {
+      return "Registration is not open yet.";
+    }
+    if (event.registrationCloses && now > event.registrationCloses) {
+      return "Registration is currently closed.";
+    }
+  }
+  return "Complete the form below to secure your spot.";
 }
 
 export function formatEventDate(dateStr: string): string {

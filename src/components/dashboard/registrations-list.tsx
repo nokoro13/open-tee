@@ -1,5 +1,5 @@
 import type { Registration } from "@/db/schema";
-import { Download } from "lucide-react";
+import { Download, Lock } from "lucide-react";
 
 import { EditRegistrationSheet } from "@/components/dashboard/edit-registration-sheet";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  isEventSetupLocked,
+  type EventScoringStatus,
+} from "@/lib/event-setup-lock";
 import { formatHandicapDisplay } from "@/lib/handicap-strokes";
 
 const statusVariant: Record<
@@ -28,6 +32,7 @@ type RegistrationsListProps = {
   registrations: Registration[];
   registrationCount: number;
   maxPlayers: number;
+  scoringStatus: EventScoringStatus;
 };
 
 export function RegistrationsList({
@@ -35,7 +40,10 @@ export function RegistrationsList({
   registrations,
   registrationCount,
   maxPlayers,
+  scoringStatus,
 }: RegistrationsListProps) {
+  const registrationLocked = isEventSetupLocked(scoringStatus);
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
@@ -43,6 +51,7 @@ export function RegistrationsList({
           <CardTitle>Registrations</CardTitle>
           <CardDescription>
             {registrationCount} of {maxPlayers} spots filled
+            {registrationLocked ? " · New sign-ups are closed" : ""}
           </CardDescription>
         </div>
         {registrations.length > 0 && (
@@ -57,6 +66,15 @@ export function RegistrationsList({
         )}
       </CardHeader>
       <CardContent>
+        {registrationLocked && (
+          <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2.5 text-sm text-muted-foreground">
+            <Lock className="mt-0.5 size-4 shrink-0 text-amber-700" />
+            <span>
+              New registrations are closed. You can still edit existing player
+              details.
+            </span>
+          </div>
+        )}
         {registrations.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No registrations yet. Share your registration link to get players

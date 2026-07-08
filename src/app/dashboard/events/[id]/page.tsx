@@ -30,6 +30,10 @@ import { syncTeeTimesForEvent } from "@/actions/start-format";
 import { getEventPairings } from "@/lib/pairings";
 import { requireOrganization } from "@/lib/auth";
 import { getEventFormatLabel } from "@/lib/event-formats";
+import {
+  eventSetupLockedMessage,
+  isEventSetupLocked,
+} from "@/lib/event-setup-lock";
 
 type EventDetailPageProps = {
   params: Promise<{ id: string }>;
@@ -119,12 +123,20 @@ export default async function EventDetailPage({
         />
       )}
 
+      {event.status === "published" && isEventSetupLocked(event.scoringStatus) && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-muted-foreground">
+          {eventSetupLockedMessage(event.scoringStatus)}
+        </div>
+      )}
+
       {event.status === "published" && (
         <Card>
           <CardHeader>
             <CardTitle>Registration link</CardTitle>
             <CardDescription>
-              Share this link with players. Works on any phone — no app needed.
+              {isEventSetupLocked(event.scoringStatus)
+                ? "Public registration is closed while scoring is active."
+                : "Share this link with players. Works on any phone — no app needed."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -149,12 +161,14 @@ export default async function EventDetailPage({
           registrations={registrations}
           registrationCount={registrationCount}
           maxPlayers={event.maxPlayers}
+          scoringStatus={event.scoringStatus}
         />
       )}
 
       {event.status === "published" && (
         <StartFormatCard
           eventId={event.id}
+          scoringStatus={event.scoringStatus}
           event={{
             startFormat: event.startFormat,
             shotgunStartTime: event.shotgunStartTime,

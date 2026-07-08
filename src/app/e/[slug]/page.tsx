@@ -7,6 +7,7 @@ import {
   formatFee,
   getPublishedEventBySlug,
   getRegistrationCount,
+  getPublicRegistrationMessage,
   isRegistrationOpen,
 } from "@/lib/events";
 import { getEventFormatLabel } from "@/lib/event-formats";
@@ -44,6 +45,9 @@ export default async function PublicEventPage({
   const spotsLeft = Math.max(0, event.maxPlayers - registrationCount);
   const soldOut = spotsLeft === 0;
   const registrationClosed = !isRegistrationOpen(event);
+  const registrationDescription = soldOut
+    ? "This event is at capacity."
+    : getPublicRegistrationMessage(event);
 
   return (
     <div className="min-h-full bg-muted/20">
@@ -110,11 +114,7 @@ export default async function PublicEventPage({
           <CardHeader>
             <CardTitle>Register</CardTitle>
             <CardDescription>
-              {soldOut
-                ? "This event is at capacity."
-                : registrationClosed
-                  ? "Registration is currently closed."
-                  : "Complete the form below to secure your spot."}
+              {registrationDescription}
             </CardDescription>
           </CardHeader>
           <CardContent>

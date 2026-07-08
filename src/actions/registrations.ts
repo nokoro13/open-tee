@@ -14,6 +14,7 @@ import { requireOrganization } from "@/lib/auth";
 import {
   getPublishedEventBySlug,
   getRegistrationCount,
+  getPublicRegistrationMessage,
   isRegistrationOpen,
 } from "@/lib/events";
 import { getAppUrl, getStripe } from "@/lib/stripe";
@@ -73,7 +74,10 @@ export async function registerForEvent(
   }
 
   if (!isRegistrationOpen(event)) {
-    return { success: false, error: "Registration is closed for this event." };
+    return {
+      success: false,
+      error: getPublicRegistrationMessage(event),
+    };
   }
 
   const count = await getRegistrationCount(event.id);

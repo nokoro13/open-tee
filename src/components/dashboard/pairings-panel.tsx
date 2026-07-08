@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { AlertTriangle, Plus, Printer, Trash2, Users } from "lucide-react";
+import { AlertTriangle, Lock, Plus, Printer, Trash2, Users } from "lucide-react";
 
 import {
   assignRegistrationTeamSide,
@@ -49,6 +49,10 @@ import {
   getStartFormatSummary,
   type StartFormat,
 } from "@/lib/start-format";
+import {
+  eventSetupLockedMessage,
+  isEventSetupLocked,
+} from "@/lib/event-setup-lock";
 
 type PairingsPanelProps = {
   eventId: string;
@@ -133,6 +137,8 @@ export function PairingsPanel({
   );
   const showScoringLinks = scoringStatus !== "disabled";
   const canEmailPlayers = scoringStatus === "open";
+  const setupLocked = isEventSetupLocked(scoringStatus);
+  const controlsDisabled = isPending || setupLocked;
   const startingHoleOptions = getStartingHoleOptions(holes);
   const scheduleSummary = getStartFormatSummary({
     startFormat,
@@ -170,30 +176,39 @@ export function PairingsPanel({
               Print all scorecards
             </ButtonLink>
           )}
-          {startFormat === "shotgun" && pairings.groups.length > 0 && (
+          {startFormat === "shotgun" && pairings.groups.length > 0 && !setupLocked && (
             <Button
               type="button"
               variant="outline"
               size="sm"
-              disabled={isPending}
+              disabled={controlsDisabled}
               onClick={handleAutoAssignHoles}
             >
               Auto-assign holes
             </Button>
           )}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={isPending}
-            onClick={handleCreateGroup}
-          >
-            <Plus />
-            {showMatchType ? "Add match" : "Add group"}
-          </Button>
+          {!setupLocked && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={controlsDisabled}
+              onClick={handleCreateGroup}
+            >
+              <Plus />
+              {showMatchType ? "Add match" : "Add group"}
+            </Button>
+          )}
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
+        {setupLocked && (
+          <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2.5 text-sm text-muted-foreground">
+            <Lock className="mt-0.5 size-4 shrink-0 text-amber-700" />
+            <span>{eventSetupLockedMessage(scoringStatus)}</span>
+          </div>
+        )}
+
         {error && (
           <p className="text-sm text-destructive" role="alert">
             {error}
@@ -238,7 +253,7 @@ export function PairingsPanel({
                         startingHoleOptions={startingHoleOptions}
                         matchType={group.matchType}
                         showMatchType={showMatchType}
-                        disabled={isPending}
+                        disabled={controlsDisabled}
                         scoringCode={group.scoringCode}
                         scoringUrl={
                           group.scoringCode
@@ -279,6 +294,7 @@ export function PairingsPanel({
                                 sideALabel={sideALabel}
                                 sideBLabel={sideBLabel}
                                 disabled={isPending}
+                                assignDisabled={controlsDisabled}
                                 eventId={eventId}
                                 canEmailPlayer={canEmailPlayers}
                                 onAssign={handleAssign}
@@ -314,6 +330,7 @@ export function PairingsPanel({
                         sideALabel={sideALabel}
                         sideBLabel={sideBLabel}
                         disabled={isPending}
+                        assignDisabled={controlsDisabled}
                         eventId={eventId}
                         canEmailPlayer={canEmailPlayers}
                         onAssign={handleAssign}
@@ -551,6 +568,7 @@ type PlayerRowProps = {
   sideALabel: string;
   sideBLabel: string;
   disabled: boolean;
+  assignDisabled: boolean;
   eventId: string;
   canEmailPlayer: boolean;
   onAssign: (registrationId: string, groupId: string | null) => void;
@@ -565,6 +583,7 @@ function PlayerRow({
   sideALabel,
   sideBLabel,
   disabled,
+  assignDisabled,
   eventId,
   canEmailPlayer,
   onAssign,
@@ -602,7 +621,7 @@ function PlayerRow({
         {showTeamSides && (
           <Select
             value={teamValue}
-            disabled={disabled}
+            disabled={assignDisabled}
             onValueChange={(value) => {
               if (value === "none") onTeamSide(player.id, null);
               else if (value === "a" || value === "b") onTeamSide(player.id, value);
@@ -626,7 +645,7 @@ function PlayerRow({
         )}
         <Select
           value={selectValue}
-          disabled={disabled || groupOptions.length === 0}
+          disabled={assignDisabled || groupOptions.length === 0}
           onValueChange={(value) => {
             onAssign(player.id, value === "unassigned" ? null : value);
           }}
