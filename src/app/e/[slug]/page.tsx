@@ -145,7 +145,14 @@ export default async function PublicEventPage({
         )}
 
         <p className="mt-6 text-center text-xs text-muted-foreground">
-          Powered by OpenRound · Mobile-friendly, no app required
+          Powered by OpenRound ·{" "}
+          <Link href="/terms" className="underline underline-offset-4 hover:text-foreground">
+            Terms
+          </Link>
+          {" · "}
+          <Link href="/privacy" className="underline underline-offset-4 hover:text-foreground">
+            Privacy
+          </Link>
         </p>
       </main>
     </div>

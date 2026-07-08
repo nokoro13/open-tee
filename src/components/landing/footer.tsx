@@ -14,11 +14,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 
-const footerLinks = {
-  Product: ["Features", "Pricing", "Integrations", "Changelog"],
-  Company: ["About", "Blog", "Careers", "Contact"],
-  Resources: ["Documentation", "Help center", "API", "Status"],
-  Legal: ["Privacy", "Terms", "Security"],
+const footerLinks: Record<string, { label: string; href: string }[]> = {
+  Product: [
+    { label: "Features", href: "/#features" },
+    { label: "Pricing", href: "/#pricing" },
+  ],
+  Legal: [
+    { label: "Privacy", href: "/privacy" },
+    { label: "Terms", href: "/terms" },
+  ],
 };
 
 export function Footer() {
@@ -65,12 +69,12 @@ export function Footer() {
                 <h4 className="text-sm font-medium">{title}</h4>
                 <ul className="mt-4 space-y-2.5">
                   {links.map((link) => (
-                    <li key={link}>
+                    <li key={link.href}>
                       <Link
-                        href="#"
+                        href={link.href}
                         className="text-sm text-muted-foreground transition-colors hover:text-foreground"
                       >
-                        {link}
+                        {link.label}
                       </Link>
                     </li>
                   ))}
@@ -88,12 +92,12 @@ export function Footer() {
                 <AccordionContent>
                   <ul className="space-y-2.5 pb-2">
                     {links.map((link) => (
-                      <li key={link}>
+                      <li key={link.href}>
                         <Link
-                          href="#"
+                          href={link.href}
                           className="text-sm text-muted-foreground transition-colors hover:text-foreground"
                         >
-                          {link}
+                          {link.label}
                         </Link>
                       </li>
                     ))}

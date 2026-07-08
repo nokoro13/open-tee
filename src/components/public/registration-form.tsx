@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 
 import {
@@ -153,6 +154,17 @@ export function RegistrationForm({
         <p className="text-center text-xs text-muted-foreground">
           {spotsLeft} spot{spotsLeft === 1 ? "" : "s"} remaining
           {entryFeeCents > 0 && " · Secure payment via Stripe"}
+        </p>
+        <p className="text-center text-xs leading-relaxed text-muted-foreground">
+          By registering, you agree to our{" "}
+          <Link href="/terms" className="underline underline-offset-4 hover:text-foreground">
+            Terms
+          </Link>{" "}
+          and{" "}
+          <Link href="/privacy" className="underline underline-offset-4 hover:text-foreground">
+            Privacy Policy
+          </Link>
+          .
         </p>
       </div>
     </form>
