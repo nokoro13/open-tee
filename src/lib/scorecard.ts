@@ -9,6 +9,7 @@ export type ScorecardHoleSnapshot = {
   par: number;
   yardage?: number | null;
   strokeIndex?: number | null;
+  yardagesByTee?: Record<string, number | null>;
 };
 
 export type EventParMap = Map<number, number>;

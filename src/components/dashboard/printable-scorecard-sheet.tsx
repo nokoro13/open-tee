@@ -4,6 +4,7 @@ import type {
 } from "@/lib/printable-scorecard";
 import {
   getHoleValue,
+  STANDARD_SCORECARD_TEE_COLORS,
   sumRange,
 } from "@/lib/printable-scorecard";
 import { formatHandicapDisplay } from "@/lib/handicap-strokes";
@@ -12,6 +13,27 @@ type PrintableScorecardSheetProps = {
   event: PrintableScorecardEvent;
   scorecard: PrintableScorecard;
   qrDataUrl: string;
+};
+
+const TEE_YARDAGE_ROWS = [
+  { color: "black", label: "Black" },
+  { color: "blue", label: "Blue" },
+  { color: "white", label: "White" },
+  { color: "red", label: "Red" },
+] as const satisfies ReadonlyArray<{
+  color: (typeof STANDARD_SCORECARD_TEE_COLORS)[number];
+  label: string;
+}>;
+
+const TEE_ROW_CELL_STYLES: Record<
+  (typeof TEE_YARDAGE_ROWS)[number]["color"],
+  string
+> = {
+  black: "bg-neutral-700 text-white print:bg-neutral-700 print:text-white",
+  blue: "bg-blue-700 text-white print:bg-blue-700 print:text-white",
+  white:
+    "bg-white text-neutral-900 print:bg-white print:text-neutral-900",
+  red: "bg-red-600 text-white print:bg-red-600 print:text-white",
 };
 
 type ScorecardColumn =
@@ -93,20 +115,22 @@ function GridCell({
   className = "",
   strokeDots = 0,
   header = false,
+  fixedHeight = false,
 }: {
   children?: React.ReactNode;
   className?: string;
   strokeDots?: number;
   header?: boolean;
+  fixedHeight?: boolean;
 }) {
   const Tag = header ? "th" : "td";
 
   return (
     <Tag
-      className={`relative border border-black px-0.5 py-1 text-center align-middle tabular-nums leading-none ${className}`}
+      className={`relative border border-black px-0.5 py-1 text-center align-middle tabular-nums leading-none ${fixedHeight ? "h-8 min-h-8" : ""} ${className}`}
     >
       <StrokeDots count={strokeDots} />
-      {children}
+      {children ?? (fixedHeight ? "\u00a0" : null)}
     </Tag>
   );
 }
@@ -115,14 +139,24 @@ function LabelCell({
   children,
   className = "",
   shaded = false,
+  fixedHeight = false,
+  tinted = false,
 }: {
   children: React.ReactNode;
   className?: string;
   shaded?: boolean;
+  fixedHeight?: boolean;
+  tinted?: boolean;
 }) {
+  const backgroundClass = tinted
+    ? ""
+    : shaded
+      ? "bg-neutral-100"
+      : "bg-white";
+
   return (
     <td
-      className={`border border-black px-2 py-1.5 text-left align-middle text-[9px] font-semibold leading-snug ${shaded ? "bg-neutral-100" : "bg-white"} ${className}`}
+      className={`border border-black px-2 text-left align-middle text-[9px] font-semibold leading-snug ${fixedHeight ? "h-8 min-h-8 py-1" : "py-1.5"} ${backgroundClass} ${className}`}
     >
       {children}
     </td>
@@ -159,18 +193,22 @@ export function PrintableScorecardSheet({
   const totalPar = sumRange(event.holeData, 1, isEighteen ? 18 : 9, "par");
   const outPar = isEighteen ? sumRange(event.holeData, 1, 9, "par") : totalPar;
   const inPar = isEighteen ? sumRange(event.holeData, 10, 18, "par") : null;
-  const totalYardage = sumRange(
-    event.holeData,
-    1,
-    isEighteen ? 18 : 9,
-    "yardage"
-  );
-  const outYardage = isEighteen
-    ? sumRange(event.holeData, 1, 9, "yardage")
-    : totalYardage;
-  const inYardage = isEighteen
-    ? sumRange(event.holeData, 10, 18, "yardage")
-    : null;
+
+  const teeYardageTotals = Object.fromEntries(
+    TEE_YARDAGE_ROWS.map(({ color }) => {
+      const total = sumRange(event.holeData, 1, isEighteen ? 18 : 9, "yardage", color);
+      const out = isEighteen
+        ? sumRange(event.holeData, 1, 9, "yardage", color)
+        : total;
+      const backNine = isEighteen
+        ? sumRange(event.holeData, 10, 18, "yardage", color)
+        : null;
+      return [color, { total, out, backNine }] as const;
+    })
+  ) as Record<
+    (typeof TEE_YARDAGE_ROWS)[number]["color"],
+    { total: number | null; out: number | null; backNine: number | null }
+  >;
 
   const playerRows = Array.from(
     { length: scorecard.minPlayerRows },
@@ -179,27 +217,32 @@ export function PrintableScorecardSheet({
 
   function holeCellValue(
     column: ScorecardColumn,
-    field: "yardage" | "par" | "strokeIndex"
+    field: "yardage" | "par" | "strokeIndex",
+    teeColor?: string
   ): number | null {
     if (column.kind === "hole") {
-      return getHoleValue(event.holeData, column.hole, field);
+      return getHoleValue(event.holeData, column.hole, field, teeColor);
     }
     if (column.kind === "out") {
-      return field === "par"
-        ? outPar
-        : field === "yardage"
-          ? outYardage
-          : null;
+      if (field === "par") return outPar;
+      if (field === "yardage" && teeColor) {
+        return teeYardageTotals[teeColor as keyof typeof teeYardageTotals]?.out ?? null;
+      }
+      return null;
     }
     if (column.kind === "in") {
-      return field === "par" ? inPar : field === "yardage" ? inYardage : null;
+      if (field === "par") return inPar;
+      if (field === "yardage" && teeColor) {
+        return teeYardageTotals[teeColor as keyof typeof teeYardageTotals]?.backNine ?? null;
+      }
+      return null;
     }
     if (column.kind === "tot") {
-      return field === "par"
-        ? totalPar
-        : field === "yardage"
-          ? totalYardage
-          : null;
+      if (field === "par") return totalPar;
+      if (field === "yardage" && teeColor) {
+        return teeYardageTotals[teeColor as keyof typeof teeYardageTotals]?.total ?? null;
+      }
+      return null;
     }
     return null;
   }
@@ -210,13 +253,21 @@ export function PrintableScorecardSheet({
       player?: PrintableScorecard["players"][number] | null;
       rowIndex?: number;
       playerRow?: boolean;
+      teeColor?: string;
+      teeRowClass?: string;
     }
   ) {
+    const fixedHeight = options?.playerRow ?? options?.player != null;
+    const teeRowClass = options?.teeRowClass ?? "";
+
     return dataColumns.map((column) => {
       if (options?.player != null) {
         if (column.kind === "hdcp") {
           return (
-            <GridCell key={columnKey(column, `player-${options.rowIndex}`)}>
+            <GridCell
+              key={columnKey(column, `player-${options.rowIndex}`)}
+              fixedHeight
+            >
               {formatHandicapDisplay(options.player.handicap)}
             </GridCell>
           );
@@ -230,14 +281,14 @@ export function PrintableScorecardSheet({
           return (
             <GridCell
               key={columnKey(column, `player-${options.rowIndex}`)}
-              className="h-8"
+              fixedHeight
             />
           );
         }
         return (
           <GridCell
             key={columnKey(column, `player-${options.rowIndex}`)}
-            className="h-8"
+            fixedHeight
             strokeDots={
               column.kind === "hole"
                 ? (options.player.strokesByHole[column.index] ?? 0)
@@ -247,14 +298,29 @@ export function PrintableScorecardSheet({
         );
       }
 
+      if (fixedHeight) {
+        return (
+          <GridCell
+            key={columnKey(column, `${field}-empty-${options?.rowIndex ?? "team"}`)}
+            fixedHeight
+          />
+        );
+      }
+
       if (field === "yardage" || field === "par" || field === "strokeIndex") {
         if (column.kind === "hdcp" || column.kind === "net") {
-          return <GridCell key={columnKey(column, field)} />;
+          return (
+            <GridCell
+              key={columnKey(column, field)}
+              className={teeRowClass}
+            />
+          );
         }
 
         const value = holeCellValue(
           column,
-          field as "yardage" | "par" | "strokeIndex"
+          field as "yardage" | "par" | "strokeIndex",
+          options?.teeColor
         );
         const isTotalColumn =
           column.kind === "out" ||
@@ -264,7 +330,7 @@ export function PrintableScorecardSheet({
         return (
           <GridCell
             key={columnKey(column, field)}
-            className={field !== "strokeIndex" && isTotalColumn ? "font-semibold" : undefined}
+            className={`${teeRowClass} ${field !== "strokeIndex" && isTotalColumn ? "font-semibold" : ""}`}
           >
             {value ?? ""}
           </GridCell>
@@ -274,7 +340,7 @@ export function PrintableScorecardSheet({
       return (
         <GridCell
           key={columnKey(column, field)}
-          className={options?.playerRow ? "h-8" : undefined}
+          fixedHeight={fixedHeight}
         />
       );
     });
@@ -387,10 +453,20 @@ export function PrintableScorecardSheet({
                 </GridCell>
               ))}
             </tr>
-            <tr>
-              <LabelCell>Yardage</LabelCell>
-              {renderDataCells("yardage")}
-            </tr>
+            {TEE_YARDAGE_ROWS.map(({ color, label }) => {
+              const teeRowClass = TEE_ROW_CELL_STYLES[color];
+              return (
+                <tr key={color} className={`scorecard-tee-row scorecard-tee-${color}`}>
+                  <LabelCell tinted className={teeRowClass}>
+                    {label}
+                  </LabelCell>
+                  {renderDataCells("yardage", {
+                    teeColor: color,
+                    teeRowClass,
+                  })}
+                </tr>
+              );
+            })}
             <tr>
               <LabelCell>Hdcp</LabelCell>
               {renderDataCells("strokeIndex")}
@@ -400,14 +476,18 @@ export function PrintableScorecardSheet({
               {renderDataCells("par")}
             </tr>
             {playerRows.map((player, rowIndex) => (
-              <tr key={player?.id ?? `row-${rowIndex}`}>
-                <LabelCell>{player?.name ?? ""}</LabelCell>
-                {renderDataCells(`player-${rowIndex}`, { player, rowIndex })}
+              <tr key={player?.id ?? `row-${rowIndex}`} className="scorecard-player-row">
+                <LabelCell fixedHeight>{player?.name ?? "\u00a0"}</LabelCell>
+                {renderDataCells(`player-${rowIndex}`, {
+                  player,
+                  rowIndex,
+                  playerRow: true,
+                })}
               </tr>
             ))}
             {scorecard.showTeamRow && scorecard.teamRowLabel && (
-              <tr>
-                <LabelCell>{scorecard.teamRowLabel}</LabelCell>
+              <tr className="scorecard-player-row">
+                <LabelCell fixedHeight>{scorecard.teamRowLabel}</LabelCell>
                 {renderDataCells("team", { playerRow: true })}
               </tr>
             )}

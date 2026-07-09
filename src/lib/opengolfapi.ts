@@ -47,12 +47,32 @@ export type OpenGolfCourseDetail = OpenGolfCourseSummary & {
   scorecard?: OpenGolfScorecardHole[];
   holes_data?: OpenGolfHoleData[];
   tees?: OpenGolfTee[];
+  lat?: number | null;
+  lng?: number | null;
 };
 
 type SearchResponse = {
   courses: OpenGolfCourseSummary[];
   total: number;
 };
+
+export function extractOpenGolfCourseCoordinates(
+  course: OpenGolfCourseDetail | null | undefined
+): { latitude: number | null; longitude: number | null } {
+  if (!course) return { latitude: null, longitude: null };
+
+  const latitude = course.latitude ?? course.lat ?? null;
+  const longitude = course.longitude ?? course.lng ?? null;
+
+  return {
+    latitude:
+      typeof latitude === "number" && Number.isFinite(latitude) ? latitude : null,
+    longitude:
+      typeof longitude === "number" && Number.isFinite(longitude)
+        ? longitude
+        : null,
+  };
+}
 
 const TEE_YARDAGE_PREFERENCE = [
   "white",
@@ -78,6 +98,16 @@ const DEFAULT_TEE_COLOR_PREFERENCE = [
   "web",
 ] as const;
 
+export const STANDARD_SCORECARD_TEE_COLORS = [
+  "black",
+  "blue",
+  "white",
+  "red",
+] as const;
+
+export type StandardScorecardTeeColor =
+  (typeof STANDARD_SCORECARD_TEE_COLORS)[number];
+
 export function pickPreferredTeeYardage(
   yardages: Record<string, number> | null | undefined
 ): number | null {
@@ -96,13 +126,56 @@ export function pickPreferredTeeYardage(
   return values.length > 0 ? values[0] : null;
 }
 
-function yardageForTeeColor(
+export function yardageForTeeColor(
   yardages: Record<string, number> | null | undefined,
   teeColor: string | null | undefined
 ): number | null {
   if (!yardages || !teeColor) return null;
   const value = yardages[teeColor.toLowerCase()];
   return typeof value === "number" && value > 0 ? value : null;
+}
+
+function sliceHolesData(
+  holesData: OpenGolfHoleData[],
+  options: {
+    holes: "9" | "18";
+    nineSide?: "front" | "back" | null;
+  }
+): OpenGolfHoleData[] {
+  const sorted = [...holesData].sort((a, b) => a.number - b.number);
+
+  if (options.holes === "18") {
+    return sorted.slice(0, 18);
+  }
+
+  const side = options.nineSide ?? "front";
+  return side === "back" && sorted.length >= 18
+    ? sorted.slice(9, 18)
+    : sorted.slice(0, 9);
+}
+
+export function buildMultiTeeHoleSnapshots(
+  holesData: OpenGolfHoleData[],
+  options: {
+    holes: "9" | "18";
+    nineSide?: "front" | "back" | null;
+  },
+  teeColors: readonly string[] = STANDARD_SCORECARD_TEE_COLORS
+) {
+  return sliceHolesData(holesData, options).map((hole, index) => ({
+    holeNumber: index + 1,
+    par: hole.par,
+    strokeIndex: hole.handicap_index ?? null,
+    yardage:
+      yardageForTeeColor(hole.yardages, "white") ??
+      pickPreferredTeeYardage(hole.yardages),
+    yardagesByTee: Object.fromEntries(
+      teeColors.map((color) => [
+        color,
+        yardageForTeeColor(hole.yardages, color),
+      ])
+    ) as Record<string, number | null>,
+  }));
 }
 
 export function pickDefaultTeeKey(tees: OpenGolfTee[] | undefined): string | null {
@@ -163,6 +236,9 @@ function mergeCourseDetail(
     name: basic.name || full.name,
     city: basic.city ?? full.city,
     state: basic.state ?? full.state,
+    latitude: basic.latitude ?? full.latitude ?? full.lat ?? basic.lat ?? null,
+    longitude:
+      basic.longitude ?? full.longitude ?? full.lng ?? basic.lng ?? null,
     scorecard: scorecardFromHoles ?? basic.scorecard ?? full.scorecard,
     holes_data: holesData.length > 0 ? holesData : full.holes_data,
     tees: full.tees ?? basic.tees,
@@ -277,4 +353,75 @@ export async function getOpenGolfCourse(
 
   if (!basic) return full;
   return mergeCourseDetail(basic, full, teeColor);
+}
+
+type OpenGolfFeature = {
+  id: string;
+  center?: { lat: number; lng: number } | null;
+  geometry?: { type: string; coordinates: unknown };
+};
+
+type OpenGolfFeaturesResponse = {
+  features?: OpenGolfFeature[];
+};
+
+export type OpenGolfGreenFeatureSeed = {
+  center: { lat: number; lng: number } | null;
+  geometry: OpenGolfFeature["geometry"] | null;
+};
+
+export async function getGreenFeatureForCourseHole(
+  courseId: string,
+  holeNumber: number
+): Promise<OpenGolfGreenFeatureSeed | null> {
+  const url = new URL(`${OPENGOLFAPI_V1_BASE}/features`);
+  url.searchParams.set("course", courseId);
+  url.searchParams.set("hole", String(holeNumber));
+  url.searchParams.set("type", "green");
+
+  const response = await fetch(url.toString(), {
+    next: { revalidate: 86400 },
+  });
+
+  if (!response.ok) return null;
+
+  const data = (await response.json()) as OpenGolfFeaturesResponse;
+  const feature = data.features?.[0];
+  if (!feature) return null;
+
+  const center = feature.center;
+  const hasCenter =
+    center &&
+    typeof center.lat === "number" &&
+    typeof center.lng === "number";
+
+  return {
+    center: hasCenter ? { lat: center.lat, lng: center.lng } : null,
+    geometry: feature.geometry ?? null,
+  };
+}
+
+export async function seedGreenFeaturesForCourse(
+  courseId: string,
+  holeNumbers: number[]
+): Promise<
+  Record<
+    number,
+    { center: { lat: number; lng: number } | null; geometry: unknown | null }
+  >
+> {
+  const entries = await Promise.all(
+    holeNumbers.map(async (holeNumber) => {
+      const feature = await getGreenFeatureForCourseHole(courseId, holeNumber);
+      return [
+        holeNumber,
+        {
+          center: feature?.center ?? null,
+          geometry: feature?.geometry ?? null,
+        },
+      ] as const;
+    })
+  );
+
+  return Object.fromEntries(entries);
 }

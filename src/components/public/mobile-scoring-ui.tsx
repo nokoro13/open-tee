@@ -1,5 +1,6 @@
 "use client";
 
+import { Map, Waves } from "lucide-react";
 import { ChevronUp } from "lucide-react";
 
 import type { MatchRunningScore, RunningScore } from "@/lib/score-entry-utils";
@@ -142,6 +143,10 @@ type MobileHoleHeroProps = {
   totalHoles: number;
   par: number;
   yardage?: number | null;
+  onOpenHoleMap?: () => void;
+  onOpenGreenHeatmap?: () => void;
+  hasHeatmap?: boolean;
+  isAtGreen?: boolean;
 };
 
 export function MobileHoleHero({
@@ -149,12 +154,16 @@ export function MobileHoleHero({
   totalHoles,
   par,
   yardage,
+  onOpenHoleMap,
+  onOpenGreenHeatmap,
+  hasHeatmap = false,
+  isAtGreen = false,
 }: MobileHoleHeroProps) {
   return (
     <div className="relative shrink-0 overflow-hidden rounded-t-2xl bg-linear-to-br from-primary/8 via-primary/4 to-transparent px-5 py-4">
       <div className="absolute -right-6 -top-6 size-24 rounded-full bg-primary/5" />
-      <div className="relative flex items-end justify-between">
-        <div>
+      <div className="relative flex items-end justify-between gap-3">
+        <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
             Current hole
           </p>
@@ -166,6 +175,35 @@ export function MobileHoleHero({
               of {totalHoles}
             </span>
           </div>
+          {(onOpenHoleMap || (onOpenGreenHeatmap && hasHeatmap)) && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {onOpenHoleMap && (
+                <button
+                  type="button"
+                  onClick={onOpenHoleMap}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/80 px-3 py-1.5 text-xs font-medium text-foreground shadow-sm"
+                >
+                  <Map className="size-3.5" />
+                  Hole view
+                </button>
+              )}
+              {onOpenGreenHeatmap && hasHeatmap && (
+                <button
+                  type="button"
+                  onClick={onOpenGreenHeatmap}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium shadow-sm",
+                    isAtGreen
+                      ? "border-primary/50 bg-primary/15 text-primary"
+                      : "border-border/70 bg-background/80 text-foreground"
+                  )}
+                >
+                  <Waves className="size-3.5" />
+                  {isAtGreen ? "Read putt" : "Putting read"}
+                </button>
+              )}
+            </div>
+          )}
         </div>
         <div className="flex items-stretch gap-2">
           {yardage != null && (

@@ -278,12 +278,21 @@ export const PARTNER_CLUBS = [
 
 const previewScorecardHoles: ScorecardHoleSnapshot[] = Array.from(
   { length: 18 },
-  (_, index) => ({
-    holeNumber: index + 1,
-    par: index % 5 === 0 ? 5 : index % 3 === 0 ? 3 : 4,
-    yardage: 350 + index * 12,
-    strokeIndex: index + 1,
-  })
+  (_, index) => {
+    const white = 350 + index * 12;
+    return {
+      holeNumber: index + 1,
+      par: index % 5 === 0 ? 5 : index % 3 === 0 ? 3 : 4,
+      yardage: white,
+      strokeIndex: index + 1,
+      yardagesByTee: {
+        black: white + 55,
+        blue: white + 30,
+        white,
+        red: Math.max(white - 45, 90),
+      },
+    };
+  }
 );
 
 export const previewPrintableScorecardEvent: PrintableScorecardEvent = {

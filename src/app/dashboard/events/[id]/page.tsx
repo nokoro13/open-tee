@@ -4,6 +4,7 @@ import { ArrowLeft, ExternalLink } from "lucide-react";
 import { getEventById, getEventByIdWithScorecard } from "@/actions/events";
 import { syncPublishIfPaid } from "@/actions/publish";
 import { CopyRegistrationLink } from "@/components/dashboard/copy-registration-link";
+import { CaddieModeCard } from "@/components/dashboard/caddie-mode-card";
 import { EventForm } from "@/components/dashboard/event-form";
 import { PairingsPanel } from "@/components/dashboard/pairings-panel";
 import { PublishEventCard } from "@/components/dashboard/publish-event-card";
@@ -34,6 +35,10 @@ import {
   eventSetupLockedMessage,
   isEventSetupLocked,
 } from "@/lib/event-setup-lock";
+import {
+  getLatestMappingRequestForEvent,
+  getPublishedGolfCourseByExternalId,
+} from "@/lib/golf-courses";
 
 type EventDetailPageProps = {
   params: Promise<{ id: string }>;
@@ -77,6 +82,11 @@ export default async function EventDetailPage({
           return getEventPairings(event.id, org.id);
         })()
       : null;
+
+  const publishedGolfCourse = event.externalCourseId
+    ? await getPublishedGolfCourseByExternalId(event.externalCourseId)
+    : null;
+  const latestMappingRequest = await getLatestMappingRequestForEvent(event.id);
 
   return (
     <div className="space-y-6">
@@ -193,6 +203,27 @@ export default async function EventDetailPage({
           teamAName={event.teamAName}
           teamBName={event.teamBName}
           pairings={pairings}
+        />
+      )}
+
+      {event.status === "published" && (
+        <CaddieModeCard
+          eventId={event.id}
+          eventSlug={event.slug}
+          externalCourseId={event.externalCourseId}
+          courseName={event.courseName}
+          publishedMapAvailable={publishedGolfCourse != null}
+          publishedMappedHoles={publishedGolfCourse?.mappedHoleCount ?? 0}
+          dataQuality={publishedGolfCourse?.dataQuality ?? null}
+          latestRequest={
+            latestMappingRequest
+              ? {
+                  id: latestMappingRequest.id,
+                  status: latestMappingRequest.status,
+                  mappedHoleCount: latestMappingRequest.course.mappedHoleCount,
+                }
+              : null
+          }
         />
       )}
 
