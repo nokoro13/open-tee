@@ -15,10 +15,25 @@ export type HoleMapView = {
   center: Point;
   bearing: number;
   tee: Point | null;
+  green: Point | null;
   back: Point | null;
+  extentPoints: Point[];
 };
 
-type Point = { lat: number; lng: number };
+export type Point = { lat: number; lng: number };
+
+export type HoleMapCameraPadding = {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+};
+
+export type HoleMapCamera = {
+  center: Point;
+  zoom: number;
+  heading: number;
+};
 
 const EDGE_PADDING_YARDS = 35;
 const MAX_PLAYER_INCLUDE_YARDS = 700;
@@ -105,6 +120,27 @@ function expandBounds(bounds: HoleMapBounds, paddingYards: number): HoleMapBound
     maxLat: bounds.maxLat + latPad,
     minLng: bounds.minLng - lngPad,
     maxLng: bounds.maxLng + lngPad,
+  };
+}
+
+function latLngToMeters(point: Point, origin: Point) {
+  const metersPerDegreeLat = 111_320;
+  const metersPerDegreeLng =
+    111_320 * Math.cos((origin.lat * Math.PI) / 180);
+
+  return {
+    x: (point.lng - origin.lng) * metersPerDegreeLng,
+    y: (point.lat - origin.lat) * metersPerDegreeLat,
+  };
+}
+
+function rotateMeters(x: number, y: number, bearingDegrees: number) {
+  const theta = (bearingDegrees * Math.PI) / 180;
+  const cos = Math.cos(theta);
+  const sin = Math.sin(theta);
+  return {
+    x: x * cos - y * sin,
+    y: x * sin + y * cos,
   };
 }
 
@@ -204,6 +240,96 @@ function resolveBackPoint(
   return farthest;
 }
 
+function resolveGreenPoint(
+  features: GeoJsonFeatureCollection,
+  targets: GreenTargets | null,
+  back: Point | null
+): Point | null {
+  if (targets?.middle) return targets.middle;
+  if (back) return back;
+
+  const green = featureByType(features, "green");
+  if (green?.geometry) {
+    const points = collectGeometryPoints(green.geometry);
+    if (points.length > 0) return centroid(points);
+  }
+
+  return null;
+}
+
+function resolveHoleBearing(
+  features: GeoJsonFeatureCollection,
+  tee: Point | null,
+  green: Point | null
+): number {
+  const holeLine = featureByType(features, "hole_line");
+  if (holeLine?.geometry) {
+    const line = holeLine.geometry as LineStringGeometry;
+    if (line.coordinates.length >= 2) {
+      const [startLng, startLat] = line.coordinates[0]!;
+      const [endLng, endLat] = line.coordinates[line.coordinates.length - 1]!;
+      return bearingDegrees(
+        { lat: startLat, lng: startLng },
+        { lat: endLat, lng: endLng }
+      );
+    }
+  }
+
+  if (tee && green) {
+    return bearingDegrees(tee, green);
+  }
+
+  return 0;
+}
+
+export function computeHoleMapCamera(options: {
+  view: HoleMapView;
+  mapWidth: number;
+  mapHeight: number;
+  padding: HoleMapCameraPadding;
+}): HoleMapCamera {
+  const { view, mapWidth, mapHeight, padding } = options;
+  const { tee, green, bearing, extentPoints } = view;
+
+  const center =
+    tee && green ? midpoint(tee, green) : view.center;
+
+  const points =
+    extentPoints.length > 0
+      ? extentPoints
+      : tee && green
+        ? [tee, green]
+        : [center];
+
+  const projected = points.map((point) => {
+    const meters = latLngToMeters(point, center);
+    return rotateMeters(meters.x, meters.y, bearing);
+  });
+
+  const xs = projected.map((point) => point.x);
+  const ys = projected.map((point) => point.y);
+
+  const padMeters = EDGE_PADDING_YARDS * 0.9144;
+  const spanX = Math.max(Math.max(...xs) - Math.min(...xs) + padMeters * 2, 20);
+  const spanY = Math.max(Math.max(...ys) - Math.min(...ys) + padMeters * 2, 20);
+
+  const innerWidth = Math.max(mapWidth - padding.left - padding.right, 1);
+  const innerHeight = Math.max(mapHeight - padding.top - padding.bottom, 1);
+
+  const metersPerPixelAtZoom0 =
+    156_543.03392 * Math.cos((center.lat * Math.PI) / 180);
+
+  const zoomX = Math.log2((innerWidth * metersPerPixelAtZoom0) / spanX);
+  const zoomY = Math.log2((innerHeight * metersPerPixelAtZoom0) / spanY);
+  const zoom = Math.min(zoomX, zoomY, 21);
+
+  return {
+    center,
+    zoom: Math.max(zoom, 14),
+    heading: bearing,
+  };
+}
+
 export function computeHoleMapView(options: {
   features: GeoJsonFeatureCollection;
   targets: GreenTargets | null;
@@ -244,21 +370,23 @@ export function computeHoleMapView(options: {
     }
   }
 
-  const bearing =
-    tee && back ? bearingDegrees(tee, back) : tee && targets?.middle
-      ? bearingDegrees(tee, targets.middle)
-      : 0;
+  const green = resolveGreenPoint(features, targets, back);
+  const bearing = resolveHoleBearing(features, tee, green);
 
   const center =
-    tee && back
-      ? midpoint(tee, back)
-      : centroid(extentPoints);
+    tee && green
+      ? midpoint(tee, green)
+      : tee && back
+        ? midpoint(tee, back)
+        : centroid(extentPoints);
 
   return {
     bounds,
     center,
     bearing,
     tee,
+    green,
     back,
+    extentPoints,
   };
 }

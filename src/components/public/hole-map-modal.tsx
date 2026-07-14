@@ -9,14 +9,9 @@ import type { GreenTargets, LiveDistances } from "@/lib/green-distance";
 import { MIN_LIVE_DISTANCE_YARDS } from "@/lib/green-distance";
 import type { GeoJsonFeatureCollection } from "@/lib/geojson";
 import {
-  buildHoleDiagramLayout,
-  drawHoleDiagram,
-  type HoleDiagramLayout,
-} from "@/lib/hole-diagram";
-import {
-  applyDiagramViewportTransform,
-  useDiagramViewport,
-} from "@/hooks/use-diagram-viewport";
+  HoleGoogleMap,
+  type HoleGoogleMapHandle,
+} from "@/components/public/hole-google-map";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -33,17 +28,6 @@ type HoleMapModalProps = {
   liveDistances?: LiveDistances;
   liveDistanceStatus?: LiveDistanceStatus;
 };
-
-const LEGEND = [
-  { label: "Fairway", color: "bg-[#529c5f]" },
-  { label: "Rough", color: "bg-[#2d5a37]" },
-  { label: "Scrub", color: "bg-[#4a6741]" },
-  { label: "Green", color: "bg-emerald-400" },
-  { label: "Bunker", color: "bg-[#eac488]" },
-  { label: "Water", color: "bg-sky-400" },
-  { label: "OB", color: "bg-red-400" },
-  { label: "Tree", color: "bg-green-700" },
-] as const;
 
 function DistanceChip({
   label,
@@ -119,10 +103,7 @@ export function HoleMapModal({
   liveDistances,
   liveDistanceStatus = "hidden",
 }: HoleMapModalProps) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const layoutRef = useRef<HoleDiagramLayout | null>(null);
-  const sizeRef = useRef({ width: 0, height: 0 });
+  const mapRef = useRef<HoleGoogleMapHandle | null>(null);
   const [displayFeatures, setDisplayFeatures] =
     useState<GeoJsonFeatureCollection | null>(features);
   const [loadingFeatures, setLoadingFeatures] = useState(false);
@@ -139,17 +120,6 @@ export function HoleMapModal({
   const showDistanceHud =
     liveDistanceStatus !== "hidden" &&
     (hasDistances || liveDistanceStatus === "locating");
-
-  const { viewportRef, bindViewportElement, resetViewport, isAdjusted } =
-    useDiagramViewport({
-      enabled: open && Boolean(displayFeatures),
-      resetKey: holeNumber,
-    });
-
-  useEffect(() => {
-    if (!open || !displayFeatures || !containerRef.current) return;
-    return bindViewportElement(containerRef.current);
-  }, [open, displayFeatures, bindViewportElement, holeNumber]);
 
   useEffect(() => {
     if (!open) return;
@@ -198,94 +168,6 @@ export function HoleMapModal({
       document.body.style.overflow = previousOverflow;
     };
   }, [open]);
-
-  useEffect(() => {
-    if (!open || !displayFeatures || !containerRef.current) return;
-
-    const container = containerRef.current;
-
-    function rebuildLayout() {
-      const rect = container.getBoundingClientRect();
-      const width = Math.max(Math.floor(rect.width), 1);
-      const height = Math.max(Math.floor(rect.height), 1);
-      sizeRef.current = { width, height };
-
-      layoutRef.current = buildHoleDiagramLayout({
-        features: displayFeatures!,
-        targets,
-        playerPosition,
-        width,
-        height,
-      });
-    }
-
-    rebuildLayout();
-
-    const resizeObserver = new ResizeObserver(() => {
-      rebuildLayout();
-    });
-    resizeObserver.observe(container);
-
-    return () => {
-      resizeObserver.disconnect();
-    };
-  }, [open, displayFeatures, targets, playerPosition, holeNumber]);
-
-  useEffect(() => {
-    if (!open || !displayFeatures) return;
-
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const canvasElement = canvas;
-
-    let frameId = 0;
-    let startTime = performance.now();
-
-    function render(now: number) {
-      const layout = layoutRef.current;
-      const { width, height } = sizeRef.current;
-      if (!layout || width === 0 || height === 0) {
-        frameId = requestAnimationFrame(render);
-        return;
-      }
-
-      const dpr = window.devicePixelRatio || 1;
-      const pixelWidth = Math.floor(width * dpr);
-      const pixelHeight = Math.floor(height * dpr);
-
-      if (canvasElement.width !== pixelWidth || canvasElement.height !== pixelHeight) {
-        canvasElement.width = pixelWidth;
-        canvasElement.height = pixelHeight;
-        canvasElement.style.width = `${width}px`;
-        canvasElement.style.height = `${height}px`;
-      }
-
-      const ctx = canvasElement.getContext("2d");
-      if (!ctx) return;
-
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      const pulsePhase = ((now - startTime) / 1000) * Math.PI * 2;
-
-      ctx.save();
-      applyDiagramViewportTransform(
-        ctx,
-        width,
-        height,
-        viewportRef.current
-      );
-      drawHoleDiagram(ctx, layout, width, height, pulsePhase);
-      ctx.restore();
-
-      frameId = requestAnimationFrame(render);
-    }
-
-    frameId = requestAnimationFrame(render);
-
-    return () => {
-      cancelAnimationFrame(frameId);
-    };
-  }, [open, displayFeatures, targets, playerPosition, holeNumber]);
 
   if (!open) return null;
 
@@ -345,37 +227,21 @@ export function HoleMapModal({
         ) : (
           <div className="flex min-h-0 flex-1 flex-col gap-3 px-3 pb-3">
             <div className="relative min-h-0 flex-1 overflow-hidden rounded-2xl border border-white/10 shadow-inner">
-              <div
-                ref={containerRef}
-                className={cn(
-                  "hole-diagram-container absolute inset-0 touch-none",
-                  isAdjusted ? "cursor-grab active:cursor-grabbing" : "cursor-default"
-                )}
-              >
-                <canvas ref={canvasRef} className="absolute inset-0 block h-full w-full" />
-              </div>
-
-              <div className="pointer-events-none absolute left-3 top-3 flex flex-wrap gap-1.5">
-                {LEGEND.map((item) => (
-                  <span
-                    key={item.label}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-black/35 px-2 py-1 text-[10px] font-medium text-white/70 backdrop-blur-md"
-                  >
-                    <span className={cn("size-2 rounded-full", item.color)} />
-                    {item.label}
-                  </span>
-                ))}
-              </div>
+              <HoleGoogleMap
+                ref={mapRef}
+                className="absolute inset-0"
+                features={displayFeatures}
+                targets={targets}
+                playerPosition={playerPosition}
+                holeNumber={holeNumber}
+              />
 
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className={cn(
-                  "absolute right-3 top-3 h-8 border border-white/10 bg-black/45 px-2.5 text-xs text-white/80 backdrop-blur-md hover:bg-black/60 hover:text-white",
-                  !isAdjusted && "opacity-80"
-                )}
-                onClick={resetViewport}
+                className="absolute right-3 top-3 h-8 border border-white/10 bg-black/45 px-2.5 text-xs text-white/80 backdrop-blur-md hover:bg-black/60 hover:text-white"
+                onClick={() => mapRef.current?.fitHole()}
               >
                 <Maximize2 className="size-3.5" />
                 Fit hole

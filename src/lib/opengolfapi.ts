@@ -1,5 +1,75 @@
-const OPENGOLFAPI_BASE = "https://api.opengolfapi.org/v1";
-const OPENGOLFAPI_V1_BASE = "https://api.opengolfapi.org/api/v1";
+const OPENGOLFAPI_BASE = "https://api.opengolfapi.org/api/v1";
+
+type RawCourseSummary = {
+  id: string;
+  name?: string;
+  course_name?: string;
+  city?: string | null;
+  state?: string | null;
+  par?: number | null;
+  par_total?: number | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  lat?: number | null;
+  lng?: number | null;
+  phone?: string | null;
+  website?: string | null;
+  type?: string | null;
+  course_type?: string | null;
+};
+
+type RawCourseDetail = RawCourseSummary & {
+  address?: string | null;
+  holes?: number | null;
+  yardage?: number | null;
+  total_yardage?: number | null;
+  scorecard?: OpenGolfScorecardHole[];
+  holes_data?: OpenGolfHoleData[];
+  tees?: OpenGolfTee[];
+};
+
+function normalizeCourseSummary(raw: RawCourseSummary): OpenGolfCourseSummary {
+  return {
+    id: raw.id,
+    name: raw.name ?? raw.course_name ?? "",
+    course_name: raw.course_name ?? raw.name,
+    city: raw.city ?? null,
+    state: raw.state ?? null,
+    par: raw.par ?? raw.par_total ?? null,
+    latitude: raw.latitude ?? raw.lat ?? null,
+    longitude: raw.longitude ?? raw.lng ?? null,
+    phone: raw.phone ?? null,
+    website: raw.website ?? null,
+    type: raw.type ?? raw.course_type ?? null,
+  };
+}
+
+function normalizeCourseDetail(
+  raw: RawCourseDetail,
+  teeColor?: string | null
+): OpenGolfCourseDetail {
+  const summary = normalizeCourseSummary(raw);
+  const holesData = raw.holes_data ?? [];
+  const scorecardFromHoles =
+    holesData.length > 0
+      ? normalizeScorecardFromHolesData(holesData, teeColor)
+      : null;
+
+  const latitude = summary.latitude;
+  const longitude = summary.longitude;
+
+  return {
+    ...summary,
+    address: raw.address ?? null,
+    holes: typeof raw.holes === "number" ? raw.holes : null,
+    yardage: raw.yardage ?? raw.total_yardage ?? null,
+    scorecard: scorecardFromHoles ?? raw.scorecard,
+    holes_data: holesData.length > 0 ? holesData : raw.holes_data,
+    tees: raw.tees,
+    lat: latitude,
+    lng: longitude,
+  };
+}
 
 export type OpenGolfCourseSummary = {
   id: string;
@@ -219,32 +289,6 @@ function normalizeScorecardFromHolesData(
     }));
 }
 
-function mergeCourseDetail(
-  basic: OpenGolfCourseDetail,
-  full: OpenGolfCourseDetail | null,
-  teeColor?: string | null
-): OpenGolfCourseDetail {
-  if (!full) return basic;
-
-  const holesData = full.holes_data ?? [];
-  const scorecardFromHoles =
-    holesData.length > 0 ? normalizeScorecardFromHolesData(holesData, teeColor) : null;
-
-  return {
-    ...basic,
-    ...full,
-    name: basic.name || full.name,
-    city: basic.city ?? full.city,
-    state: basic.state ?? full.state,
-    latitude: basic.latitude ?? full.latitude ?? full.lat ?? basic.lat ?? null,
-    longitude:
-      basic.longitude ?? full.longitude ?? full.lng ?? basic.lng ?? null,
-    scorecard: scorecardFromHoles ?? basic.scorecard ?? full.scorecard,
-    holes_data: holesData.length > 0 ? holesData : full.holes_data,
-    tees: full.tees ?? basic.tees,
-  };
-}
-
 export function buildScorecardForTee(
   course: OpenGolfCourseDetail,
   teeKey: string | null | undefined,
@@ -300,11 +344,14 @@ export async function searchOpenGolfCourses(
   }
 
   const data = (await response.json()) as SearchResponse;
-  return data.courses ?? [];
+  return (data.courses ?? []).map((course) =>
+    normalizeCourseSummary(course as RawCourseSummary)
+  );
 }
 
-async function getOpenGolfCourseBasic(
-  courseId: string
+export async function getOpenGolfCourse(
+  courseId: string,
+  options?: { teeKey?: string | null }
 ): Promise<OpenGolfCourseDetail | null> {
   const response = await fetch(`${OPENGOLFAPI_BASE}/courses/${courseId}`, {
     next: { revalidate: 86400 },
@@ -315,44 +362,13 @@ async function getOpenGolfCourseBasic(
     throw new Error("Could not load course details.");
   }
 
-  return (await response.json()) as OpenGolfCourseDetail;
-}
-
-async function getOpenGolfCourseFull(
-  courseId: string
-): Promise<OpenGolfCourseDetail | null> {
-  const response = await fetch(`${OPENGOLFAPI_V1_BASE}/courses/${courseId}`, {
-    next: { revalidate: 86400 },
-  });
-
-  if (response.status === 404) return null;
-  if (!response.ok) {
-    return null;
-  }
-
-  return (await response.json()) as OpenGolfCourseDetail;
-}
-
-export async function getOpenGolfCourse(
-  courseId: string,
-  options?: { teeKey?: string | null }
-): Promise<OpenGolfCourseDetail | null> {
-  const [basic, full] = await Promise.all([
-    getOpenGolfCourseBasic(courseId),
-    getOpenGolfCourseFull(courseId),
-  ]);
-
-  if (!basic && !full) return null;
-
+  const raw = (await response.json()) as RawCourseDetail;
   const teeKey =
-    options?.teeKey ??
-    pickDefaultTeeKey(full?.tees ?? basic?.tees) ??
-    null;
-  const tee = full?.tees?.find((entry) => entry.tee_key === teeKey);
+    options?.teeKey ?? pickDefaultTeeKey(raw.tees) ?? null;
+  const tee = raw.tees?.find((entry) => entry.tee_key === teeKey);
   const teeColor = tee?.tee_color ?? null;
 
-  if (!basic) return full;
-  return mergeCourseDetail(basic, full, teeColor);
+  return normalizeCourseDetail(raw, teeColor);
 }
 
 type OpenGolfFeature = {
@@ -374,7 +390,7 @@ export async function getGreenFeatureForCourseHole(
   courseId: string,
   holeNumber: number
 ): Promise<OpenGolfGreenFeatureSeed | null> {
-  const url = new URL(`${OPENGOLFAPI_V1_BASE}/features`);
+  const url = new URL(`${OPENGOLFAPI_BASE}/features`);
   url.searchParams.set("course", courseId);
   url.searchParams.set("hole", String(holeNumber));
   url.searchParams.set("type", "green");
