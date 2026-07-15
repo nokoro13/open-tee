@@ -106,6 +106,15 @@ export const mappingRequestStatusEnum = pgEnum("mapping_request_status", [
   "rejected",
 ]);
 
+export const courseOnboardingStatusEnum = pgEnum("course_onboarding_status", [
+  "draft",
+  "scorecard",
+  "mapping",
+  "submitted",
+  "verified",
+  "rejected",
+]);
+
 export const organizations = pgTable("organizations", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull(),
@@ -258,23 +267,78 @@ export const golfCourses = pgTable(
   "golf_courses",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id").references(() => organizations.id, {
+      onDelete: "set null",
+    }),
     externalCourseId: text("external_course_id"),
     name: text("name").notNull(),
+    address: text("address"),
     city: text("city"),
     state: text("state"),
     latitude: text("latitude"),
     longitude: text("longitude"),
+    holeCount: integer("hole_count").notNull().default(18),
     status: golfCourseStatusEnum("status").notNull().default("draft"),
+    onboardingStatus: courseOnboardingStatusEnum("onboarding_status")
+      .notNull()
+      .default("draft"),
     dataQuality: golfDataQualityEnum("data_quality")
       .notNull()
       .default("geometry_only"),
     mappedHoleCount: integer("mapped_hole_count").notNull().default(0),
+    scorecardImageUrl: text("scorecard_image_url"),
+    reviewNotes: text("review_notes"),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    verifiedByClerkId: text("verified_by_clerk_id"),
     publishedAt: timestamp("published_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     uniqueIndex("golf_courses_external_course_idx").on(table.externalCourseId),
+  ]
+);
+
+export const courseTees = pgTable(
+  "course_tees",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    courseId: uuid("course_id")
+      .notNull()
+      .references(() => golfCourses.id, { onDelete: "cascade" }),
+    teeKey: text("tee_key").notNull(),
+    teeName: text("tee_name").notNull(),
+    teeColor: text("tee_color"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    courseRating: text("course_rating"),
+    slope: integer("slope"),
+    totalYardage: integer("total_yardage"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("course_tees_course_key_idx").on(table.courseId, table.teeKey),
+  ]
+);
+
+export const courseHoles = pgTable(
+  "course_holes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    courseId: uuid("course_id")
+      .notNull()
+      .references(() => golfCourses.id, { onDelete: "cascade" }),
+    holeNumber: integer("hole_number").notNull(),
+    par: integer("par").notNull(),
+    yardage: integer("yardage"),
+    teeYardages: jsonb("tee_yardages").$type<Record<string, number>>(),
+    strokeIndex: integer("stroke_index"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("course_holes_course_hole_idx").on(table.courseId, table.holeNumber),
   ]
 );
 
@@ -372,6 +436,7 @@ export const mappingRequests = pgTable("mapping_requests", {
 
 export const organizationsRelations = relations(organizations, ({ many }) => ({
   events: many(events),
+  golfCourses: many(golfCourses),
   mappingRequests: many(mappingRequests),
 }));
 
@@ -437,16 +502,38 @@ export type Registration = typeof registrations.$inferSelect;
 export type HoleScore = typeof holeScores.$inferSelect;
 export type EventHole = typeof eventHoles.$inferSelect;
 export type GolfCourse = typeof golfCourses.$inferSelect;
+export type CourseHole = typeof courseHoles.$inferSelect;
+export type CourseTee = typeof courseTees.$inferSelect;
 export type HoleFeature = typeof holeFeatures.$inferSelect;
 export type GreenTarget = typeof greenTargets.$inferSelect;
 export type GreenElevationGrid = typeof greenElevationGrids.$inferSelect;
 export type MappingRequest = typeof mappingRequests.$inferSelect;
 
-export const golfCoursesRelations = relations(golfCourses, ({ many }) => ({
+export const golfCoursesRelations = relations(golfCourses, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [golfCourses.orgId],
+    references: [organizations.id],
+  }),
+  courseHoles: many(courseHoles),
+  courseTees: many(courseTees),
   holeFeatures: many(holeFeatures),
   greenTargets: many(greenTargets),
   greenElevationGrids: many(greenElevationGrids),
   mappingRequests: many(mappingRequests),
+}));
+
+export const courseHolesRelations = relations(courseHoles, ({ one }) => ({
+  course: one(golfCourses, {
+    fields: [courseHoles.courseId],
+    references: [golfCourses.id],
+  }),
+}));
+
+export const courseTeesRelations = relations(courseTees, ({ one }) => ({
+  course: one(golfCourses, {
+    fields: [courseTees.courseId],
+    references: [golfCourses.id],
+  }),
 }));
 
 export const holeFeaturesRelations = relations(holeFeatures, ({ one }) => ({

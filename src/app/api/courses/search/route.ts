@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 
+import { searchVerifiedCourses } from "@/lib/course-onboarding";
 import { searchOpenGolfCourses } from "@/lib/opengolfapi";
+import { parseCoordinate } from "@/lib/green-distance";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -11,8 +13,32 @@ export async function GET(request: Request) {
   }
 
   try {
-    const courses = await searchOpenGolfCourses(q, 8);
-    return NextResponse.json({ courses });
+    const verified = await searchVerifiedCourses(q, 8);
+    const verifiedResults = verified.map((course) => ({
+      id: course.externalCourseId ?? course.id,
+      name: course.name,
+      course_name: course.name,
+      city: course.city,
+      state: course.state,
+      latitude: parseCoordinate(course.latitude),
+      longitude: parseCoordinate(course.longitude),
+      par: course.courseHoles.reduce((sum, hole) => sum + hole.par, 0),
+      source: "verified" as const,
+    }));
+
+    const seen = new Set(verifiedResults.map((course) => course.id));
+
+    const openGolf = await searchOpenGolfCourses(q, 8);
+    const openGolfResults = openGolf
+      .filter((course) => !seen.has(course.id))
+      .map((course) => ({
+        ...course,
+        source: "opengolf" as const,
+      }));
+
+    return NextResponse.json({
+      courses: [...verifiedResults, ...openGolfResults],
+    });
   } catch {
     return NextResponse.json(
       { error: "Course search unavailable." },

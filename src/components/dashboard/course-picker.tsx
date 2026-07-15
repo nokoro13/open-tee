@@ -48,7 +48,9 @@ export function CoursePicker({ selection, holes, onChange }: CoursePickerProps) 
     selection.externalCourseId ? "search" : "manual"
   );
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<OpenGolfCourseSummary[]>([]);
+  const [results, setResults] = useState<
+    (OpenGolfCourseSummary & { source?: string })[]
+  >([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [selectedCourse, setSelectedCourse] = useState<OpenGolfCourseDetail | null>(
@@ -118,7 +120,9 @@ export function CoursePicker({ selection, holes, onChange }: CoursePickerProps) 
           { signal: controller.signal }
         );
         if (!response.ok) throw new Error("Search failed");
-        const data = (await response.json()) as { courses: OpenGolfCourseSummary[] };
+        const data = (await response.json()) as {
+          courses: (OpenGolfCourseSummary & { source?: string })[];
+        };
         setResults(data.courses);
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") return;
@@ -279,8 +283,8 @@ export function CoursePicker({ selection, holes, onChange }: CoursePickerProps) 
             )}
           </div>
           <FieldDescription>
-            Powered by OpenGolfAPI. US courses have the best coverage; use manual
-            entry for courses not listed.
+            Verified OpenRound courses appear first. OpenGolfAPI fills in courses
+            we have not onboarded yet.
           </FieldDescription>
 
           {isSearching && (
@@ -305,6 +309,7 @@ export function CoursePicker({ selection, holes, onChange }: CoursePickerProps) 
                       <span className="text-xs text-muted-foreground">
                         {formatCourseLocation(course)}
                         {course.par ? ` · Par ${course.par}` : ""}
+                        {course.source === "verified" ? " · Verified" : ""}
                       </span>
                     </span>
                   </button>

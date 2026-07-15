@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 
 import {
+  ADMIN_DASHBOARD_NAV_ITEMS,
   CREATE_FORMAT_SHORTCUTS,
   DASHBOARD_NAV_ITEMS,
 } from "@/lib/dashboard-nav";
@@ -24,7 +25,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 
-export function AppSidebar() {
+export function AppSidebar({ showAdminNav = false }: { showAdminNav?: boolean }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { isMobile, setOpenMobile } = useSidebar();
@@ -92,6 +93,30 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {showAdminNav && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Platform</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {ADMIN_DASHBOARD_NAV_ITEMS.map((item) => (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton
+                      render={
+                        <Link href={item.href} onClick={closeMobileSidebar} />
+                      }
+                      isActive={isDashboardItemActive(item.href)}
+                      tooltip={item.label}
+                    >
+                      <item.icon />
+                      <span>{item.label}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
         <SidebarGroup>
           <SidebarGroupLabel>Create</SidebarGroupLabel>

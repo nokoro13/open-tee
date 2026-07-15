@@ -14,6 +14,7 @@ import { getEventFormat } from "@/lib/event-formats";
 
 type DashboardShellProps = {
   children: React.ReactNode;
+  showAdminNav?: boolean;
 };
 
 function SidebarFallback() {
@@ -26,6 +27,14 @@ function DashboardHeaderTitle() {
 
   if (pathname === "/dashboard") {
     return "Home";
+  }
+
+  if (pathname.startsWith("/dashboard/courses")) {
+    return "Verified courses";
+  }
+
+  if (pathname.startsWith("/dashboard/admin/courses")) {
+    return "Course verification";
   }
 
   if (pathname === "/dashboard/settings") {
@@ -45,11 +54,14 @@ function DashboardHeaderTitle() {
   return "Dashboard";
 }
 
-export function DashboardShell({ children }: DashboardShellProps) {
+export function DashboardShell({
+  children,
+  showAdminNav = false,
+}: DashboardShellProps) {
   return (
     <SidebarProvider defaultOpen>
       <Suspense fallback={<SidebarFallback />}>
-        <AppSidebar />
+        <AppSidebar showAdminNav={showAdminNav} />
       </Suspense>
       <SidebarInset>
         <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4 sm:h-16 sm:px-6">
