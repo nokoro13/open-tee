@@ -79,6 +79,29 @@ export function segmentYards(from: LatLng, to: LatLng): number {
   return Math.round(yardsBetween(from, to));
 }
 
+export function measureHolePathYardage(
+  from: LatLng,
+  breakPoint: LatLng,
+  to: LatLng
+): { leg1: number; leg2: number; total: number } {
+  const leg1 = segmentYards(from, breakPoint);
+  const leg2 = segmentYards(breakPoint, to);
+  return { leg1, leg2, total: leg1 + leg2 };
+}
+
+export function yardageMatchDelta(measured: number, target: number): number {
+  return measured - target;
+}
+
+export function yardageMatchTone(
+  delta: number
+): "match" | "close" | "off" {
+  const abs = Math.abs(delta);
+  if (abs <= 5) return "match";
+  if (abs <= 15) return "close";
+  return "off";
+}
+
 export function createBreakAnchorIcon(): google.maps.Icon {
   const size = 30;
   const canvas = document.createElement("canvas");

@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 
 import { getDb } from "@/db";
 import { organizations, type Organization } from "@/db/schema";
+import { activatePendingCourseAccessForUser } from "@/lib/course-access";
 
 export async function requireUserId(): Promise<string> {
   const { userId } = await auth();
@@ -22,6 +23,8 @@ export async function getOrganizationForUser(
 
 export async function requireOrganization(): Promise<Organization> {
   const userId = await requireUserId();
+  await activatePendingCourseAccessForUser(userId);
+
   const existing = await getOrganizationForUser(userId);
 
   if (existing) {

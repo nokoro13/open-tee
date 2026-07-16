@@ -9,12 +9,15 @@ import {
 } from "@/actions/course-onboarding";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ButtonLink } from "@/components/ui/button-link";
 import { Input } from "@/components/ui/input";
-import type { CourseHole, GolfCourse, Organization } from "@/db/schema";
+import type { CourseHole, CourseTee, GolfCourse, Organization } from "@/db/schema";
+import { formatCourseLocationLine } from "@/lib/course-location";
 
 type AdminCourseVerificationListProps = {
   courses: (GolfCourse & {
     courseHoles: CourseHole[];
+    courseTees: CourseTee[];
     organization: Organization | null;
   })[];
 };
@@ -52,23 +55,36 @@ export function AdminCourseVerificationList({
                 {course.organization?.name ?? "Unknown organization"}
               </p>
               <p className="text-sm text-muted-foreground">
-                {[course.city, course.state].filter(Boolean).join(", ")}
+                {formatCourseLocationLine({
+                  city: course.city,
+                  state: course.state,
+                  country: course.country,
+                })}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Badge variant="outline">{course.holeCount} holes</Badge>
               <Badge variant="outline">{course.mappedHoleCount} mapped</Badge>
+              {course.courseTees.length > 0 && (
+                <Badge variant="outline">
+                  {course.courseTees.map((tee) => tee.teeName).join(", ")}
+                </Badge>
+              )}
             </div>
           </div>
 
           <div className="flex flex-wrap gap-2">
+            <ButtonLink href={`/dashboard/admin/courses/${course.id}`} size="sm">
+              Review course
+            </ButtonLink>
             <Button
               type="button"
               size="sm"
+              variant="outline"
               disabled={isPending}
               onClick={() => runAction(() => verifySubmittedCourse(course.id))}
             >
-              Approve and publish
+              Quick approve
             </Button>
             <Input
               className="h-9 max-w-xs"

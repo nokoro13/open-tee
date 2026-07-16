@@ -6,12 +6,10 @@ import {
   greenElevationGrids,
   greenTargets,
   holeFeatures,
-  mappingRequests,
   type GolfCourse,
   type GreenElevationGrid,
   type GreenTarget,
   type HoleFeature,
-  type MappingRequest,
 } from "@/db/schema";
 import {
   buildGreenTargetsByEventHole,
@@ -20,9 +18,7 @@ import {
   type GreenTargets,
   type GreenTargetsByEventHole,
 } from "@/lib/green-distance";
-import { computeGreenTargets } from "@/lib/green-targets";
 import { fetchElevationGridForGreen } from "@/lib/elevation-seed";
-import type { CourseMapSeedResult } from "@/lib/course-map-seed";
 import {
   assignOsmFeaturesToHoles,
   osmFeatureTypeToHoleFeatureType,
@@ -33,11 +29,6 @@ import { unstable_cache } from "next/cache";
 type PolygonGeometry = {
   type: "Polygon";
   coordinates: [number, number][][];
-};
-
-type LineStringGeometry = {
-  type: "LineString";
-  coordinates: [number, number][];
 };
 
 function latLngFromTarget(target: GreenTarget) {
@@ -317,227 +308,6 @@ export async function getGreenElevationGrid(
   );
 }
 
-export async function getLatestMappingRequestForEvent(eventId: string) {
-  return getDb().query.mappingRequests.findFirst({
-    where: eq(mappingRequests.eventId, eventId),
-    orderBy: [desc(mappingRequests.requestedAt)],
-    with: {
-      course: {
-        with: {
-          holeFeatures: true,
-          greenTargets: true,
-        },
-      },
-      event: true,
-    },
-  });
-}
-
-export async function getMappingRequestsForOrg(orgId: string) {
-  return getDb().query.mappingRequests.findMany({
-    where: eq(mappingRequests.orgId, orgId),
-    orderBy: [desc(mappingRequests.requestedAt)],
-    with: {
-      event: true,
-      course: true,
-    },
-  });
-}
-
-export async function getMappingRequestForOrg(requestId: string, orgId: string) {
-  return getDb().query.mappingRequests.findFirst({
-    where: and(eq(mappingRequests.id, requestId), eq(mappingRequests.orgId, orgId)),
-    with: {
-      event: true,
-      course: {
-        with: {
-          holeFeatures: {
-            orderBy: [asc(holeFeatures.holeNumber)],
-          },
-          greenTargets: {
-            orderBy: [asc(greenTargets.holeNumber)],
-          },
-        },
-      },
-    },
-  });
-}
-
-function featureTypeFromOsm(feature: OsmGolfFeature): HoleFeature["featureType"] | null {
-  return osmFeatureTypeToHoleFeatureType(feature.featureType);
-}
-
-async function upsertHoleFeature(
-  db: ReturnType<typeof getDb>,
-  values: {
-    courseId: string;
-    holeNumber: number;
-    featureType: HoleFeature["featureType"];
-    geometry: unknown;
-    osmId: string;
-    source: "overpass";
-  }
-) {
-  const existing = await db.query.holeFeatures.findFirst({
-    where: and(
-      eq(holeFeatures.courseId, values.courseId),
-      eq(holeFeatures.osmId, values.osmId)
-    ),
-  });
-
-  const row = {
-    geometry: values.geometry,
-    holeNumber: values.holeNumber,
-    featureType: values.featureType,
-    source: values.source,
-    updatedAt: new Date(),
-  };
-
-  if (existing) {
-    await db.update(holeFeatures).set(row).where(eq(holeFeatures.id, existing.id));
-    return;
-  }
-
-  await db.insert(holeFeatures).values({
-    courseId: values.courseId,
-    osmId: values.osmId,
-    ...row,
-  });
-}
-
-export async function persistSeedResult(
-  courseId: string,
-  holeNumbers: number[],
-  seed: CourseMapSeedResult
-) {
-  const db = getDb();
-
-  const assigned = assignOsmFeaturesToHoles(seed.allFeatures, holeNumbers);
-
-  for (const [holeNumber, features] of assigned.entries()) {
-    for (const feature of features) {
-      const featureType = featureTypeFromOsm(feature);
-      if (!featureType || !feature.geometry) continue;
-
-      await upsertHoleFeature(db, {
-        courseId,
-        holeNumber,
-        featureType,
-        geometry: feature.geometry,
-        osmId: feature.osmId,
-        source: "overpass",
-      });
-    }
-  }
-
-  for (const holeNumber of holeNumbers) {
-    const seededHole = seed.holes[holeNumber];
-    if (!seededHole?.geometry || seededHole.geometry === null) continue;
-
-    const existingGreen = await db.query.holeFeatures.findFirst({
-      where: and(
-        eq(holeFeatures.courseId, courseId),
-        eq(holeFeatures.holeNumber, holeNumber),
-        eq(holeFeatures.featureType, "green")
-      ),
-    });
-
-    const manualOsmId = `manual:green:${holeNumber}`;
-    const greenValues = {
-      geometry: seededHole.geometry,
-      osmId: manualOsmId,
-      source: seededHole.source === "overpass" ? ("overpass" as const) : ("manual" as const),
-      updatedAt: new Date(),
-    };
-
-    if (existingGreen) {
-      await db
-        .update(holeFeatures)
-        .set(greenValues)
-        .where(eq(holeFeatures.id, existingGreen.id));
-    } else {
-      await db.insert(holeFeatures).values({
-        courseId,
-        holeNumber,
-        featureType: "green",
-        ...greenValues,
-      });
-    }
-  }
-
-  let mappedCount = 0;
-
-  for (const holeNumber of holeNumbers) {
-    const greenFeature = await db.query.holeFeatures.findFirst({
-      where: and(
-        eq(holeFeatures.courseId, courseId),
-        eq(holeFeatures.holeNumber, holeNumber),
-        eq(holeFeatures.featureType, "green")
-      ),
-    });
-
-    const holeLine = await db.query.holeFeatures.findFirst({
-      where: and(
-        eq(holeFeatures.courseId, courseId),
-        eq(holeFeatures.holeNumber, holeNumber),
-        eq(holeFeatures.featureType, "hole_line")
-      ),
-    });
-
-    if (!greenFeature?.geometry) continue;
-
-    const targets = computeGreenTargets({
-      greenGeometry: greenFeature.geometry as PolygonGeometry,
-      holeLineGeometry: (holeLine?.geometry as LineStringGeometry | null) ?? null,
-    });
-
-    if (!targets) continue;
-    mappedCount += 1;
-
-    for (const [targetType, point] of Object.entries(targets) as [
-      "front" | "middle" | "back",
-      { lat: number; lng: number },
-    ][]) {
-      const existing = await db.query.greenTargets.findFirst({
-        where: and(
-          eq(greenTargets.courseId, courseId),
-          eq(greenTargets.holeNumber, holeNumber),
-          eq(greenTargets.targetType, targetType)
-        ),
-      });
-
-      const values = {
-        latitude: String(point.lat),
-        longitude: String(point.lng),
-        computedFrom: "polygon_perimeter" as const,
-        updatedAt: new Date(),
-      };
-
-      if (existing) {
-        await db.update(greenTargets).set(values).where(eq(greenTargets.id, existing.id));
-      } else {
-        await db.insert(greenTargets).values({
-          courseId,
-          holeNumber,
-          targetType,
-          ...values,
-        });
-      }
-    }
-  }
-
-  await db
-    .update(golfCourses)
-    .set({
-      mappedHoleCount: mappedCount,
-      dataQuality: mappedCount > 0 ? "geometry_targets" : "geometry_only",
-      updatedAt: new Date(),
-    })
-    .where(eq(golfCourses.id, courseId));
-
-  return mappedCount;
-}
-
 export async function seedElevationForCourse(courseId: string, holeNumbers: number[]) {
   const db = getDb();
   let elevationCount = 0;
@@ -604,14 +374,6 @@ export async function seedElevationForCourse(courseId: string, holeNumbers: numb
 
   return elevationCount;
 }
-
-export type MappingRequestWithCourse = MappingRequest & {
-  event: { id: string; name: string; slug: string; holes: "9" | "18" };
-  course: GolfCourse & {
-    holeFeatures: HoleFeature[];
-    greenTargets: GreenTarget[];
-  };
-};
 
 export type CaddieContextForEvent = {
   courseId: string;

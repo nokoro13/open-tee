@@ -1,6 +1,7 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { auth } from "@clerk/nextjs/server";
+import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 import { getDb } from "@/db";
@@ -8,6 +9,8 @@ import { golfCourses } from "@/db/schema";
 import { requireOrganization } from "@/lib/auth";
 import {
   countCourseMappingProgress,
+  duplicateCourseError,
+  findDuplicateCourses,
   getCourseOnboardingBundle,
   holeNumbersForCount,
   onboardingStepForCourse,
@@ -16,31 +19,95 @@ import {
   saveManualGreenPin,
   saveManualLineBreak,
   saveManualTeePin,
+  type CourseDuplicateMatch,
 } from "@/lib/course-onboarding";
+import {
+  parseCourseCountry,
+  type CourseCountry,
+} from "@/lib/course-location";
 import {
   normalizeTeeKey,
   sortCourseTees,
   totalYardageForTee,
   type CourseTeeInput,
 } from "@/lib/course-tees";
+import { applyOsmOnboardingPrefill } from "@/lib/course-onboarding-osm-prefill";
+import { parseCoordinate } from "@/lib/green-distance";
+import { extractScorecardFromImage } from "@/lib/scorecard-ocr";
 import { createLocalCourseId } from "@/lib/local-course";
+import {
+  activatePendingCourseAccessForUser,
+  canUserEditCourse,
+  canUserEditVerifiedCourse,
+} from "@/lib/course-access";
 import { requirePlatformAdmin } from "@/lib/platform-admin";
-import type { OnboardingActionResult } from "@/lib/course-onboarding-action-result";
+import type {
+  OnboardingActionResult,
+  OsmPrefillActionResult,
+  ScorecardOcrActionResult,
+} from "@/lib/course-onboarding-action-result";
 
-async function getOwnedOnboardingCourse(courseId: string, orgId: string) {
-  return getDb().query.golfCourses.findFirst({
-    where: and(eq(golfCourses.id, courseId), eq(golfCourses.orgId, orgId)),
+async function canEditVerifiedCourse(courseId: string): Promise<boolean> {
+  const { userId } = await auth();
+  if (!userId) return false;
+  return canUserEditVerifiedCourse(userId, courseId);
+}
+
+function verifiedCourseEditError(
+  onboardingStatus: string,
+  allowVerifiedEdit: boolean
+): string | null {
+  if (onboardingStatus === "verified" && !allowVerifiedEdit) {
+    return "Verified courses cannot be edited.";
+  }
+  return null;
+}
+
+async function getEditableOnboardingCourse(courseId: string) {
+  const org = await requireOrganization();
+  const { userId } = await auth();
+  if (!userId) return null;
+
+  await activatePendingCourseAccessForUser(userId);
+
+  const course = await getDb().query.golfCourses.findFirst({
+    where: eq(golfCourses.id, courseId),
     with: {
       courseHoles: true,
       courseTees: true,
     },
   });
+
+  if (!course) return null;
+
+  const allowed = await canUserEditCourse({
+    userId,
+    orgId: org.id,
+    courseId: course.id,
+    courseOrgId: course.orgId,
+  });
+
+  if (!allowed) return null;
+  return course;
+}
+
+export async function checkCourseOnboardingDuplicate(input: {
+  name: string;
+  city?: string | null;
+  state?: string | null;
+  country?: CourseCountry | null;
+  excludeCourseId?: string;
+}): Promise<{ matches: CourseDuplicateMatch[] }> {
+  await requireOrganization();
+  const matches = await findDuplicateCourses(input);
+  return { matches };
 }
 
 export async function createCourseOnboarding(input: {
   name: string;
   city?: string | null;
   state?: string | null;
+  country?: CourseCountry | null;
   address?: string | null;
   latitude: number;
   longitude: number;
@@ -56,6 +123,18 @@ export async function createCourseOnboarding(input: {
 
   if (!Number.isFinite(input.latitude) || !Number.isFinite(input.longitude)) {
     return { success: false, error: "Course location is required." };
+  }
+
+  const country = parseCourseCountry(input.country ?? "US");
+  const duplicates = await findDuplicateCourses({
+    name,
+    city: input.city,
+    state: input.state,
+    country,
+  });
+  const exactDuplicate = duplicates.find((match) => match.matchType === "exact");
+  if (exactDuplicate) {
+    return { success: false, error: duplicateCourseError(duplicates) };
   }
 
   const externalCourseId = input.externalCourseId?.trim() || createLocalCourseId();
@@ -79,6 +158,7 @@ export async function createCourseOnboarding(input: {
         name,
         city: input.city ?? null,
         state: input.state ?? null,
+        country,
         address: input.address ?? null,
         latitude: String(input.latitude),
         longitude: String(input.longitude),
@@ -101,6 +181,7 @@ export async function createCourseOnboarding(input: {
       name,
       city: input.city ?? null,
       state: input.state ?? null,
+      country,
       address: input.address ?? null,
       latitude: String(input.latitude),
       longitude: String(input.longitude),
@@ -120,21 +201,39 @@ export async function updateCourseOnboardingDetails(
     name: string;
     city?: string | null;
     state?: string | null;
+    country?: CourseCountry | null;
     address?: string | null;
     latitude: number;
     longitude: number;
     holeCount: 9 | 18;
   }
 ): Promise<OnboardingActionResult> {
-  const org = await requireOrganization();
-  const course = await getOwnedOnboardingCourse(courseId, org.id);
+  const allowVerifiedEdit = await canEditVerifiedCourse(courseId);
+  const course = await getEditableOnboardingCourse(courseId);
 
   if (!course) {
     return { success: false, error: "Course not found." };
   }
 
-  if (course.onboardingStatus === "verified") {
-    return { success: false, error: "Verified courses cannot be edited." };
+  const verifiedError = verifiedCourseEditError(
+    course.onboardingStatus,
+    allowVerifiedEdit
+  );
+  if (verifiedError) {
+    return { success: false, error: verifiedError };
+  }
+
+  const country = parseCourseCountry(input.country ?? "US");
+  const duplicates = await findDuplicateCourses({
+    name: input.name,
+    city: input.city,
+    state: input.state,
+    country,
+    excludeCourseId: courseId,
+  });
+  const exactDuplicate = duplicates.find((match) => match.matchType === "exact");
+  if (exactDuplicate) {
+    return { success: false, error: duplicateCourseError(duplicates) };
   }
 
   await getDb()
@@ -143,6 +242,7 @@ export async function updateCourseOnboardingDetails(
       name: input.name.trim(),
       city: input.city ?? null,
       state: input.state ?? null,
+      country,
       address: input.address ?? null,
       latitude: String(input.latitude),
       longitude: String(input.longitude),
@@ -175,8 +275,7 @@ export async function saveCourseOnboardingScorecardImage(
   courseId: string,
   imageDataUrl: string
 ): Promise<OnboardingActionResult> {
-  const org = await requireOrganization();
-  const course = await getOwnedOnboardingCourse(courseId, org.id);
+  const course = await getEditableOnboardingCourse(courseId);
 
   if (!course) {
     return { success: false, error: "Course not found." };
@@ -212,8 +311,7 @@ export async function saveCourseOnboardingScorecard(
     }[];
   }
 ): Promise<OnboardingActionResult> {
-  const org = await requireOrganization();
-  const course = await getOwnedOnboardingCourse(courseId, org.id);
+  const course = await getEditableOnboardingCourse(courseId);
 
   if (!course) {
     return { success: false, error: "Course not found." };
@@ -290,7 +388,10 @@ export async function saveCourseOnboardingScorecard(
   await getDb()
     .update(golfCourses)
     .set({
-      onboardingStatus: "mapping",
+      onboardingStatus:
+        course.onboardingStatus === "verified"
+          ? "verified"
+          : "mapping",
       updatedAt: new Date(),
     })
     .where(eq(golfCourses.id, courseId));
@@ -305,10 +406,9 @@ export async function saveCourseOnboardingHolePin(
   pin:
     | { kind: "green"; lat: number; lng: number }
     | { kind: "tee"; teeKey: string; lat: number; lng: number }
-    | { kind: "line_break"; teeKey: string; lat: number; lng: number }
+    | { kind: "line_break"; lat: number; lng: number }
 ): Promise<OnboardingActionResult> {
-  const org = await requireOrganization();
-  const course = await getOwnedOnboardingCourse(courseId, org.id);
+  const course = await getEditableOnboardingCourse(courseId);
 
   if (!course) {
     return { success: false, error: "Course not found." };
@@ -327,22 +427,151 @@ export async function saveCourseOnboardingHolePin(
     }
     await saveManualTeePin(courseId, holeNumber, pin.teeKey, pin);
   } else {
-    const teeExists = course.courseTees.some((tee) => tee.teeKey === pin.teeKey);
-    if (!teeExists) {
-      return { success: false, error: "Unknown tee set." };
-    }
-    await saveManualLineBreak(courseId, holeNumber, pin.teeKey, pin);
+    await saveManualLineBreak(courseId, holeNumber, pin);
   }
 
   revalidatePath(`/dashboard/courses/${courseId}/onboard`);
   return { success: true, courseId };
 }
 
+export async function prefillCourseOnboardingFromOsm(
+  courseId: string
+): Promise<OsmPrefillActionResult> {
+  const allowVerifiedEdit = await canEditVerifiedCourse(courseId);
+  const course = await getEditableOnboardingCourse(courseId);
+
+  if (!course) {
+    return { success: false, error: "Course not found." };
+  }
+
+  const verifiedError = verifiedCourseEditError(
+    course.onboardingStatus,
+    allowVerifiedEdit
+  );
+  if (verifiedError) {
+    return { success: false, error: verifiedError };
+  }
+
+  if (course.courseTees.length === 0) {
+    return {
+      success: false,
+      error: "Save the scorecard with tee sets before prefilling hole mapping.",
+    };
+  }
+
+  const latitude = parseCoordinate(course.latitude);
+  const longitude = parseCoordinate(course.longitude);
+
+  if (latitude == null || longitude == null) {
+    return {
+      success: false,
+      error: "Course coordinates are required to query OpenStreetMap.",
+    };
+  }
+
+  try {
+    const { coverage, appliedHoleCount } = await applyOsmOnboardingPrefill({
+      courseId,
+      latitude,
+      longitude,
+      holeCount: course.holeCount,
+      courseHoles: course.courseHoles,
+      courseTees: course.courseTees,
+    });
+
+    if (appliedHoleCount === 0) {
+      return {
+        success: false,
+        error:
+          coverage.overpassError ??
+          "No mappable holes were found in OpenStreetMap near this course.",
+      };
+    }
+
+    revalidatePath(`/dashboard/courses/${courseId}/onboard`);
+    return {
+      success: true,
+      courseId,
+      coverage,
+      appliedHoleCount,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Could not prefill from OpenStreetMap.",
+    };
+  }
+}
+
+export async function extractCourseOnboardingScorecard(
+  courseId: string,
+  imageDataUrl?: string,
+  requestedTees?: CourseTeeInput[]
+): Promise<ScorecardOcrActionResult> {
+  const course = await getEditableOnboardingCourse(courseId);
+
+  if (!course) {
+    return { success: false, error: "Course not found." };
+  }
+
+  const tees = (requestedTees ?? [])
+    .map((tee, index) => ({
+      ...tee,
+      teeKey: normalizeTeeKey(tee.teeKey || tee.teeName),
+      teeName: tee.teeName.trim(),
+      sortOrder: tee.sortOrder ?? index,
+    }))
+    .filter((tee) => tee.teeKey.length > 0 && tee.teeName.length > 0);
+
+  if (tees.length === 0) {
+    return {
+      success: false,
+      error: "Select the tee colors on this scorecard before extracting.",
+    };
+  }
+
+  let imageUrl = imageDataUrl?.trim() || null;
+
+  if (!imageUrl) {
+    const row = await getDb().query.golfCourses.findFirst({
+      where: eq(golfCourses.id, courseId),
+      columns: { scorecardImageUrl: true },
+    });
+    imageUrl = row?.scorecardImageUrl ?? null;
+  }
+
+  if (!imageUrl) {
+    return {
+      success: false,
+      error: "Upload a scorecard image before extracting data.",
+    };
+  }
+
+  try {
+    const data = await extractScorecardFromImage(
+      imageUrl,
+      course.holeCount,
+      tees
+    );
+    return { success: true, data };
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Could not extract scorecard data.",
+    };
+  }
+}
+
 export async function submitCourseForVerification(
   courseId: string
 ): Promise<OnboardingActionResult> {
-  const org = await requireOrganization();
-  const course = await getOwnedOnboardingCourse(courseId, org.id);
+  const course = await getEditableOnboardingCourse(courseId);
 
   if (!course) {
     return { success: false, error: "Course not found." };

@@ -27,7 +27,14 @@ import {
 import { computeGreenTargets } from "@/lib/green-targets";
 import type { LatLng } from "@/lib/green-distance";
 import type { ScorecardHoleSnapshot } from "@/lib/scorecard";
-import type { OpenGolfCourseDetail } from "@/lib/opengolfapi";
+import {
+  type CourseDetail,
+} from "@/lib/course-catalog";
+import {
+  normalizeCourseMatchText,
+  parseCourseCountry,
+  type CourseCountry,
+} from "@/lib/course-location";
 import { parseCoordinate } from "@/lib/green-distance";
 
 export type CourseOnboardingStep = "details" | "scorecard" | "mapping" | "review";
@@ -36,7 +43,7 @@ export type CourseHolePin = {
   holeNumber: number;
   green: LatLng | null;
   tees: Record<string, LatLng>;
-  lineBreaks: Record<string, LatLng>;
+  lineBreak: LatLng | null;
 };
 
 export type CourseMappingProgress = {
@@ -265,13 +272,11 @@ export function extractHolePinsFromFeatures(
         holeNumber: feature.holeNumber,
         green: null,
         tees: {},
-        lineBreaks: {},
+        lineBreak: null,
       };
     }
 
     if (feature.featureType === "hole_line" && geometry.type === "LineString") {
-      const parsed = parseManualHoleLineOsmId(feature.osmId);
-      if (!parsed) continue;
       const path = lineStringToPath(geometry);
       if (path.length < 2) continue;
       const breakPoint = breakPointFromLinePath(
@@ -279,8 +284,8 @@ export function extractHolePinsFromFeatures(
         path[0]!,
         path[path.length - 1]!
       );
-      if (breakPoint) {
-        pins[feature.holeNumber].lineBreaks[parsed.teeKey] = breakPoint;
+      if (breakPoint && pins[feature.holeNumber].lineBreak == null) {
+        pins[feature.holeNumber].lineBreak = breakPoint;
       }
       continue;
     }
@@ -497,6 +502,29 @@ export async function saveManualHoleLine(
   );
 }
 
+async function resolveSharedLineBreakForHole(
+  features: {
+    featureType: string;
+    geometry: unknown;
+  }[],
+  tee: LatLng,
+  green: LatLng
+): Promise<LatLng> {
+  for (const feature of features) {
+    if (feature.featureType !== "hole_line") continue;
+    const path = lineStringToPath(feature.geometry);
+    if (path.length < 3) continue;
+    const breakPoint = breakPointFromLinePath(
+      path,
+      path[0]!,
+      path[path.length - 1]!
+    );
+    if (breakPoint) return breakPoint;
+  }
+
+  return midpoint(tee, green);
+}
+
 async function refreshHoleLinesForHole(courseId: string, holeNumber: number) {
   const db = getDb();
   const features = await db.query.holeFeatures.findMany({
@@ -514,6 +542,69 @@ async function refreshHoleLinesForHole(courseId: string, holeNumber: number) {
     : null;
   if (!green) return;
 
+  const teeFeatures = features.filter((feature) => feature.featureType === "tee");
+  const primaryTeeFeature = teeFeatures[0];
+  const primaryTeeGeometry = primaryTeeFeature?.geometry as {
+    type?: string;
+    coordinates?: [number, number];
+  };
+  const primaryTee =
+    primaryTeeGeometry?.type === "Point" && primaryTeeGeometry.coordinates
+      ? {
+          lat: primaryTeeGeometry.coordinates[1],
+          lng: primaryTeeGeometry.coordinates[0],
+        }
+      : null;
+  const sharedBreak = primaryTee
+    ? await resolveSharedLineBreakForHole(features, primaryTee, green)
+    : null;
+
+  for (const feature of teeFeatures) {
+    const parsedTee = parseManualTeeOsmId(feature.osmId);
+    if (!parsedTee) continue;
+
+    const geometry = feature.geometry as {
+      type?: string;
+      coordinates?: [number, number];
+    };
+    if (geometry.type !== "Point" || !geometry.coordinates) continue;
+    const [lng, lat] = geometry.coordinates;
+    const tee = { lat, lng };
+
+    await saveManualHoleLine(
+      courseId,
+      holeNumber,
+      parsedTee.teeKey,
+      tee,
+      green,
+      sharedBreak ?? midpoint(tee, green)
+    );
+  }
+}
+
+export async function saveManualLineBreak(
+  courseId: string,
+  holeNumber: number,
+  breakPoint: LatLng
+) {
+  const db = getDb();
+  const features = await db.query.holeFeatures.findMany({
+    where: and(
+      eq(holeFeatures.courseId, courseId),
+      eq(holeFeatures.holeNumber, holeNumber)
+    ),
+  });
+
+  const greenFeature = features.find(
+    (feature) => feature.featureType === "green"
+  );
+  const green = greenFeature
+    ? await resolveGreenCenter(greenFeature.geometry)
+    : null;
+  if (!green) return;
+
+  let primaryTee: LatLng | null = null;
+
   for (const feature of features) {
     if (feature.featureType !== "tee") continue;
     const parsedTee = parseManualTeeOsmId(feature.osmId);
@@ -526,17 +617,7 @@ async function refreshHoleLinesForHole(courseId: string, holeNumber: number) {
     if (geometry.type !== "Point" || !geometry.coordinates) continue;
     const [lng, lat] = geometry.coordinates;
     const tee = { lat, lng };
-
-    const holeLine = features.find(
-      (entry) =>
-        entry.featureType === "hole_line" &&
-        parseManualHoleLineOsmId(entry.osmId)?.teeKey === parsedTee.teeKey
-    );
-    const path = holeLine ? lineStringToPath(holeLine.geometry) : [];
-    const breakPoint =
-      path.length >= 3
-        ? breakPointFromLinePath(path, path[0]!, path[path.length - 1]!)
-        : null;
+    primaryTee ??= tee;
 
     await saveManualHoleLine(
       courseId,
@@ -547,55 +628,10 @@ async function refreshHoleLinesForHole(courseId: string, holeNumber: number) {
       breakPoint
     );
   }
-}
 
-export async function saveManualLineBreak(
-  courseId: string,
-  holeNumber: number,
-  teeKey: string,
-  breakPoint: LatLng
-) {
-  const db = getDb();
-  const teeFeature = await db.query.holeFeatures.findFirst({
-    where: and(
-      eq(holeFeatures.courseId, courseId),
-      eq(holeFeatures.holeNumber, holeNumber),
-      eq(holeFeatures.osmId, manualTeeOsmId(holeNumber, teeKey))
-    ),
-  });
-
-  const greenFeature = await db.query.holeFeatures.findFirst({
-    where: and(
-      eq(holeFeatures.courseId, courseId),
-      eq(holeFeatures.holeNumber, holeNumber),
-      eq(holeFeatures.featureType, "green")
-    ),
-  });
-
-  const teeGeometry = teeFeature?.geometry as {
-    type?: string;
-    coordinates?: [number, number];
-  };
-  const green = greenFeature
-    ? await resolveGreenCenter(greenFeature.geometry)
-    : null;
-
-  if (teeGeometry?.type !== "Point" || !teeGeometry.coordinates || !green) {
-    return;
+  if (primaryTee) {
+    await recomputeGreenTargetsForHole(courseId, holeNumber, primaryTee, green);
   }
-
-  const [lng, lat] = teeGeometry.coordinates;
-  const tee = { lat, lng };
-
-  await saveManualHoleLine(
-    courseId,
-    holeNumber,
-    teeKey,
-    tee,
-    green,
-    breakPoint
-  );
-  await recomputeGreenTargetsForHole(courseId, holeNumber, tee, green);
 }
 
 export async function saveManualGreenPin(
@@ -644,18 +680,17 @@ export async function saveManualTeePin(
   if (greenFeature) {
     const greenCenter = await resolveGreenCenter(greenFeature.geometry);
     if (greenCenter) {
-      const existingLine = await db.query.holeFeatures.findFirst({
+      const holeFeaturesForHole = await db.query.holeFeatures.findMany({
         where: and(
           eq(holeFeatures.courseId, courseId),
-          eq(holeFeatures.holeNumber, holeNumber),
-          eq(holeFeatures.osmId, manualHoleLineOsmId(holeNumber, teeKey))
+          eq(holeFeatures.holeNumber, holeNumber)
         ),
       });
-      const path = existingLine ? lineStringToPath(existingLine.geometry) : [];
-      const breakPoint =
-        path.length >= 3
-          ? breakPointFromLinePath(path, path[0]!, path[path.length - 1]!)
-          : null;
+      const breakPoint = await resolveSharedLineBreakForHole(
+        holeFeaturesForHole,
+        tee,
+        greenCenter
+      );
 
       await saveManualHoleLine(
         courseId,
@@ -751,9 +786,109 @@ export async function replaceCourseHoles(
   );
 }
 
+export type CourseDuplicateMatch = {
+  id: string;
+  name: string;
+  city: string | null;
+  state: string | null;
+  country: string | null;
+  onboardingStatus: GolfCourse["onboardingStatus"];
+  status: GolfCourse["status"];
+  matchType: "exact" | "name";
+};
+
+export async function findDuplicateCourses(input: {
+  name: string;
+  city?: string | null;
+  state?: string | null;
+  country?: CourseCountry | null;
+  excludeCourseId?: string;
+}): Promise<CourseDuplicateMatch[]> {
+  const normalizedName = normalizeCourseMatchText(input.name);
+  if (normalizedName.length < 2) return [];
+
+  const searchName = input.name.trim();
+  const candidates = await getDb().query.golfCourses.findMany({
+    columns: {
+      id: true,
+      name: true,
+      city: true,
+      state: true,
+      country: true,
+      onboardingStatus: true,
+      status: true,
+    },
+    where: ilike(golfCourses.name, `%${searchName}%`),
+    limit: 25,
+  });
+
+  const normalizedCity = normalizeCourseMatchText(input.city);
+  const normalizedState = normalizeCourseMatchText(input.state);
+  const country = parseCourseCountry(input.country ?? "US");
+
+  const matches: CourseDuplicateMatch[] = [];
+
+  for (const course of candidates) {
+    if (course.id === input.excludeCourseId) continue;
+    if (normalizeCourseMatchText(course.name) !== normalizedName) continue;
+
+    const courseCountry = parseCourseCountry(course.country);
+    if (courseCountry !== country) continue;
+
+    const courseCity = normalizeCourseMatchText(course.city);
+    const courseState = normalizeCourseMatchText(course.state);
+
+    if (normalizedCity.length >= 2 && courseCity.length >= 2) {
+      if (normalizedCity !== courseCity) continue;
+      if (
+        normalizedState.length >= 2 &&
+        courseState.length >= 2 &&
+        normalizedState !== courseState
+      ) {
+        continue;
+      }
+
+      matches.push({
+        ...course,
+        matchType: "exact",
+      });
+      continue;
+    }
+
+    matches.push({
+      ...course,
+      matchType: "name",
+    });
+  }
+
+  return matches.sort((left, right) => {
+    if (left.matchType !== right.matchType) {
+      return left.matchType === "exact" ? -1 : 1;
+    }
+    return left.name.localeCompare(right.name);
+  });
+}
+
+export function duplicateCourseError(matches: CourseDuplicateMatch[]): string {
+  const primary = matches.find((match) => match.matchType === "exact") ?? matches[0];
+  if (!primary) return "This course already exists in the database.";
+
+  const location = [primary.city, primary.state].filter(Boolean).join(", ");
+  const statusLabel =
+    primary.onboardingStatus === "verified"
+      ? "verified"
+      : primary.onboardingStatus.replace("_", " ");
+
+  if (primary.matchType === "exact") {
+    return `A matching course already exists${location ? ` in ${location}` : ""} (${statusLabel}).`;
+  }
+
+  return `A course named "${primary.name}" already exists (${statusLabel}). Add the city to confirm whether this is a duplicate.`;
+}
+
 export function verifiedCourseToDetail(
   course: GolfCourse & { courseHoles: CourseHole[]; courseTees?: CourseTee[] }
-): OpenGolfCourseDetail {
+): CourseDetail {
   const latitude = parseCoordinate(course.latitude);
   const longitude = parseCoordinate(course.longitude);
   const sortedTees = sortCourseTees(course.courseTees ?? []);
@@ -792,6 +927,7 @@ export function verifiedCourseToDetail(
     course_name: course.name,
     city: course.city,
     state: course.state,
+    country: parseCourseCountry(course.country),
     address: course.address,
     latitude,
     longitude,
@@ -806,23 +942,40 @@ export function verifiedCourseToDetail(
 }
 
 export async function getVerifiedCourseDetail(
-  externalCourseId: string
-): Promise<OpenGolfCourseDetail | null> {
-  const course = await getDb().query.golfCourses.findFirst({
-    where: and(
-      eq(golfCourses.externalCourseId, externalCourseId),
-      eq(golfCourses.onboardingStatus, "verified"),
-      eq(golfCourses.status, "published")
-    ),
-    with: {
-      courseTees: {
-        orderBy: [asc(courseTees.sortOrder), asc(courseTees.teeName)],
+  courseId: string
+): Promise<CourseDetail | null> {
+  const db = getDb();
+  const course =
+    (await db.query.golfCourses.findFirst({
+      where: and(
+        eq(golfCourses.externalCourseId, courseId),
+        eq(golfCourses.onboardingStatus, "verified"),
+        eq(golfCourses.status, "published")
+      ),
+      with: {
+        courseTees: {
+          orderBy: [asc(courseTees.sortOrder), asc(courseTees.teeName)],
+        },
+        courseHoles: {
+          orderBy: [asc(courseHoles.holeNumber)],
+        },
       },
-      courseHoles: {
-        orderBy: [asc(courseHoles.holeNumber)],
+    })) ??
+    (await db.query.golfCourses.findFirst({
+      where: and(
+        eq(golfCourses.id, courseId),
+        eq(golfCourses.onboardingStatus, "verified"),
+        eq(golfCourses.status, "published")
+      ),
+      with: {
+        courseTees: {
+          orderBy: [asc(courseTees.sortOrder), asc(courseTees.teeName)],
+        },
+        courseHoles: {
+          orderBy: [asc(courseHoles.holeNumber)],
+        },
       },
-    },
-  });
+    }));
 
   if (!course || course.courseHoles.length === 0) return null;
   return verifiedCourseToDetail(course);

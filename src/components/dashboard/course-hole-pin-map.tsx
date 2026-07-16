@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   APIProvider,
   Map,
@@ -18,8 +18,11 @@ import { yardsBetween } from "@/lib/green-distance";
 import {
   createBreakAnchorIcon,
   createYardageBadgeIcon,
+  measureHolePathYardage,
   midpoint,
   segmentYards,
+  yardageMatchDelta,
+  yardageMatchTone,
 } from "@/lib/hole-distance-guide";
 import {
   bearingDegrees,
@@ -45,7 +48,12 @@ type PinMode =
 type HolePin =
   | { kind: "green"; lat: number; lng: number }
   | { kind: "tee"; teeKey: string; lat: number; lng: number }
-  | { kind: "line_break"; teeKey: string; lat: number; lng: number };
+  | { kind: "line_break"; lat: number; lng: number };
+
+type DragPreview =
+  | { kind: "tee"; teeKey: string; lat: number; lng: number }
+  | { kind: "green"; lat: number; lng: number }
+  | { kind: "line_break"; lat: number; lng: number };
 
 type CourseHolePinMapProps = {
   courseCenter: LatLng;
@@ -53,9 +61,11 @@ type CourseHolePinMapProps = {
   courseTees: CourseTee[];
   initialGreen: LatLng | null;
   initialTees: Record<string, LatLng>;
-  initialLineBreaks?: Record<string, LatLng>;
-  onSavePin: (pin: HolePin) => Promise<void>;
+  initialLineBreak?: LatLng | null;
+  scorecardYardages?: Record<string, number>;
+  onSavePin?: (pin: HolePin) => Promise<void>;
   isSaving?: boolean;
+  readOnly?: boolean;
   className?: string;
 };
 
@@ -90,17 +100,39 @@ function nextPinMode(
   return { kind: "green" };
 }
 
+function defaultSharedLineBreak(
+  green: LatLng,
+  tees: Record<string, LatLng>,
+  sortedTees: CourseTee[]
+): LatLng {
+  const teePositions = sortedTees
+    .map((tee) => tees[tee.teeKey])
+    .filter((point): point is LatLng => point != null);
+
+  if (teePositions.length === 0) {
+    return green;
+  }
+
+  const farthestTee = teePositions.reduce((farthest, current) =>
+    yardsBetween(current, green) > yardsBetween(farthest, green)
+      ? current
+      : farthest
+  );
+
+  return midpoint(farthestTee, green);
+}
+
 function buildPinHoleMapView(
   green: LatLng | null,
   tees: Record<string, LatLng>,
-  lineBreaks: Record<string, LatLng>,
+  lineBreak: LatLng | null,
   courseCenter: LatLng,
   sortedTees: CourseTee[]
 ): HoleMapView {
   const teePositions = sortedTees
     .map((tee) => tees[tee.teeKey])
     .filter((point): point is LatLng => point != null);
-  const breakPositions = Object.values(lineBreaks);
+  const breakPositions = lineBreak ? [lineBreak] : [];
   const extentPoints = [
     ...(green ? [green] : []),
     ...teePositions,
@@ -243,38 +275,15 @@ function YardageLineLabel({ from, to }: { from: LatLng; to: LatLng }) {
   );
 }
 
-function TeeLineGuide({
-  teeKey,
+function TeeLineSegments({
   from,
   to,
-  initialBreak,
-  disabled,
-  onBreakChange,
+  breakPoint,
 }: {
-  teeKey: string;
   from: LatLng;
   to: LatLng;
-  initialBreak?: LatLng | null;
-  disabled?: boolean;
-  onBreakChange: (point: LatLng) => void;
+  breakPoint: LatLng;
 }) {
-  const [breakPoint, setBreakPoint] = useState(
-    () => initialBreak ?? midpoint(from, to)
-  );
-  const breakIcon = useMemo(() => createBreakAnchorIcon(), []);
-
-  useEffect(() => {
-    setBreakPoint(initialBreak ?? midpoint(from, to));
-  }, [
-    teeKey,
-    from.lat,
-    from.lng,
-    to.lat,
-    to.lng,
-    initialBreak?.lat,
-    initialBreak?.lng,
-  ]);
-
   return (
     <>
       <Polyline
@@ -291,21 +300,128 @@ function TeeLineGuide({
       />
       <YardageLineLabel from={from} to={breakPoint} />
       <YardageLineLabel from={breakPoint} to={to} />
-      <Marker
-        position={breakPoint}
-        draggable={!disabled}
-        zIndex={30}
-        title="Drag to set the fairway dogleg"
-        icon={breakIcon}
-        onDragEnd={(event) => {
-          const latLng = event.latLng;
-          if (!latLng) return;
-          const point = { lat: latLng.lat(), lng: latLng.lng() };
-          setBreakPoint(point);
-          onBreakChange(point);
-        }}
-      />
     </>
+  );
+}
+
+function SharedDoglegMarker({
+  position,
+  disabled,
+  onDrag,
+  onDragEnd,
+}: {
+  position: LatLng;
+  disabled?: boolean;
+  onDrag: (point: LatLng) => void;
+  onDragEnd: (point: LatLng) => void;
+}) {
+  const breakIcon = useMemo(() => createBreakAnchorIcon(), []);
+
+  return (
+    <Marker
+      position={position}
+      draggable={!disabled}
+      zIndex={42}
+      title="Drag to set the shared fairway dogleg"
+      icon={breakIcon}
+      onDrag={(event) => {
+        const latLng = event.latLng;
+        if (!latLng) return;
+        onDrag({ lat: latLng.lat(), lng: latLng.lng() });
+      }}
+      onDragEnd={(event) => {
+        const latLng = event.latLng;
+        if (!latLng) return;
+        onDragEnd({ lat: latLng.lat(), lng: latLng.lng() });
+      }}
+    />
+  );
+}
+
+function HoleYardageGuide({
+  sortedTees,
+  tees,
+  green,
+  lineBreak,
+  scorecardYardages,
+  isDragging,
+}: {
+  sortedTees: CourseTee[];
+  tees: Record<string, LatLng>;
+  green: LatLng | null;
+  lineBreak: LatLng | null;
+  scorecardYardages: Record<string, number>;
+  isDragging: boolean;
+}) {
+  const rows = sortedTees
+    .map((tee) => {
+      const from = tees[tee.teeKey];
+      const target = scorecardYardages[tee.teeKey];
+      if (from == null || green == null || lineBreak == null || target == null) {
+        return null;
+      }
+
+      const measured = measureHolePathYardage(from, lineBreak, green);
+      const delta = yardageMatchDelta(measured.total, target);
+      const tone = yardageMatchTone(delta);
+
+      return {
+        tee,
+        target,
+        measured,
+        delta,
+        tone,
+      };
+    })
+    .filter((row): row is NonNullable<typeof row> => row != null);
+
+  if (rows.length === 0) return null;
+
+  return (
+    <div className="pointer-events-none absolute left-3 top-3 z-10 w-[min(calc(100%-1.5rem),18rem)]">
+      <div className="rounded-lg border border-white/15 bg-black/78 px-3 py-2.5 text-white shadow-lg backdrop-blur-sm">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <p className="text-[10px] font-medium uppercase tracking-wide text-white/70">
+            Yardage guide
+          </p>
+          {isDragging && (
+            <span className="text-[10px] font-semibold text-emerald-400">Live</span>
+          )}
+        </div>
+        <div className="space-y-1.5">
+          {rows.map((row) => (
+            <div
+              key={row.tee.teeKey}
+              className="grid grid-cols-[auto_1fr_auto] items-center gap-x-2 gap-y-0.5 text-[11px]"
+            >
+              <span className="inline-flex items-center gap-1.5 font-medium text-white">
+                <span
+                  className="size-2 rounded-full border border-white/20"
+                  style={{ backgroundColor: teeMarkerColor(row.tee) }}
+                />
+                {row.tee.teeName}
+              </span>
+              <span className="text-white/65">
+                {row.measured.leg1}+{row.measured.leg2}={row.measured.total}
+                <span className="text-white/30">/</span>
+                {row.target}
+              </span>
+              <span
+                className={cn(
+                  "font-semibold tabular-nums",
+                  row.tone === "match" && "text-emerald-400",
+                  row.tone === "close" && "text-amber-400",
+                  row.tone === "off" && "text-red-400"
+                )}
+              >
+                {row.delta > 0 ? "+" : ""}
+                {row.delta}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -355,50 +471,96 @@ export function CourseHolePinMap({
   courseTees,
   initialGreen,
   initialTees,
-  initialLineBreaks = {},
+  initialLineBreak = null,
+  scorecardYardages = {},
   onSavePin,
   isSaving = false,
+  readOnly = false,
   className,
 }: CourseHolePinMapProps) {
   const sortedTees = useMemo(() => sortCourseTees(courseTees), [courseTees]);
   const [green, setGreen] = useState<LatLng | null>(initialGreen);
   const [tees, setTees] = useState<Record<string, LatLng>>(initialTees);
-  const [lineBreaks, setLineBreaks] =
-    useState<Record<string, LatLng>>(initialLineBreaks);
+  const [lineBreak, setLineBreak] = useState<LatLng | null>(initialLineBreak);
+  const [dragPreview, setDragPreview] = useState<DragPreview | null>(null);
   const [isEditing, setIsEditing] = useState(
     () => !isHoleMapped(initialGreen, initialTees, courseTees)
   );
   const [mode, setMode] = useState<PinMode>(() =>
     nextPinMode(sortedTees, initialGreen, initialTees)
   );
+  const previousHoleRef = useRef(holeNumber);
 
   useEffect(() => {
+    const holeChanged = previousHoleRef.current !== holeNumber;
+    previousHoleRef.current = holeNumber;
+
     setGreen(initialGreen);
     setTees(initialTees);
-    setLineBreaks(initialLineBreaks);
+    setLineBreak(initialLineBreak);
+    setDragPreview(null);
     setMode(nextPinMode(sortedTees, initialGreen, initialTees));
-    setIsEditing(!isHoleMapped(initialGreen, initialTees, sortedTees));
-  }, [holeNumber, initialGreen, initialLineBreaks, initialTees, sortedTees]);
+
+    if (holeChanged) {
+      setIsEditing(!isHoleMapped(initialGreen, initialTees, sortedTees));
+    }
+  }, [holeNumber, initialGreen, initialLineBreak, initialTees, sortedTees]);
 
   const holeComplete = isHoleMapped(green, tees, sortedTees);
-  const isLocked = holeComplete && !isEditing;
+  const isLocked = readOnly || (holeComplete && !isEditing);
+  const dragToAdjust = !readOnly && holeComplete && isEditing;
   const placedTeeCount = sortedTees.filter((tee) => tees[tee.teeKey]).length;
   const hasPinData =
     initialGreen != null || Object.keys(initialTees).length > 0;
+
+  const hasScorecardYardages = useMemo(
+    () =>
+      sortedTees.some(
+        (tee) => scorecardYardages[tee.teeKey] != null
+      ),
+    [scorecardYardages, sortedTees]
+  );
+
+  const liveGreen = useMemo(() => {
+    if (dragPreview?.kind === "green") {
+      return { lat: dragPreview.lat, lng: dragPreview.lng };
+    }
+    return green;
+  }, [dragPreview, green]);
+
+  const liveTees = useMemo(() => {
+    if (dragPreview?.kind !== "tee") return tees;
+    return {
+      ...tees,
+      [dragPreview.teeKey]: {
+        lat: dragPreview.lat,
+        lng: dragPreview.lng,
+      },
+    };
+  }, [dragPreview, tees]);
+
+  const sharedLineBreak = useMemo(() => {
+    if (dragPreview?.kind === "line_break") {
+      return { lat: dragPreview.lat, lng: dragPreview.lng };
+    }
+    if (lineBreak) return lineBreak;
+    if (!liveGreen) return null;
+    return defaultSharedLineBreak(liveGreen, liveTees, sortedTees);
+  }, [dragPreview, lineBreak, liveGreen, liveTees, sortedTees]);
 
   const pinMapView = useMemo(
     () =>
       buildPinHoleMapView(
         initialGreen,
         initialTees,
-        initialLineBreaks,
+        initialLineBreak,
         courseCenter,
         sortedTees
       ),
     [
       courseCenter,
       initialGreen,
-      initialLineBreaks,
+      initialLineBreak,
       initialTees,
       sortedTees,
     ]
@@ -407,7 +569,7 @@ export function CourseHolePinMap({
   const handleMapClick = useCallback(
     (event: MapMouseEvent) => {
       const latLng = event.detail.latLng;
-      if (!latLng || isSaving || isLocked) return;
+      if (!latLng || isSaving || isLocked || !onSavePin) return;
 
       const point = { lat: latLng.lat, lng: latLng.lng };
 
@@ -423,9 +585,6 @@ export function CourseHolePinMap({
       setTees(nextTees);
       const nextMode = nextPinMode(sortedTees, green, nextTees);
       setMode(nextMode);
-      if (isHoleMapped(green, nextTees, sortedTees)) {
-        setIsEditing(false);
-      }
       void onSavePin({ kind: "tee", teeKey: mode.teeKey, ...point });
     },
     [green, isLocked, isSaving, mode, onSavePin, sortedTees, tees]
@@ -433,21 +592,21 @@ export function CourseHolePinMap({
 
   const teeLines = useMemo(
     () =>
-      green
+      liveGreen && sharedLineBreak
         ? sortedTees
             .map((tee) => {
-              const from = tees[tee.teeKey];
+              const from = liveTees[tee.teeKey];
               if (!from) return null;
               return {
                 teeKey: tee.teeKey,
                 from,
-                to: green,
-                breakPoint: lineBreaks[tee.teeKey] ?? null,
+                to: liveGreen,
+                breakPoint: sharedLineBreak,
               };
             })
             .filter((line): line is NonNullable<typeof line> => line != null)
         : [],
-    [green, lineBreaks, sortedTees, tees]
+    [liveGreen, sharedLineBreak, sortedTees, liveTees]
   );
 
   const modeLabel =
@@ -481,34 +640,41 @@ export function CourseHolePinMap({
               )}
             </div>
             <p className="text-xs text-muted-foreground">
-              {isLocked
-                ? "Locked — click Edit to adjust pins."
-                : `Placing ${modeLabel}. Drag fairway anchors to match doglegs.`}
+              {readOnly
+                ? "Read-only preview of submitted hole mapping."
+                : isLocked
+                  ? "Locked — click Edit to adjust pins."
+                  : dragToAdjust
+                    ? "Drag pins to adjust. Yardages update live against your scorecard."
+                    : hasScorecardYardages
+                      ? `Placing ${modeLabel}. Match map yardages to scorecard targets on the map.`
+                      : `Placing ${modeLabel}. Click the map or drag placed pins. Drag the shared fairway dogleg to match doglegs.`}
             </p>
           </div>
 
-          {isLocked ? (
-            <Button type="button" size="sm" onClick={() => setIsEditing(true)}>
-              <Pencil />
-              Edit
-            </Button>
-          ) : (
-            holeComplete &&
-            isEditing && (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => setIsEditing(false)}
-              >
-                <ShieldCheck />
-                Lock hole
+          {!readOnly &&
+            (isLocked ? (
+              <Button type="button" size="sm" onClick={() => setIsEditing(true)}>
+                <Pencil />
+                Edit
               </Button>
-            )
-          )}
+            ) : (
+              holeComplete &&
+              isEditing && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setIsEditing(false)}
+                >
+                  <ShieldCheck />
+                  Lock hole
+                </Button>
+              )
+            ))}
         </div>
 
-        {!isLocked && (
+        {!readOnly && !isLocked && !dragToAdjust && (
           <div className="mt-3 flex flex-wrap gap-1 rounded-lg bg-muted/80 p-1">
             <PinModeToggle
               active={mode.kind === "green"}
@@ -529,9 +695,20 @@ export function CourseHolePinMap({
             ))}
           </div>
         )}
+
       </div>
 
       <div className="relative min-h-0 flex-1 bg-zinc-950/3">
+        {hasScorecardYardages && (
+          <HoleYardageGuide
+            sortedTees={sortedTees}
+            tees={liveTees}
+            green={liveGreen}
+            lineBreak={sharedLineBreak}
+            scorecardYardages={scorecardYardages}
+            isDragging={dragPreview != null}
+          />
+        )}
         <APIProvider apiKey={MAPS_API_KEY}>
           <Map
             defaultCenter={pinMapView.center}
@@ -545,7 +722,7 @@ export function CourseHolePinMap({
             rotateControl={false}
             headingInteractionEnabled={false}
             tiltInteractionEnabled={false}
-            onClick={isLocked ? undefined : handleMapClick}
+            onClick={isLocked || dragToAdjust ? undefined : handleMapClick}
             className="absolute inset-0 size-full"
           >
             <MapCameraController
@@ -554,48 +731,108 @@ export function CourseHolePinMap({
               enabled={hasPinData}
             />
             {teeLines.map((line) => (
-              <TeeLineGuide
+              <TeeLineSegments
                 key={line.teeKey}
-                teeKey={line.teeKey}
                 from={line.from}
                 to={line.to}
-                initialBreak={line.breakPoint}
+                breakPoint={line.breakPoint}
+              />
+            ))}
+            {sharedLineBreak && (
+              <SharedDoglegMarker
+                position={sharedLineBreak}
                 disabled={isSaving || isLocked}
-                onBreakChange={(point) => {
+                onDrag={(point) => {
                   if (isLocked) return;
-                  setLineBreaks((current) => ({
-                    ...current,
-                    [line.teeKey]: point,
-                  }));
+                  setDragPreview({ kind: "line_break", ...point });
+                }}
+                onDragEnd={(point) => {
+                  if (isLocked || !onSavePin) return;
+                  setDragPreview(null);
+                  setLineBreak(point);
                   void onSavePin({
                     kind: "line_break",
-                    teeKey: line.teeKey,
                     ...point,
                   });
                 }}
               />
-            ))}
+            )}
             {sortedTees.map((tee) => {
-              const position = tees[tee.teeKey];
+              const position = liveTees[tee.teeKey];
               if (!position) return null;
+              const canDrag = !isLocked && !isSaving;
               return (
                 <Marker
                   key={tee.teeKey}
                   position={position}
+                  draggable={canDrag}
+                  zIndex={canDrag ? 40 : undefined}
+                  title={
+                    canDrag
+                      ? `Drag to move ${tee.teeName} tee`
+                      : undefined
+                  }
                   label={{
                     text: tee.teeName.slice(0, 1).toUpperCase(),
                     color: "#ffffff",
                     fontWeight: "700",
                   }}
                   icon={markerIcon(teeMarkerColor(tee))}
+                  onDrag={(event) => {
+                    const latLng = event.latLng;
+                    if (!latLng || isLocked) return;
+                    setDragPreview({
+                      kind: "tee",
+                      teeKey: tee.teeKey,
+                      lat: latLng.lat(),
+                      lng: latLng.lng(),
+                    });
+                  }}
+                  onDragEnd={(event) => {
+                    const latLng = event.latLng;
+                    if (!latLng || isLocked || !onSavePin) return;
+                    const point = { lat: latLng.lat(), lng: latLng.lng() };
+                    setDragPreview(null);
+                    setTees((current) => ({
+                      ...current,
+                      [tee.teeKey]: point,
+                    }));
+                    void onSavePin({
+                      kind: "tee",
+                      teeKey: tee.teeKey,
+                      ...point,
+                    });
+                  }}
                 />
               );
             })}
-            {green && (
+            {liveGreen && (
               <Marker
-                position={green}
+                position={liveGreen}
+                draggable={!isLocked && !isSaving}
+                zIndex={!isLocked && !isSaving ? 41 : undefined}
+                title={
+                  !isLocked && !isSaving ? "Drag to move green" : undefined
+                }
                 label={{ text: "G", color: "#ffffff", fontWeight: "700" }}
                 icon={markerIcon("#16a34a")}
+                onDrag={(event) => {
+                  const latLng = event.latLng;
+                  if (!latLng || isLocked) return;
+                  setDragPreview({
+                    kind: "green",
+                    lat: latLng.lat(),
+                    lng: latLng.lng(),
+                  });
+                }}
+                onDragEnd={(event) => {
+                  const latLng = event.latLng;
+                  if (!latLng || isLocked || !onSavePin) return;
+                  const point = { lat: latLng.lat(), lng: latLng.lng() };
+                  setDragPreview(null);
+                  setGreen(point);
+                  void onSavePin({ kind: "green", ...point });
+                }}
               />
             )}
           </Map>

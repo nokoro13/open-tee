@@ -6,7 +6,6 @@ import {
   Flag,
   GitBranch,
   Home,
-  Map,
   MapPinned,
   ShieldCheck,
   Swords,
@@ -25,7 +24,6 @@ import {
 export const DASHBOARD_NAV_ITEMS = [
   { href: "/dashboard", label: "Home", icon: Home },
   { href: "/dashboard/courses", label: "Verified courses", icon: MapPinned },
-  { href: "/dashboard/mapping", label: "Course mapping", icon: Map },
   { href: "/dashboard/settings", label: "Organization", icon: Building2 },
 ] as const;
 

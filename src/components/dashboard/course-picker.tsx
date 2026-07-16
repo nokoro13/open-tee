@@ -12,9 +12,10 @@ import {
 import {
   formatTeeOptionLabel,
   pickDefaultTeeKey,
-  type OpenGolfCourseDetail,
-  type OpenGolfCourseSummary,
-} from "@/lib/opengolfapi";
+  type CourseDetail,
+  type CourseSummary,
+} from "@/lib/course-catalog";
+import { parseCourseCountry } from "@/lib/course-location";
 import { Button } from "@/components/ui/button";
 import {
   Field,
@@ -38,9 +39,12 @@ type CoursePickerProps = {
   onChange: (selection: CourseSelection) => void;
 };
 
-function formatCourseLocation(course: OpenGolfCourseSummary): string {
+function formatCourseLocation(course: CourseSummary): string {
   const parts = [course.city, course.state].filter(Boolean);
-  return parts.length > 0 ? parts.join(", ") : "Location unknown";
+  const locality = parts.length > 0 ? parts.join(", ") : "Location unknown";
+  return parseCourseCountry(course.country) === "CA"
+    ? `${locality === "Location unknown" ? "Canada" : `${locality}, Canada`}`
+    : locality;
 }
 
 export function CoursePicker({ selection, holes, onChange }: CoursePickerProps) {
@@ -49,11 +53,11 @@ export function CoursePicker({ selection, holes, onChange }: CoursePickerProps) 
   );
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<
-    (OpenGolfCourseSummary & { source?: string })[]
+    (CourseSummary & { source?: string })[]
   >([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
-  const [selectedCourse, setSelectedCourse] = useState<OpenGolfCourseDetail | null>(
+  const [selectedCourse, setSelectedCourse] = useState<CourseDetail | null>(
     null
   );
   const [selectedTeeKey, setSelectedTeeKey] = useState<string | null>(
@@ -83,7 +87,7 @@ export function CoursePicker({ selection, holes, onChange }: CoursePickerProps) 
           `/api/courses/${selection.externalCourseId}${queryString ? `?${queryString}` : ""}`
         );
         if (!response.ok) return;
-        const data = (await response.json()) as { course: OpenGolfCourseDetail };
+        const data = (await response.json()) as { course: CourseDetail };
         setSelectedCourse(data.course);
         setLoadedCourseId(selection.externalCourseId);
         setSelectedTeeKey(
@@ -121,7 +125,7 @@ export function CoursePicker({ selection, holes, onChange }: CoursePickerProps) 
         );
         if (!response.ok) throw new Error("Search failed");
         const data = (await response.json()) as {
-          courses: (OpenGolfCourseSummary & { source?: string })[];
+          courses: (CourseSummary & { source?: string })[];
         };
         setResults(data.courses);
       } catch (error) {
@@ -140,7 +144,7 @@ export function CoursePicker({ selection, holes, onChange }: CoursePickerProps) 
   }, [query, mode]);
 
   function applySelection(
-    course: OpenGolfCourseDetail,
+    course: CourseDetail,
     teeKey: string | null,
     nextHoles: "9" | "18",
     nextSide: "front" | "back"
@@ -161,11 +165,11 @@ export function CoursePicker({ selection, holes, onChange }: CoursePickerProps) 
       `/api/courses/${courseId}${queryString ? `?${queryString}` : ""}`
     );
     if (!response.ok) throw new Error("Failed to load course");
-    const data = (await response.json()) as { course: OpenGolfCourseDetail };
+    const data = (await response.json()) as { course: CourseDetail };
     return data.course;
   }
 
-  async function handleSelectCourse(course: OpenGolfCourseSummary) {
+  async function handleSelectCourse(course: CourseSummary) {
     setQuery("");
     setResults([]);
     setSearchError(null);
@@ -283,8 +287,8 @@ export function CoursePicker({ selection, holes, onChange }: CoursePickerProps) 
             )}
           </div>
           <FieldDescription>
-            Verified OpenRound courses appear first. OpenGolfAPI fills in courses
-            we have not onboarded yet.
+            Search verified OpenRound courses with official scorecards and hole
+            mapping.
           </FieldDescription>
 
           {isSearching && (

@@ -36,7 +36,6 @@ import {
   isEventSetupLocked,
 } from "@/lib/event-setup-lock";
 import {
-  getLatestMappingRequestForEvent,
   getPublishedGolfCourseByExternalId,
 } from "@/lib/golf-courses";
 
@@ -86,7 +85,6 @@ export default async function EventDetailPage({
   const publishedGolfCourse = event.externalCourseId
     ? await getPublishedGolfCourseByExternalId(event.externalCourseId)
     : null;
-  const latestMappingRequest = await getLatestMappingRequestForEvent(event.id);
 
   return (
     <div className="space-y-6">
@@ -208,22 +206,12 @@ export default async function EventDetailPage({
 
       {event.status === "published" && (
         <CaddieModeCard
-          eventId={event.id}
           eventSlug={event.slug}
           externalCourseId={event.externalCourseId}
           courseName={event.courseName}
           publishedMapAvailable={publishedGolfCourse != null}
           publishedMappedHoles={publishedGolfCourse?.mappedHoleCount ?? 0}
           dataQuality={publishedGolfCourse?.dataQuality ?? null}
-          latestRequest={
-            latestMappingRequest
-              ? {
-                  id: latestMappingRequest.id,
-                  status: latestMappingRequest.status,
-                  mappedHoleCount: latestMappingRequest.course.mappedHoleCount,
-                }
-              : null
-          }
         />
       )}
 

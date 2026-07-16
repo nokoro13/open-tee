@@ -115,6 +115,17 @@ export const courseOnboardingStatusEnum = pgEnum("course_onboarding_status", [
   "rejected",
 ]);
 
+export const courseAccessRoleEnum = pgEnum("course_access_role", [
+  "course_admin",
+  "course_editor",
+]);
+
+export const courseAccessStatusEnum = pgEnum("course_access_status", [
+  "pending",
+  "active",
+  "revoked",
+]);
+
 export const organizations = pgTable("organizations", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull(),
@@ -275,6 +286,7 @@ export const golfCourses = pgTable(
     address: text("address"),
     city: text("city"),
     state: text("state"),
+    country: text("country").notNull().default("US"),
     latitude: text("latitude"),
     longitude: text("longitude"),
     holeCount: integer("hole_count").notNull().default(18),
@@ -297,6 +309,34 @@ export const golfCourses = pgTable(
   },
   (table) => [
     uniqueIndex("golf_courses_external_course_idx").on(table.externalCourseId),
+  ]
+);
+
+export const courseAccess = pgTable(
+  "course_access",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    courseId: uuid("course_id")
+      .notNull()
+      .references(() => golfCourses.id, { onDelete: "cascade" }),
+    clerkUserId: text("clerk_user_id"),
+    inviteEmail: text("invite_email"),
+    role: courseAccessRoleEnum("role").notNull().default("course_admin"),
+    status: courseAccessStatusEnum("status").notNull().default("pending"),
+    invitedByClerkId: text("invited_by_clerk_id").notNull(),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("course_access_course_user_idx").on(
+      table.courseId,
+      table.clerkUserId
+    ),
+    uniqueIndex("course_access_course_email_idx").on(
+      table.courseId,
+      table.inviteEmail
+    ),
   ]
 );
 
@@ -508,6 +548,7 @@ export type HoleFeature = typeof holeFeatures.$inferSelect;
 export type GreenTarget = typeof greenTargets.$inferSelect;
 export type GreenElevationGrid = typeof greenElevationGrids.$inferSelect;
 export type MappingRequest = typeof mappingRequests.$inferSelect;
+export type CourseAccess = typeof courseAccess.$inferSelect;
 
 export const golfCoursesRelations = relations(golfCourses, ({ one, many }) => ({
   organization: one(organizations, {
@@ -520,6 +561,14 @@ export const golfCoursesRelations = relations(golfCourses, ({ one, many }) => ({
   greenTargets: many(greenTargets),
   greenElevationGrids: many(greenElevationGrids),
   mappingRequests: many(mappingRequests),
+  courseAccess: many(courseAccess),
+}));
+
+export const courseAccessRelations = relations(courseAccess, ({ one }) => ({
+  course: one(golfCourses, {
+    fields: [courseAccess.courseId],
+    references: [golfCourses.id],
+  }),
 }));
 
 export const courseHolesRelations = relations(courseHoles, ({ one }) => ({

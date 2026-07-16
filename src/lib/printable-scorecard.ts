@@ -7,9 +7,9 @@ import { getEventFormatLabel, usesTeamLeaderboard } from "@/lib/event-formats";
 import { parseCourseHandicap, strokesReceivedOnHole } from "@/lib/handicap-strokes";
 import {
   buildMultiTeeHoleSnapshots,
-  getOpenGolfCourse,
   STANDARD_SCORECARD_TEE_COLORS,
-} from "@/lib/opengolfapi";
+} from "@/lib/course-catalog";
+import { getVerifiedCourseDetail } from "@/lib/course-onboarding";
 import { buildScorecardSnapshot, type ScorecardHoleSnapshot } from "@/lib/scorecard";
 import { getGroupScorePageUrl } from "@/lib/scoring-code-storage";
 import { formatTimeDisplay } from "@/lib/start-format";
@@ -153,7 +153,7 @@ async function resolveHoleData(
 
   if (event.externalCourseId) {
     try {
-      const course = await getOpenGolfCourse(event.externalCourseId);
+      const course = await getVerifiedCourseDetail(event.externalCourseId);
       const fromApi =
         course?.holes_data?.length
           ? buildMultiTeeHoleSnapshots(course.holes_data, {

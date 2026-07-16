@@ -4,6 +4,11 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import { createCourseOnboarding } from "@/actions/course-onboarding";
+import {
+  CourseDuplicateWarning,
+  useCourseDuplicateCheck,
+} from "@/components/dashboard/course-duplicate-warning";
+import { CourseRegionSelect, clearRegionIfInvalid } from "@/components/dashboard/course-region-select";
 import { Button } from "@/components/ui/button";
 import {
   Field,
@@ -18,6 +23,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  COURSE_COUNTRIES,
+  parseCourseCountry,
+  type CourseCountry,
+} from "@/lib/course-location";
 
 export function NewCourseOnboardingForm() {
   const router = useRouter();
@@ -25,12 +35,20 @@ export function NewCourseOnboardingForm() {
   const [error, setError] = useState<string | null>(null);
 
   const [name, setName] = useState("");
+  const [country, setCountry] = useState<CourseCountry>("US");
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
   const [address, setAddress] = useState("");
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
   const [holeCount, setHoleCount] = useState<"9" | "18">("18");
+
+  const duplicateCheck = useCourseDuplicateCheck({
+    name,
+    city,
+    state,
+    country,
+  });
 
   return (
     <form
@@ -41,6 +59,7 @@ export function NewCourseOnboardingForm() {
         startTransition(async () => {
           const result = await createCourseOnboarding({
             name,
+            country,
             city,
             state,
             address,
@@ -70,6 +89,28 @@ export function NewCourseOnboardingForm() {
         />
       </Field>
       <Field className="sm:col-span-2">
+        <FieldLabel>Country</FieldLabel>
+        <Select
+          value={country}
+          onValueChange={(value) => {
+            const nextCountry = parseCourseCountry(value);
+            setCountry(nextCountry);
+            setState((current) => clearRegionIfInvalid(nextCountry, current));
+          }}
+        >
+          <SelectTrigger className="h-11 w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {COURSE_COUNTRIES.map((entry) => (
+              <SelectItem key={entry.value} value={entry.value}>
+                {entry.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+      <Field className="sm:col-span-2">
         <FieldLabel htmlFor="newCourseAddress">Address</FieldLabel>
         <Input
           id="newCourseAddress"
@@ -85,14 +126,12 @@ export function NewCourseOnboardingForm() {
           onChange={(event) => setCity(event.target.value)}
         />
       </Field>
-      <Field>
-        <FieldLabel htmlFor="newCourseState">State</FieldLabel>
-        <Input
-          id="newCourseState"
-          value={state}
-          onChange={(event) => setState(event.target.value)}
-        />
-      </Field>
+      <CourseRegionSelect
+        id="newCourseState"
+        country={country}
+        value={state}
+        onChange={setState}
+      />
       <Field>
         <FieldLabel htmlFor="newCourseLatitude">Latitude</FieldLabel>
         <Input
@@ -132,12 +171,22 @@ export function NewCourseOnboardingForm() {
         </Select>
       </Field>
 
+      <div className="sm:col-span-2">
+        <CourseDuplicateWarning
+          matches={duplicateCheck.matches}
+          isChecking={duplicateCheck.isChecking}
+        />
+      </div>
+
       {error && (
         <p className="text-sm text-destructive sm:col-span-2">{error}</p>
       )}
 
       <div className="sm:col-span-2">
-        <Button type="submit" disabled={isPending}>
+        <Button
+          type="submit"
+          disabled={isPending || duplicateCheck.hasExactMatch}
+        >
           {isPending ? "Creating..." : "Start course onboarding"}
         </Button>
       </div>

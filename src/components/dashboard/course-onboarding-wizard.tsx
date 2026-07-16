@@ -1,11 +1,13 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, ChevronLeft, ChevronRight, MapPin, Upload } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, MapPin, ScanLine, Sparkles, Upload } from "lucide-react";
 
 import {
+  extractCourseOnboardingScorecard,
+  prefillCourseOnboardingFromOsm,
   saveCourseOnboardingHolePin,
   saveCourseOnboardingScorecard,
   saveCourseOnboardingScorecardImage,
@@ -13,6 +15,11 @@ import {
   updateCourseOnboardingDetails,
 } from "@/actions/course-onboarding";
 import { CourseHolePinMap } from "@/components/dashboard/course-hole-pin-map";
+import {
+  CourseDuplicateWarning,
+  useCourseDuplicateCheck,
+} from "@/components/dashboard/course-duplicate-warning";
+import { CourseRegionSelect, clearRegionIfInvalid } from "@/components/dashboard/course-region-select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -49,6 +56,13 @@ import type {
   HoleFeature,
 } from "@/db/schema";
 import { parseCoordinate } from "@/lib/green-distance";
+import {
+  COURSE_COUNTRIES,
+  formatCourseLocationLine,
+  parseCourseCountry,
+  resolveCourseLocation,
+  type CourseCountry,
+} from "@/lib/course-location";
 import { cn } from "@/lib/utils";
 
 type ScorecardRow = {
@@ -66,6 +80,7 @@ type CourseOnboardingWizardProps = {
     greenTargets: GreenTarget[];
   };
   initialStep: CourseOnboardingStep;
+  canEditVerifiedCourse?: boolean;
 };
 
 const STEPS: { id: CourseOnboardingStep; label: string }[] = [
@@ -121,6 +136,7 @@ function buildTeeRows(existing: CourseTee[]): CourseTeeInput[] {
 export function CourseOnboardingWizard({
   course,
   initialStep,
+  canEditVerifiedCourse = false,
 }: CourseOnboardingWizardProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -129,10 +145,13 @@ export function CourseOnboardingWizard({
   const [message, setMessage] = useState<string | null>(null);
   const [activeHole, setActiveHole] = useState(1);
 
+  const initialLocation = resolveCourseLocation(course.country, course.state);
+
   const [name, setName] = useState(course.name);
   const [address, setAddress] = useState(course.address ?? "");
+  const [country, setCountry] = useState<CourseCountry>(initialLocation.country);
   const [city, setCity] = useState(course.city ?? "");
-  const [state, setState] = useState(course.state ?? "");
+  const [state, setState] = useState(initialLocation.region);
   const [latitude, setLatitude] = useState(
     parseCoordinate(course.latitude)?.toString() ?? ""
   );
@@ -155,6 +174,40 @@ export function CourseOnboardingWizard({
       buildTeeRows(course.courseTees).map((tee) => tee.teeKey)
     )
   );
+  const [ocrWarnings, setOcrWarnings] = useState<string[]>([]);
+
+  const duplicateCheck = useCourseDuplicateCheck({
+    name,
+    city,
+    state,
+    country,
+    excludeCourseId: course.id,
+  });
+
+  useEffect(() => {
+    if (step !== "details") return;
+
+    const location = resolveCourseLocation(course.country, course.state);
+    setName(course.name);
+    setAddress(course.address ?? "");
+    setCountry(location.country);
+    setCity(course.city ?? "");
+    setState(location.region);
+    setLatitude(parseCoordinate(course.latitude)?.toString() ?? "");
+    setLongitude(parseCoordinate(course.longitude)?.toString() ?? "");
+    setHoleCount(course.holeCount === 9 ? "9" : "18");
+  }, [
+    step,
+    course.id,
+    course.name,
+    course.address,
+    course.country,
+    course.city,
+    course.state,
+    course.latitude,
+    course.longitude,
+    course.holeCount,
+  ]);
 
   const sortedTees = useMemo(() => sortCourseTees(teeRows), [teeRows]);
   const mappingProgress = useMemo(
@@ -172,6 +225,22 @@ export function CourseOnboardingWizard({
     () => extractHolePinsFromFeatures(course.holeFeatures),
     [course.holeFeatures]
   );
+
+  const activeHoleScorecardYardages = useMemo(() => {
+    const hole = course.courseHoles.find(
+      (entry) => entry.holeNumber === activeHole
+    );
+    if (!hole) return {};
+
+    return Object.fromEntries(
+      sortCourseTees(course.courseTees)
+        .map((tee) => {
+          const yardage = hole.teeYardages?.[tee.teeKey] ?? hole.yardage;
+          return yardage != null ? [tee.teeKey, yardage] : null;
+        })
+        .filter((entry): entry is [string, number] => entry != null)
+    );
+  }, [activeHole, course.courseHoles, course.courseTees]);
 
   const mappedHoleNumbers = useMemo(
     () =>
@@ -301,6 +370,13 @@ export function CourseOnboardingWizard({
         </Badge>
       </div>
 
+      {course.onboardingStatus === "verified" && canEditVerifiedCourse && (
+        <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm text-amber-900 dark:text-amber-200">
+          This verified course is editable. Use the steps above to update
+          details, scorecard, or hole mapping.
+        </div>
+      )}
+
       {error && <p className="text-sm text-destructive">{error}</p>}
       {message && <p className="text-sm text-primary">{message}</p>}
 
@@ -322,6 +398,28 @@ export function CourseOnboardingWizard({
               onChange={(event) => setAddress(event.target.value)}
             />
           </Field>
+          <Field className="sm:col-span-2">
+            <FieldLabel>Country</FieldLabel>
+            <Select
+              value={country}
+              onValueChange={(value) => {
+                const nextCountry = parseCourseCountry(value);
+                setCountry(nextCountry);
+                setState((current) => clearRegionIfInvalid(nextCountry, current));
+              }}
+            >
+              <SelectTrigger className="h-11 w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {COURSE_COUNTRIES.map((entry) => (
+                  <SelectItem key={entry.value} value={entry.value}>
+                    {entry.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
           <Field>
             <FieldLabel htmlFor="courseCity">City</FieldLabel>
             <Input
@@ -330,14 +428,12 @@ export function CourseOnboardingWizard({
               onChange={(event) => setCity(event.target.value)}
             />
           </Field>
-          <Field>
-            <FieldLabel htmlFor="courseState">State</FieldLabel>
-            <Input
-              id="courseState"
-              value={state}
-              onChange={(event) => setState(event.target.value)}
-            />
-          </Field>
+          <CourseRegionSelect
+            id="courseState"
+            country={country}
+            value={state}
+            onChange={setState}
+          />
           <Field>
             <FieldLabel htmlFor="courseLatitude">Latitude</FieldLabel>
             <Input
@@ -383,9 +479,15 @@ export function CourseOnboardingWizard({
             </Select>
           </Field>
           <div className="sm:col-span-2">
+            <CourseDuplicateWarning
+              matches={duplicateCheck.matches}
+              isChecking={duplicateCheck.isChecking}
+            />
+          </div>
+          <div className="sm:col-span-2">
             <Button
               type="button"
-              disabled={isPending}
+              disabled={isPending || duplicateCheck.hasExactMatch}
               onClick={() =>
                 runAction(async () => {
                   const lat = Number(latitude);
@@ -393,6 +495,7 @@ export function CourseOnboardingWizard({
                   const result = await updateCourseOnboardingDetails(course.id, {
                     name,
                     address,
+                    country,
                     city,
                     state,
                     latitude: lat,
@@ -413,41 +516,10 @@ export function CourseOnboardingWizard({
       {step === "scorecard" && (
         <div className="space-y-4 rounded-lg border p-4">
           <Field>
-            <FieldLabel>Scorecard photo</FieldLabel>
-            <FieldDescription>
-              Upload a photo of the official scorecard for reference during
-              verification.
-            </FieldDescription>
-            <label className="mt-2 flex cursor-pointer items-center gap-2 rounded-md border border-dashed px-4 py-6 text-sm text-muted-foreground hover:bg-muted/40">
-              <Upload className="size-4" />
-              <span>Upload scorecard image</span>
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(event) =>
-                  handleScorecardImage(event.target.files?.[0] ?? null)
-                }
-              />
-            </label>
-            {scorecardImageUrl && (
-              <div className="relative mt-3 h-48 w-full overflow-hidden rounded-md border">
-                <Image
-                  src={scorecardImageUrl}
-                  alt="Scorecard reference"
-                  fill
-                  className="object-contain"
-                  unoptimized
-                />
-              </div>
-            )}
-          </Field>
-
-          <Field>
             <FieldLabel>Tee sets</FieldLabel>
             <FieldDescription>
-              Add every tee color on the scorecard. You will place one tee box per
-              color on each hole during mapping.
+              Select every tee color printed on this scorecard before uploading
+              or extracting. OCR will only read yardages for these tees.
             </FieldDescription>
             <div className="mt-2 flex flex-wrap gap-2">
               {sortedTees.map((tee) => (
@@ -487,6 +559,100 @@ export function CourseOnboardingWizard({
                 </Button>
               ))}
             </div>
+          </Field>
+
+          <Field>
+            <FieldLabel>Scorecard photo</FieldLabel>
+            <FieldDescription>
+              Upload a photo of the official scorecard, then extract par,
+              handicap, and yardages for{" "}
+              {sortedTees.length > 0
+                ? sortedTees.map((tee) => tee.teeName).join(", ")
+                : "your selected tees"}
+              . Uncertain or misaligned values are left blank automatically.
+              OUT/IN totals are used to verify each row. Review warnings before saving.
+            </FieldDescription>
+            <label className="mt-2 flex cursor-pointer items-center gap-2 rounded-md border border-dashed px-4 py-6 text-sm text-muted-foreground hover:bg-muted/40">
+              <Upload className="size-4" />
+              <span>Upload scorecard image</span>
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(event) =>
+                  handleScorecardImage(event.target.files?.[0] ?? null)
+                }
+              />
+            </label>
+            {scorecardImageUrl && (
+              <div className="relative mt-3 h-48 w-full overflow-hidden rounded-md border">
+                <Image
+                  src={scorecardImageUrl}
+                  alt="Scorecard reference"
+                  fill
+                  className="object-contain"
+                  unoptimized
+                />
+              </div>
+            )}
+            {scorecardImageUrl && (
+              <Button
+                type="button"
+                variant="outline"
+                className="mt-3"
+                disabled={isPending || sortedTees.length === 0}
+                onClick={() => {
+                  setError(null);
+                  setMessage(null);
+                  setOcrWarnings([]);
+                  startTransition(async () => {
+                    const result = await extractCourseOnboardingScorecard(
+                      course.id,
+                      scorecardImageUrl,
+                      sortedTees
+                    );
+                    if (!result.success) {
+                      setError(result.error ?? "Could not extract scorecard.");
+                      return;
+                    }
+
+                    setScorecardRows(
+                      result.data.holes.map((hole) => ({
+                        holeNumber: hole.holeNumber,
+                        par: hole.par,
+                        strokeIndex: hole.strokeIndex,
+                        teeYardages: hole.teeYardages,
+                      }))
+                    );
+                    setOcrWarnings(result.data.warnings);
+                    setMessage(
+                      `Extracted ${result.data.holes.length} holes for ${sortedTees.map((tee) => tee.teeName).join(", ")}. Review the values below.`
+                    );
+                  });
+                }}
+              >
+                <ScanLine />
+                {isPending ? "Reading scorecard grid…" : "Extract scorecard with AI"}
+              </Button>
+            )}
+            {sortedTees.length === 0 && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Add at least one tee color before extracting.
+              </p>
+            )}
+            {ocrWarnings.length > 0 && (
+              <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-900 dark:text-amber-100">
+                <p className="font-medium">Review these extracted values</p>
+                <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                  {ocrWarnings.slice(0, 6).map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                  {ocrWarnings.length > 6 && (
+                    <li>…and {ocrWarnings.length - 6} more warnings</li>
+                  )}
+                </ul>
+              </div>
+            )}
           </Field>
 
           <div className="overflow-x-auto">
@@ -608,10 +774,39 @@ export function CourseOnboardingWizard({
 
       {step === "mapping" && (
         <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            Select a hole, place the green and each tee box, then drag fairway
-            anchors for doglegs. Completed holes lock automatically.
-          </p>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted-foreground">
+              Select a hole, place the green and each tee box, then drag fairway
+              anchors for doglegs. Completed holes lock automatically.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              disabled={isPending || course.courseTees.length === 0}
+              onClick={() => {
+                setError(null);
+                setMessage(null);
+                startTransition(async () => {
+                  const result = await prefillCourseOnboardingFromOsm(course.id);
+                  if (!result.success) {
+                    setError(result.error ?? "Could not prefill from OSM.");
+                    return;
+                  }
+
+                  const { coverage, appliedHoleCount } = result;
+                  setMessage(
+                    `Prefilled ${appliedHoleCount} holes from OpenStreetMap (${coverage.greensFound}/${coverage.totalHoles} greens, ${coverage.holeLinesFound} hole lines). Review each hole before submitting.`
+                  );
+                  router.refresh();
+                });
+              }}
+            >
+              <Sparkles />
+              Prefill from OpenStreetMap
+            </Button>
+          </div>
 
           <div className="mx-auto w-full overflow-hidden rounded-xl border bg-card shadow-sm">
             <div className="grid min-h-[min(78vh,820px)] lg:grid-cols-[14rem_1fr]">
@@ -741,7 +936,8 @@ export function CourseOnboardingWizard({
                   courseTees={course.courseTees}
                   initialGreen={holePins[activeHole]?.green ?? null}
                   initialTees={holePins[activeHole]?.tees ?? {}}
-                  initialLineBreaks={holePins[activeHole]?.lineBreaks ?? {}}
+                  initialLineBreak={holePins[activeHole]?.lineBreak ?? null}
+                  scorecardYardages={activeHoleScorecardYardages}
                   isSaving={isPending}
                   onSavePin={async (pin) => {
                     setError(null);
@@ -778,7 +974,11 @@ export function CourseOnboardingWizard({
             <div>
               <p className="text-sm font-medium">{course.name}</p>
               <p className="text-sm text-muted-foreground">
-                {[course.city, course.state].filter(Boolean).join(", ")}
+                {formatCourseLocationLine({
+                  city: course.city,
+                  state: course.state,
+                  country: course.country,
+                })}
               </p>
             </div>
             <div className="text-sm text-muted-foreground">
@@ -793,7 +993,9 @@ export function CourseOnboardingWizard({
           {course.onboardingStatus === "verified" && (
             <div className="flex items-center gap-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm">
               <CheckCircle2 className="size-4 text-primary" />
-              This course is verified and published for Caddie Mode.
+              {canEditVerifiedCourse
+                ? "Verified and published. You can edit this course."
+                : "This course is verified and published for Caddie Mode."}
             </div>
           )}
 
