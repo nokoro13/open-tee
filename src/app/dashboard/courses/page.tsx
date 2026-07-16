@@ -52,7 +52,6 @@ export default async function CoursesPage() {
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
             Browse the full verified course catalog for events and Caddie Mode.
-            Courses you manage can be edited from their preview page.
           </p>
         </div>
         <ButtonLink href="/dashboard/courses/new">
