@@ -1,9 +1,9 @@
 import type { ScorecardHoleSnapshot } from "@/lib/scorecard";
 import {
   buildScorecardForTee,
-  type OpenGolfCourseDetail,
-  type OpenGolfTee,
-} from "@/lib/opengolfapi";
+  type CourseDetail,
+  type CourseTeeOption,
+} from "@/lib/course-catalog";
 
 export type CourseSelection = {
   courseName: string;
@@ -43,7 +43,7 @@ export function emptyCourseSelection(
   };
 }
 
-function teeStats(tee: OpenGolfTee | null | undefined) {
+function teeStats(tee: CourseTeeOption | null | undefined) {
   if (!tee) {
     return {
       teeName: null,
@@ -63,7 +63,7 @@ function teeStats(tee: OpenGolfTee | null | undefined) {
 }
 
 export function buildCourseSelection(
-  course: OpenGolfCourseDetail,
+  course: CourseDetail,
   teeKey: string | null,
   options: {
     holes: "9" | "18";

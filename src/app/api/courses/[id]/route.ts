@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getOpenGolfCourse } from "@/lib/opengolfapi";
+import { getVerifiedCourseDetail } from "@/lib/course-onboarding";
 
 type CourseRouteProps = {
   params: Promise<{ id: string }>;
@@ -8,19 +8,15 @@ type CourseRouteProps = {
 
 export async function GET(request: Request, { params }: CourseRouteProps) {
   const { id } = await params;
-  const { searchParams } = new URL(request.url);
-  const teeKey = searchParams.get("teeKey");
 
   try {
-    const course = await getOpenGolfCourse(id, {
-      teeKey: teeKey || undefined,
-    });
+    const course = await getVerifiedCourseDetail(id);
 
     if (!course) {
       return NextResponse.json({ error: "Course not found." }, { status: 404 });
     }
 
-    return NextResponse.json({ course });
+    return NextResponse.json({ course, source: "verified" });
   } catch {
     return NextResponse.json(
       { error: "Could not load course." },

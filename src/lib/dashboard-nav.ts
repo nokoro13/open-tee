@@ -6,6 +6,8 @@ import {
   Flag,
   GitBranch,
   Home,
+  MapPinned,
+  ShieldCheck,
   Swords,
   Target,
   Trophy,
@@ -21,7 +23,12 @@ import {
 
 export const DASHBOARD_NAV_ITEMS = [
   { href: "/dashboard", label: "Home", icon: Home },
+  { href: "/dashboard/courses", label: "Verified courses", icon: MapPinned },
   { href: "/dashboard/settings", label: "Organization", icon: Building2 },
+] as const;
+
+export const ADMIN_DASHBOARD_NAV_ITEMS = [
+  { href: "/dashboard/admin/courses", label: "Verify courses", icon: ShieldCheck },
 ] as const;
 
 const CREATE_FORMAT_ICONS: Record<EventFormat, LucideIcon> = {

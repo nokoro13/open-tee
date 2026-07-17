@@ -2,13 +2,14 @@ import { asc, eq } from "drizzle-orm";
 
 import { getDb } from "@/db";
 import { eventHoles } from "@/db/schema";
-import type { OpenGolfCourseDetail, OpenGolfScorecardHole } from "@/lib/opengolfapi";
+import type { CourseDetail, CourseScorecardHole } from "@/lib/course-catalog";
 
 export type ScorecardHoleSnapshot = {
   holeNumber: number;
   par: number;
   yardage?: number | null;
   strokeIndex?: number | null;
+  yardagesByTee?: Record<string, number | null>;
 };
 
 export type EventParMap = Map<number, number>;
@@ -46,7 +47,7 @@ export function getScoreParMark(
 }
 
 export function buildScorecardSnapshot(
-  scorecard: OpenGolfScorecardHole[],
+  scorecard: CourseScorecardHole[],
   options: {
     holes: "9" | "18";
     nineSide?: "front" | "back" | null;
@@ -78,7 +79,7 @@ export function buildScorecardSnapshot(
 }
 
 export function buildSnapshotFromCourse(
-  course: OpenGolfCourseDetail,
+  course: CourseDetail,
   options: {
     holes: "9" | "18";
     nineSide?: "front" | "back" | null;

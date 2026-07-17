@@ -10,6 +10,7 @@ import {
   resolveScoringAccess,
   scoresToMap,
 } from "@/lib/scoring";
+import { getCaddieContextForEvent } from "@/lib/golf-courses";
 import {
   ScoreEntryForm,
   ScoringCodeForm,
@@ -130,6 +131,14 @@ export default async function ScorePage({ params, searchParams }: ScorePageProps
       .map((hole) => [hole.holeNumber, hole.yardage!])
   );
 
+  const holeNumbers = getHoleNumbers(event.holes);
+  const caddieContext = await getCaddieContextForEvent({
+    externalCourseId: event.externalCourseId,
+    holes: event.holes,
+    nineSide: event.nineSide,
+    holeNumbers,
+  });
+
   return (
     <ScoreEntryForm
       slug={slug}
@@ -137,7 +146,7 @@ export default async function ScorePage({ params, searchParams }: ScorePageProps
       eventName={event.name}
       format={event.format}
       holes={event.holes}
-      holeNumbers={getHoleNumbers(event.holes)}
+      holeNumbers={holeNumbers}
       parByHole={parByHole}
       yardageByHole={yardageByHole}
       groups={visibleGroups}
@@ -145,6 +154,10 @@ export default async function ScorePage({ params, searchParams }: ScorePageProps
       readOnly={readOnly}
       allowGroupSwitch={allowGroupSwitch}
       lockedGroupId={access.type === "group" ? access.groupId : undefined}
+      golfCourseId={caddieContext?.courseId ?? null}
+      greenTargetsByHole={caddieContext?.greenTargetsByHole}
+      holeFeaturesGeoJson={caddieContext?.holeFeaturesByHole}
+      hasHeatmapByHole={caddieContext?.hasHeatmapByHole}
     />
   );
 }

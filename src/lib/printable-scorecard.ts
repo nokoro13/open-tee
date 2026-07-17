@@ -5,7 +5,11 @@ import { getDb } from "@/db";
 import { events, pairingGroups, registrations } from "@/db/schema";
 import { getEventFormatLabel, usesTeamLeaderboard } from "@/lib/event-formats";
 import { parseCourseHandicap, strokesReceivedOnHole } from "@/lib/handicap-strokes";
-import { getOpenGolfCourse } from "@/lib/opengolfapi";
+import {
+  buildMultiTeeHoleSnapshots,
+  STANDARD_SCORECARD_TEE_COLORS,
+} from "@/lib/course-catalog";
+import { getVerifiedCourseDetail } from "@/lib/course-onboarding";
 import { buildScorecardSnapshot, type ScorecardHoleSnapshot } from "@/lib/scorecard";
 import { getGroupScorePageUrl } from "@/lib/scoring-code-storage";
 import { formatTimeDisplay } from "@/lib/start-format";
@@ -149,13 +153,19 @@ async function resolveHoleData(
 
   if (event.externalCourseId) {
     try {
-      const course = await getOpenGolfCourse(event.externalCourseId);
-      const fromApi = course?.scorecard?.length
-        ? buildScorecardSnapshot(course.scorecard, {
-            holes: event.holes,
-            nineSide: event.nineSide,
-          })
-        : [];
+      const course = await getVerifiedCourseDetail(event.externalCourseId);
+      const fromApi =
+        course?.holes_data?.length
+          ? buildMultiTeeHoleSnapshots(course.holes_data, {
+              holes: event.holes,
+              nineSide: event.nineSide,
+            })
+          : course?.scorecard?.length
+            ? buildScorecardSnapshot(course.scorecard, {
+                holes: event.holes,
+                nineSide: event.nineSide,
+              })
+            : [];
 
       if (fromApi.length > 0) {
         if (holeData.length === 0) {
@@ -169,6 +179,7 @@ async function resolveHoleData(
               ...hole,
               yardage: hole.yardage ?? apiHole?.yardage ?? null,
               strokeIndex: hole.strokeIndex ?? apiHole?.strokeIndex ?? null,
+              yardagesByTee: apiHole?.yardagesByTee ?? hole.yardagesByTee,
             };
           });
         }
@@ -176,6 +187,22 @@ async function resolveHoleData(
     } catch {
       // Keep stored hole data when the course API is unavailable.
     }
+  }
+
+  if (holeData.length > 0) {
+    holeData = holeData.map((hole) => {
+      if (hole.yardagesByTee) return hole;
+      const fallbackYardage = hole.yardage ?? null;
+      return {
+        ...hole,
+        yardagesByTee: Object.fromEntries(
+          STANDARD_SCORECARD_TEE_COLORS.map((color) => [
+            color,
+            color === "white" ? fallbackYardage : null,
+          ])
+        ),
+      };
+    });
   }
 
   if (holeData.length === 0) {
@@ -388,14 +415,20 @@ export function sumRange(
   holes: ScorecardHoleSnapshot[],
   start: number,
   end: number,
-  field: "par" | "yardage"
+  field: "par" | "yardage",
+  teeColor?: string
 ): number | null {
   let total = 0;
   let hasValue = false;
 
   for (const hole of holes) {
     if (hole.holeNumber < start || hole.holeNumber > end) continue;
-    const value = field === "par" ? hole.par : hole.yardage;
+    const value =
+      field === "par"
+        ? hole.par
+        : teeColor
+          ? hole.yardagesByTee?.[teeColor] ?? null
+          : hole.yardage;
     if (value == null) continue;
     total += value;
     hasValue = true;
@@ -407,11 +440,17 @@ export function sumRange(
 export function getHoleValue(
   holes: ScorecardHoleSnapshot[],
   holeNumber: number,
-  field: "par" | "yardage" | "strokeIndex"
+  field: "par" | "yardage" | "strokeIndex",
+  teeColor?: string
 ): number | null {
   const hole = holes.find((entry) => entry.holeNumber === holeNumber);
   if (!hole) return null;
   if (field === "par") return hole.par;
-  if (field === "yardage") return hole.yardage ?? null;
+  if (field === "yardage") {
+    if (teeColor) return hole.yardagesByTee?.[teeColor] ?? null;
+    return hole.yardage ?? null;
+  }
   return hole.strokeIndex ?? null;
 }
+
+export { STANDARD_SCORECARD_TEE_COLORS };
