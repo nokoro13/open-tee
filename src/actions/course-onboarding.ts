@@ -34,6 +34,7 @@ import {
 import { applyOsmOnboardingPrefill } from "@/lib/course-onboarding-osm-prefill";
 import { parseCoordinate } from "@/lib/green-distance";
 import { extractScorecardFromImage } from "@/lib/scorecard-ocr";
+import { isScorecardImageUrl } from "@/lib/scorecard-image-url";
 import { createLocalCourseId } from "@/lib/local-course";
 import {
   activatePendingCourseAccessForUser,
@@ -273,7 +274,7 @@ export async function updateCourseOnboardingDetails(
 
 export async function saveCourseOnboardingScorecardImage(
   courseId: string,
-  imageDataUrl: string
+  imageUrl: string
 ): Promise<OnboardingActionResult> {
   const course = await getEditableOnboardingCourse(courseId);
 
@@ -281,14 +282,14 @@ export async function saveCourseOnboardingScorecardImage(
     return { success: false, error: "Course not found." };
   }
 
-  if (!imageDataUrl.startsWith("data:image/")) {
+  if (!isScorecardImageUrl(imageUrl)) {
     return { success: false, error: "Upload a valid image file." };
   }
 
   await getDb()
     .update(golfCourses)
     .set({
-      scorecardImageUrl: imageDataUrl,
+      scorecardImageUrl: imageUrl.trim(),
       onboardingStatus:
         course.onboardingStatus === "draft" ? "scorecard" : course.onboardingStatus,
       updatedAt: new Date(),
@@ -508,7 +509,7 @@ export async function prefillCourseOnboardingFromOsm(
 
 export async function extractCourseOnboardingScorecard(
   courseId: string,
-  imageDataUrl?: string,
+  imageUrl?: string,
   requestedTees?: CourseTeeInput[]
 ): Promise<ScorecardOcrActionResult> {
   const course = await getEditableOnboardingCourse(courseId);
@@ -533,17 +534,17 @@ export async function extractCourseOnboardingScorecard(
     };
   }
 
-  let imageUrl = imageDataUrl?.trim() || null;
+  let resolvedImageUrl = imageUrl?.trim() || null;
 
-  if (!imageUrl) {
+  if (!resolvedImageUrl) {
     const row = await getDb().query.golfCourses.findFirst({
       where: eq(golfCourses.id, courseId),
       columns: { scorecardImageUrl: true },
     });
-    imageUrl = row?.scorecardImageUrl ?? null;
+    resolvedImageUrl = row?.scorecardImageUrl ?? null;
   }
 
-  if (!imageUrl) {
+  if (!resolvedImageUrl) {
     return {
       success: false,
       error: "Upload a scorecard image before extracting data.",
@@ -552,7 +553,7 @@ export async function extractCourseOnboardingScorecard(
 
   try {
     const data = await extractScorecardFromImage(
-      imageUrl,
+      resolvedImageUrl,
       course.holeCount,
       tees
     );

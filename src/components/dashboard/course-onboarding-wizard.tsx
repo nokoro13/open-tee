@@ -10,11 +10,11 @@ import {
   prefillCourseOnboardingFromOsm,
   saveCourseOnboardingHolePin,
   saveCourseOnboardingScorecard,
-  saveCourseOnboardingScorecardImage,
   submitCourseForVerification,
   updateCourseOnboardingDetails,
 } from "@/actions/course-onboarding";
 import { CourseHolePinMap } from "@/components/dashboard/course-hole-pin-map";
+import { compressScorecardImage } from "@/lib/compress-scorecard-image";
 import {
   CourseDuplicateWarning,
   useCourseDuplicateCheck,
@@ -140,6 +140,7 @@ export function CourseOnboardingWizard({
 }: CourseOnboardingWizardProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [isUploadingScorecard, setIsUploadingScorecard] = useState(false);
   const [step, setStep] = useState<CourseOnboardingStep>(initialStep);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -305,16 +306,45 @@ export function CourseOnboardingWizard({
     });
   }
 
-  function handleScorecardImage(file: File | null) {
+  async function handleScorecardImage(file: File | null) {
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = typeof reader.result === "string" ? reader.result : "";
-      if (!dataUrl) return;
-      setScorecardImageUrl(dataUrl);
-      runAction(() => saveCourseOnboardingScorecardImage(course.id, dataUrl));
-    };
-    reader.readAsDataURL(file);
+
+    setError(null);
+    setMessage(null);
+    setIsUploadingScorecard(true);
+
+    try {
+      const compressed = await compressScorecardImage(file);
+      const formData = new FormData();
+      formData.append("file", compressed);
+
+      const response = await fetch(`/api/courses/${course.id}/scorecard-image`, {
+        method: "POST",
+        body: formData,
+      });
+
+      const payload = (await response.json()) as {
+        url?: string;
+        error?: string;
+      };
+
+      if (!response.ok || !payload.url) {
+        setError(payload.error ?? "Could not upload scorecard image.");
+        return;
+      }
+
+      setScorecardImageUrl(payload.url);
+      setMessage("Scorecard image uploaded.");
+      router.refresh();
+    } catch (uploadError) {
+      setError(
+        uploadError instanceof Error
+          ? uploadError.message
+          : "Could not upload scorecard image."
+      );
+    } finally {
+      setIsUploadingScorecard(false);
+    }
   }
 
   function isHoleMappingComplete(holeNumber: number) {
@@ -572,13 +602,23 @@ export function CourseOnboardingWizard({
               . Uncertain or misaligned values are left blank automatically.
               OUT/IN totals are used to verify each row. Review warnings before saving.
             </FieldDescription>
-            <label className="mt-2 flex cursor-pointer items-center gap-2 rounded-md border border-dashed px-4 py-6 text-sm text-muted-foreground hover:bg-muted/40">
+            <label
+              className={cn(
+                "mt-2 flex cursor-pointer items-center gap-2 rounded-md border border-dashed px-4 py-6 text-sm text-muted-foreground hover:bg-muted/40",
+                isUploadingScorecard && "pointer-events-none opacity-60"
+              )}
+            >
               <Upload className="size-4" />
-              <span>Upload scorecard image</span>
+              <span>
+                {isUploadingScorecard
+                  ? "Uploading scorecard image…"
+                  : "Upload scorecard image"}
+              </span>
               <input
                 type="file"
                 accept="image/*"
                 className="hidden"
+                disabled={isUploadingScorecard}
                 onChange={(event) =>
                   handleScorecardImage(event.target.files?.[0] ?? null)
                 }

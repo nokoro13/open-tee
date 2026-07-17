@@ -3,6 +3,7 @@ import {
   sortCourseTees,
   type CourseTeeInput,
 } from "@/lib/course-tees";
+import { isScorecardImageUrl } from "@/lib/scorecard-image-url";
 
 export type ScorecardOcrHole = {
   holeNumber: number;
@@ -164,7 +165,7 @@ Process:
 
 async function callVisionOcr(
   apiKey: string,
-  imageDataUrl: string,
+  imageUrl: string,
   prompt: string
 ): Promise<string> {
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -186,7 +187,7 @@ async function callVisionOcr(
             { type: "text", text: prompt },
             {
               type: "image_url",
-              image_url: { url: imageDataUrl, detail: "high" },
+              image_url: { url: imageUrl, detail: "high" },
             },
           ],
         },
@@ -530,7 +531,7 @@ function buildHolesFromGrid(
 }
 
 export async function extractScorecardFromImage(
-  imageDataUrl: string,
+  imageUrl: string,
   holeCount: number,
   requestedTees: CourseTeeInput[] = []
 ): Promise<ScorecardOcrResult> {
@@ -541,7 +542,7 @@ export async function extractScorecardFromImage(
     );
   }
 
-  if (!imageDataUrl.startsWith("data:image/")) {
+  if (!isScorecardImageUrl(imageUrl)) {
     throw new Error("Upload a valid scorecard image before extracting data.");
   }
 
@@ -552,7 +553,7 @@ export async function extractScorecardFromImage(
   const tees = sortCourseTees(requestedTees);
   const content = await callVisionOcr(
     apiKey,
-    imageDataUrl,
+    imageUrl,
     buildSpreadsheetPrompt(holeCount, tees)
   );
 
