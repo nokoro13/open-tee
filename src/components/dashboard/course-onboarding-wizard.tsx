@@ -48,6 +48,18 @@ import {
   sortCourseTees,
   type CourseTeeInput,
 } from "@/lib/course-tees";
+import {
+  DEFAULT_SCORECARD_HANDICAP_ROWS,
+  PRESET_SCORECARD_HANDICAP_ROWS,
+  sortScorecardHandicapRows,
+  type ScorecardHandicapRowInput,
+  type ScorecardHandicapRowKey,
+} from "@/lib/scorecard-handicap-rows";
+import type {
+  ScorecardParValidation,
+  ScorecardStrokeIndexValidation,
+  ScorecardYardageValidation,
+} from "@/lib/scorecard-ocr";
 import type {
   CourseHole,
   CourseTee,
@@ -69,6 +81,7 @@ type ScorecardRow = {
   holeNumber: number;
   par: number;
   strokeIndex: string;
+  ladiesStrokeIndex: string;
   teeYardages: Record<string, string>;
 };
 
@@ -113,9 +126,153 @@ function buildScorecardRows(
       par: hole?.par ?? 4,
       strokeIndex:
         hole?.strokeIndex != null ? String(hole.strokeIndex) : String(holeNumber),
+      ladiesStrokeIndex:
+        hole?.strokeIndex != null ? String(hole.strokeIndex) : String(holeNumber),
       teeYardages,
     };
   });
+}
+
+function TotalCheckCell({
+  holeSum,
+  expected,
+  matches,
+}: {
+  holeSum: number | null;
+  expected: number | null;
+  matches: boolean;
+}) {
+  if (holeSum == null && expected == null) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+
+  const hasComparison = holeSum != null && expected != null;
+
+  return (
+    <span
+      className={cn(
+        "tabular-nums",
+        hasComparison && matches && "text-emerald-700 dark:text-emerald-300",
+        hasComparison && !matches && "font-medium text-amber-800 dark:text-amber-200"
+      )}
+    >
+      {holeSum ?? "—"}/{expected ?? "—"}
+      {hasComparison && (matches ? " ✓" : " ✗")}
+    </span>
+  );
+}
+
+function ScorecardTotalsPanel({
+  parValidation,
+  yardageValidation,
+  handicapValidation,
+}: {
+  parValidation: ScorecardParValidation | null;
+  yardageValidation: ScorecardYardageValidation[];
+  handicapValidation: ScorecardStrokeIndexValidation[];
+}) {
+  if (
+    !parValidation &&
+    yardageValidation.length === 0 &&
+    handicapValidation.length === 0
+  ) {
+    return null;
+  }
+
+  return (
+    <div className="mt-3 rounded-md border px-3 py-2 text-xs">
+      <p className="font-medium">Totals verification</p>
+      <p className="mt-0.5 text-muted-foreground">
+        Holes sum / scorecard total · ✓ match · ✗ review
+      </p>
+      <div className="mt-2 overflow-x-auto">
+        <table className="w-full min-w-[280px]">
+          <thead>
+            <tr className="text-muted-foreground">
+              <th className="pr-3 pb-1 text-left font-medium">Row</th>
+              <th className="px-2 pb-1 text-left font-medium">OUT</th>
+              <th className="px-2 pb-1 text-left font-medium">IN</th>
+              <th className="pl-2 pb-1 text-left font-medium">TOT</th>
+            </tr>
+          </thead>
+          <tbody>
+            {parValidation && (
+              <tr>
+                <td className="pr-3 py-1 font-medium">Par</td>
+                <td className="px-2 py-1">
+                  <TotalCheckCell
+                    holeSum={parValidation.frontSum}
+                    expected={parValidation.frontExpected}
+                    matches={parValidation.frontMatches}
+                  />
+                </td>
+                <td className="px-2 py-1">
+                  <TotalCheckCell
+                    holeSum={parValidation.backSum}
+                    expected={parValidation.backExpected}
+                    matches={parValidation.backMatches}
+                  />
+                </td>
+                <td className="pl-2 py-1">
+                  <TotalCheckCell
+                    holeSum={parValidation.totalSum}
+                    expected={parValidation.totalExpected}
+                    matches={parValidation.totalMatches}
+                  />
+                </td>
+              </tr>
+            )}
+            {yardageValidation.map((entry) => (
+              <tr key={entry.teeKey}>
+                <td className="pr-3 py-1 font-medium">{entry.teeName}</td>
+                <td className="px-2 py-1">
+                  <TotalCheckCell
+                    holeSum={entry.totals.frontSum}
+                    expected={entry.totals.frontExpected}
+                    matches={entry.totals.frontMatches}
+                  />
+                </td>
+                <td className="px-2 py-1">
+                  <TotalCheckCell
+                    holeSum={entry.totals.backSum}
+                    expected={entry.totals.backExpected}
+                    matches={entry.totals.backMatches}
+                  />
+                </td>
+                <td className="pl-2 py-1">
+                  <TotalCheckCell
+                    holeSum={entry.totals.totalSum}
+                    expected={entry.totals.totalExpected}
+                    matches={entry.totals.totalMatches}
+                  />
+                </td>
+              </tr>
+            ))}
+            {handicapValidation.map((entry) => (
+              <tr key={entry.label}>
+                <td className="pr-3 py-1 font-medium">{entry.label}</td>
+                <td className="px-2 py-1" colSpan={3}>
+                  <span
+                    className={cn(
+                      "tabular-nums",
+                      entry.isValidPermutation &&
+                        "text-emerald-700 dark:text-emerald-300",
+                      !entry.isValidPermutation &&
+                        "font-medium text-amber-800 dark:text-amber-200"
+                    )}
+                  >
+                    {entry.sum ?? "—"}/{entry.expectedSum}
+                    {entry.sum != null &&
+                      (entry.isValidPermutation ? " ✓" : " ✗")}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
 function buildTeeRows(existing: CourseTee[]): CourseTeeInput[] {
@@ -168,6 +325,9 @@ export function CourseOnboardingWizard({
   const [teeRows, setTeeRows] = useState<CourseTeeInput[]>(() =>
     buildTeeRows(course.courseTees)
   );
+  const [handicapRows, setHandicapRows] = useState<ScorecardHandicapRowInput[]>(
+    () => DEFAULT_SCORECARD_HANDICAP_ROWS.map((row, index) => ({ ...row, sortOrder: index }))
+  );
   const [scorecardRows, setScorecardRows] = useState<ScorecardRow[]>(() =>
     buildScorecardRows(
       course.holeCount,
@@ -175,7 +335,14 @@ export function CourseOnboardingWizard({
       buildTeeRows(course.courseTees).map((tee) => tee.teeKey)
     )
   );
-  const [ocrWarnings, setOcrWarnings] = useState<string[]>([]);
+  const [ocrParValidation, setOcrParValidation] =
+    useState<ScorecardParValidation | null>(null);
+  const [ocrYardageValidation, setOcrYardageValidation] = useState<
+    ScorecardYardageValidation[]
+  >([]);
+  const [ocrHandicapValidation, setOcrHandicapValidation] = useState<
+    ScorecardStrokeIndexValidation[]
+  >([]);
 
   const duplicateCheck = useCourseDuplicateCheck({
     name,
@@ -211,6 +378,14 @@ export function CourseOnboardingWizard({
   ]);
 
   const sortedTees = useMemo(() => sortCourseTees(teeRows), [teeRows]);
+  const sortedHandicapRows = useMemo(
+    () => sortScorecardHandicapRows(handicapRows),
+    [handicapRows]
+  );
+  const extractMensHandicap = sortedHandicapRows.some((row) => row.rowKey === "mens");
+  const extractLadiesHandicap = sortedHandicapRows.some(
+    (row) => row.rowKey === "ladies"
+  );
   const mappingProgress = useMemo(
     () =>
       countCourseMappingProgress(
@@ -284,6 +459,25 @@ export function CourseOnboardingWizard({
       .map((tee, index) => ({ ...tee, sortOrder: index }));
     setTeeRows(nextTees);
     syncScorecardRowsForTees(nextTees);
+  }
+
+  function addHandicapRowFromPreset(preset: ScorecardHandicapRowInput) {
+    if (handicapRows.some((row) => row.rowKey === preset.rowKey)) return;
+    setHandicapRows([
+      ...handicapRows,
+      {
+        ...preset,
+        sortOrder: handicapRows.length,
+      },
+    ]);
+  }
+
+  function removeHandicapRow(rowKey: ScorecardHandicapRowKey) {
+    setHandicapRows(
+      handicapRows
+        .filter((row) => row.rowKey !== rowKey)
+        .map((row, index) => ({ ...row, sortOrder: index }))
+    );
   }
 
   const courseCenter = useMemo(() => {
@@ -592,6 +786,44 @@ export function CourseOnboardingWizard({
           </Field>
 
           <Field>
+            <FieldLabel>Handicap rows</FieldLabel>
+            <FieldDescription>
+              Select every handicap row printed on this scorecard before
+              extracting. OCR reads each row separately, like tee yardages.
+            </FieldDescription>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {sortedHandicapRows.map((row) => (
+                <Badge key={row.rowKey} variant="outline" className="gap-2 px-3 py-1">
+                  {row.rowName}
+                  <button
+                    type="button"
+                    className="text-muted-foreground hover:text-foreground"
+                    onClick={() => removeHandicapRow(row.rowKey)}
+                  >
+                    ×
+                  </button>
+                </Badge>
+              ))}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {PRESET_SCORECARD_HANDICAP_ROWS.filter(
+                (preset) =>
+                  !sortedHandicapRows.some((row) => row.rowKey === preset.rowKey)
+              ).map((preset) => (
+                <Button
+                  key={preset.rowKey}
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => addHandicapRowFromPreset(preset)}
+                >
+                  + {preset.rowName}
+                </Button>
+              ))}
+            </div>
+          </Field>
+
+          <Field>
             <FieldLabel>Scorecard photo</FieldLabel>
             <FieldDescription>
               Upload a photo of the official scorecard, then extract par,
@@ -599,8 +831,11 @@ export function CourseOnboardingWizard({
               {sortedTees.length > 0
                 ? sortedTees.map((tee) => tee.teeName).join(", ")
                 : "your selected tees"}
+              {sortedHandicapRows.length > 0
+                ? ` and ${sortedHandicapRows.map((row) => row.rowName).join(", ")}`
+                : ""}
               . Uncertain or misaligned values are left blank automatically.
-              OUT/IN totals are used to verify each row. Review warnings before saving.
+              OUT/IN/TOT totals verify yardages and par after extraction.
             </FieldDescription>
             <label
               className={cn(
@@ -640,16 +875,23 @@ export function CourseOnboardingWizard({
                 type="button"
                 variant="outline"
                 className="mt-3"
-                disabled={isPending || sortedTees.length === 0}
+                disabled={
+                  isPending ||
+                  sortedTees.length === 0 ||
+                  sortedHandicapRows.length === 0
+                }
                 onClick={() => {
                   setError(null);
                   setMessage(null);
-                  setOcrWarnings([]);
+                  setOcrParValidation(null);
+                  setOcrYardageValidation([]);
+                  setOcrHandicapValidation([]);
                   startTransition(async () => {
                     const result = await extractCourseOnboardingScorecard(
                       course.id,
                       scorecardImageUrl,
-                      sortedTees
+                      sortedTees,
+                      sortedHandicapRows
                     );
                     if (!result.success) {
                       setError(result.error ?? "Could not extract scorecard.");
@@ -661,12 +903,15 @@ export function CourseOnboardingWizard({
                         holeNumber: hole.holeNumber,
                         par: hole.par,
                         strokeIndex: hole.strokeIndex,
+                        ladiesStrokeIndex: hole.ladiesStrokeIndex,
                         teeYardages: hole.teeYardages,
                       }))
                     );
-                    setOcrWarnings(result.data.warnings);
+                    setOcrParValidation(result.data.parValidation);
+                    setOcrYardageValidation(result.data.yardageValidation);
+                    setOcrHandicapValidation(result.data.handicapValidation);
                     setMessage(
-                      `Extracted ${result.data.holes.length} holes for ${sortedTees.map((tee) => tee.teeName).join(", ")}. Review the values below.`
+                      `Extracted ${result.data.holes.length} holes for ${sortedTees.map((tee) => tee.teeName).join(", ")}. Check the totals below.`
                     );
                   });
                 }}
@@ -680,18 +925,19 @@ export function CourseOnboardingWizard({
                 Add at least one tee color before extracting.
               </p>
             )}
-            {ocrWarnings.length > 0 && (
-              <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-900 dark:text-amber-100">
-                <p className="font-medium">Review these extracted values</p>
-                <ul className="mt-1 list-disc space-y-0.5 pl-4">
-                  {ocrWarnings.slice(0, 6).map((warning) => (
-                    <li key={warning}>{warning}</li>
-                  ))}
-                  {ocrWarnings.length > 6 && (
-                    <li>…and {ocrWarnings.length - 6} more warnings</li>
-                  )}
-                </ul>
-              </div>
+            {sortedTees.length > 0 && sortedHandicapRows.length === 0 && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Add at least one handicap row before extracting.
+              </p>
+            )}
+            {(ocrParValidation ||
+              ocrYardageValidation.length > 0 ||
+              ocrHandicapValidation.length > 0) && (
+              <ScorecardTotalsPanel
+                parValidation={ocrParValidation}
+                yardageValidation={ocrYardageValidation}
+                handicapValidation={ocrHandicapValidation}
+              />
             )}
           </Field>
 
@@ -706,7 +952,12 @@ export function CourseOnboardingWizard({
                       {tee.teeName} yds
                     </th>
                   ))}
-                  <th className="px-2 py-2">HCP</th>
+                  {extractMensHandicap && (
+                    <th className="px-2 py-2">Men HCP</th>
+                  )}
+                  {extractLadiesHandicap && (
+                    <th className="px-2 py-2">Ladies HCP</th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -751,23 +1002,44 @@ export function CourseOnboardingWizard({
                         />
                       </td>
                     ))}
-                    <td className="px-2 py-2">
-                      <Input
-                        type="number"
-                        min={1}
-                        max={18}
-                        className="h-9 w-20"
-                        value={row.strokeIndex}
-                        onChange={(event) => {
-                          const next = [...scorecardRows];
-                          next[index] = {
-                            ...row,
-                            strokeIndex: event.target.value,
-                          };
-                          setScorecardRows(next);
-                        }}
-                      />
-                    </td>
+                    {extractMensHandicap && (
+                      <td className="px-2 py-2">
+                        <Input
+                          type="number"
+                          min={1}
+                          max={18}
+                          className="h-9 w-20"
+                          value={row.strokeIndex}
+                          onChange={(event) => {
+                            const next = [...scorecardRows];
+                            next[index] = {
+                              ...row,
+                              strokeIndex: event.target.value,
+                            };
+                            setScorecardRows(next);
+                          }}
+                        />
+                      </td>
+                    )}
+                    {extractLadiesHandicap && (
+                      <td className="px-2 py-2">
+                        <Input
+                          type="number"
+                          min={1}
+                          max={18}
+                          className="h-9 w-20"
+                          value={row.ladiesStrokeIndex}
+                          onChange={(event) => {
+                            const next = [...scorecardRows];
+                            next[index] = {
+                              ...row,
+                              ladiesStrokeIndex: event.target.value,
+                            };
+                            setScorecardRows(next);
+                          }}
+                        />
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

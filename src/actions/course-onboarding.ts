@@ -34,6 +34,8 @@ import {
 import { applyOsmOnboardingPrefill } from "@/lib/course-onboarding-osm-prefill";
 import { parseCoordinate } from "@/lib/green-distance";
 import { extractScorecardFromImage } from "@/lib/scorecard-ocr";
+import type { ScorecardHandicapRowInput } from "@/lib/scorecard-handicap-rows";
+import { DEFAULT_SCORECARD_HANDICAP_ROWS } from "@/lib/scorecard-handicap-rows";
 import { isScorecardImageUrl } from "@/lib/scorecard-image-url";
 import { createLocalCourseId } from "@/lib/local-course";
 import {
@@ -510,7 +512,8 @@ export async function prefillCourseOnboardingFromOsm(
 export async function extractCourseOnboardingScorecard(
   courseId: string,
   imageUrl?: string,
-  requestedTees?: CourseTeeInput[]
+  requestedTees?: CourseTeeInput[],
+  requestedHandicapRows?: ScorecardHandicapRowInput[]
 ): Promise<ScorecardOcrActionResult> {
   const course = await getEditableOnboardingCourse(courseId);
 
@@ -531,6 +534,21 @@ export async function extractCourseOnboardingScorecard(
     return {
       success: false,
       error: "Select the tee colors on this scorecard before extracting.",
+    };
+  }
+
+  const handicapRows = (requestedHandicapRows ?? DEFAULT_SCORECARD_HANDICAP_ROWS).map(
+    (row, index) => ({
+      ...row,
+      rowName: row.rowName.trim(),
+      sortOrder: row.sortOrder ?? index,
+    })
+  );
+
+  if (handicapRows.length === 0) {
+    return {
+      success: false,
+      error: "Select at least one handicap row on this scorecard before extracting.",
     };
   }
 
@@ -555,7 +573,8 @@ export async function extractCourseOnboardingScorecard(
     const data = await extractScorecardFromImage(
       resolvedImageUrl,
       course.holeCount,
-      tees
+      tees,
+      handicapRows
     );
     return { success: true, data };
   } catch (error) {
