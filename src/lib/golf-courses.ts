@@ -2,6 +2,7 @@ import { and, asc, desc, eq, ilike, or } from "drizzle-orm";
 
 import { getDb } from "@/db";
 import {
+  courseTees,
   golfCourses,
   greenElevationGrids,
   greenTargets,
@@ -11,6 +12,7 @@ import {
   type GreenTarget,
   type HoleFeature,
 } from "@/db/schema";
+import { sortCourseTees, teeMarkerColor } from "@/lib/course-tees";
 import {
   buildGreenTargetsByEventHole,
   eventHoleToCourseHole,
@@ -385,10 +387,12 @@ export type CaddieContextForEvent = {
     Awaited<ReturnType<typeof getHoleFeatureCollection>> | null
   >;
   hasHeatmapByHole: Record<number, boolean>;
+  selectedTeeColor: string | null;
 };
 
 export async function getCaddieContextForEvent(event: {
   externalCourseId: string | null;
+  selectedTeeKey?: string | null;
   holes: "9" | "18";
   nineSide?: "front" | "back" | null;
   holeNumbers: number[];
@@ -407,6 +411,17 @@ export async function getCaddieContextForEvent(event: {
   const elevationGrids = await getDb().query.greenElevationGrids.findMany({
     where: eq(greenElevationGrids.courseId, course.id),
   });
+
+  const courseTeeRows = await getDb().query.courseTees.findMany({
+    where: eq(courseTees.courseId, course.id),
+    orderBy: [asc(courseTees.sortOrder), asc(courseTees.teeName)],
+  });
+  const sortedCourseTees = sortCourseTees(courseTeeRows);
+  const selectedTee =
+    sortedCourseTees.find((tee) => tee.teeKey === event.selectedTeeKey) ??
+    sortedCourseTees[0] ??
+    null;
+  const selectedTeeColor = selectedTee ? teeMarkerColor(selectedTee) : null;
 
   for (const eventHole of event.holeNumbers) {
     const courseHole = eventHoleToCourseHole(eventHole, {
@@ -429,5 +444,6 @@ export async function getCaddieContextForEvent(event: {
     greenTargetsByHole,
     holeFeaturesByHole,
     hasHeatmapByHole,
+    selectedTeeColor,
   };
 }

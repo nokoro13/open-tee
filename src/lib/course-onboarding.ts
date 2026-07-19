@@ -26,6 +26,7 @@ import {
 } from "@/lib/hole-distance-guide";
 import { computeGreenTargets } from "@/lib/green-targets";
 import type { LatLng } from "@/lib/green-distance";
+import { parseCoordinate, yardsBetween } from "@/lib/green-distance";
 import type { ScorecardHoleSnapshot } from "@/lib/scorecard";
 import {
   type CourseDetail,
@@ -35,7 +36,6 @@ import {
   parseCourseCountry,
   type CourseCountry,
 } from "@/lib/course-location";
-import { parseCoordinate } from "@/lib/green-distance";
 
 export type CourseOnboardingStep = "details" | "scorecard" | "mapping" | "review";
 
@@ -489,15 +489,16 @@ export async function saveManualHoleLine(
   teeKey: string,
   tee: LatLng,
   green: LatLng,
-  breakPoint?: LatLng | null
+  breakPoint: LatLng | null
 ) {
-  const bend = breakPoint ?? midpoint(tee, green);
+  const path =
+    breakPoint != null ? [tee, breakPoint, green] : [tee, green];
 
   await upsertManualHoleFeature(
     courseId,
     holeNumber,
     "hole_line",
-    holeLinePathGeometry([tee, bend, green]),
+    holeLinePathGeometry(path),
     manualHoleLineOsmId(holeNumber, teeKey)
   );
 }
@@ -507,22 +508,24 @@ async function resolveSharedLineBreakForHole(
     featureType: string;
     geometry: unknown;
   }[],
-  tee: LatLng,
-  green: LatLng
-): Promise<LatLng> {
+  _tee: LatLng,
+  _green: LatLng
+): Promise<LatLng | null> {
   for (const feature of features) {
     if (feature.featureType !== "hole_line") continue;
     const path = lineStringToPath(feature.geometry);
-    if (path.length < 3) continue;
-    const breakPoint = breakPointFromLinePath(
-      path,
-      path[0]!,
-      path[path.length - 1]!
-    );
-    if (breakPoint) return breakPoint;
+    if (path.length === 2) return null;
+    if (path.length >= 3) {
+      const breakPoint = breakPointFromLinePath(
+        path,
+        path[0]!,
+        path[path.length - 1]!
+      );
+      if (breakPoint) return breakPoint;
+    }
   }
 
-  return midpoint(tee, green);
+  return null;
 }
 
 async function refreshHoleLinesForHole(courseId: string, holeNumber: number) {
@@ -577,7 +580,76 @@ async function refreshHoleLinesForHole(courseId: string, holeNumber: number) {
       parsedTee.teeKey,
       tee,
       green,
-      sharedBreak ?? midpoint(tee, green)
+      sharedBreak
+    );
+  }
+}
+
+export async function setManualHoleDogleg(
+  courseId: string,
+  holeNumber: number,
+  enabled: boolean
+) {
+  const db = getDb();
+  const features = await db.query.holeFeatures.findMany({
+    where: and(
+      eq(holeFeatures.courseId, courseId),
+      eq(holeFeatures.holeNumber, holeNumber)
+    ),
+  });
+
+  const greenFeature = features.find(
+    (feature) => feature.featureType === "green"
+  );
+  const green = greenFeature
+    ? await resolveGreenCenter(greenFeature.geometry)
+    : null;
+  if (!green) return;
+
+  const teeFeatures = features.filter((feature) => feature.featureType === "tee");
+  let breakPoint: LatLng | null = null;
+
+  if (enabled) {
+    let farthestTee: LatLng | null = null;
+    let farthestYards = -1;
+
+    for (const feature of teeFeatures) {
+      const geometry = feature.geometry as {
+        type?: string;
+        coordinates?: [number, number];
+      };
+      if (geometry.type !== "Point" || !geometry.coordinates) continue;
+      const [lng, lat] = geometry.coordinates;
+      const tee = { lat, lng };
+      const yards = yardsBetween(tee, green);
+      if (yards > farthestYards) {
+        farthestYards = yards;
+        farthestTee = tee;
+      }
+    }
+
+    breakPoint = farthestTee ? midpoint(farthestTee, green) : null;
+  }
+
+  for (const feature of teeFeatures) {
+    const parsedTee = parseManualTeeOsmId(feature.osmId);
+    if (!parsedTee) continue;
+
+    const geometry = feature.geometry as {
+      type?: string;
+      coordinates?: [number, number];
+    };
+    if (geometry.type !== "Point" || !geometry.coordinates) continue;
+    const [lng, lat] = geometry.coordinates;
+    const tee = { lat, lng };
+
+    await saveManualHoleLine(
+      courseId,
+      holeNumber,
+      parsedTee.teeKey,
+      tee,
+      green,
+      breakPoint
     );
   }
 }

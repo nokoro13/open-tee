@@ -1088,8 +1088,9 @@ export function CourseOnboardingWizard({
         <div className="space-y-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted-foreground">
-              Select a hole, place the green and each tee box, then drag fairway
-              anchors for doglegs. Completed holes lock automatically.
+              Select a hole, place the green and each tee box, then choose
+              Straight or Dogleg for the fairway path. Completed holes lock
+              automatically.
             </p>
             <Button
               type="button"
@@ -1267,7 +1268,11 @@ export function CourseOnboardingWizard({
                         ? `Saved green for hole ${activeHole}.`
                         : pin.kind === "tee"
                           ? `Saved tee for hole ${activeHole}.`
-                          : `Updated fairway line for hole ${activeHole}.`
+                          : pin.kind === "line_break"
+                            ? `Updated fairway line for hole ${activeHole}.`
+                            : pin.enabled
+                              ? `Enabled dogleg for hole ${activeHole}.`
+                              : `Set hole ${activeHole} to a straight path.`
                     );
                     startTransition(() => {
                       router.refresh();

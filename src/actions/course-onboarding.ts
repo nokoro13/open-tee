@@ -19,6 +19,7 @@ import {
   saveManualGreenPin,
   saveManualLineBreak,
   saveManualTeePin,
+  setManualHoleDogleg,
   type CourseDuplicateMatch,
 } from "@/lib/course-onboarding";
 import {
@@ -410,6 +411,7 @@ export async function saveCourseOnboardingHolePin(
     | { kind: "green"; lat: number; lng: number }
     | { kind: "tee"; teeKey: string; lat: number; lng: number }
     | { kind: "line_break"; lat: number; lng: number }
+    | { kind: "dogleg"; enabled: boolean }
 ): Promise<OnboardingActionResult> {
   const course = await getEditableOnboardingCourse(courseId);
 
@@ -429,8 +431,10 @@ export async function saveCourseOnboardingHolePin(
       return { success: false, error: "Unknown tee set." };
     }
     await saveManualTeePin(courseId, holeNumber, pin.teeKey, pin);
-  } else {
+  } else if (pin.kind === "line_break") {
     await saveManualLineBreak(courseId, holeNumber, pin);
+  } else {
+    await setManualHoleDogleg(courseId, holeNumber, pin.enabled);
   }
 
   revalidatePath(`/dashboard/courses/${courseId}/onboard`);

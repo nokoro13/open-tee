@@ -4,8 +4,10 @@ import { yardsBetween } from "@/lib/green-distance";
 import type { GeoJsonFeatureCollection } from "@/lib/geojson";
 import {
   extractHoleLinePath,
+  extractSharedLineBreak,
   type HoleDistanceGuide,
 } from "@/lib/hole-distance-guide";
+import { teeMarkerStrokeColor } from "@/lib/course-tees";
 import { computeHoleMapView } from "@/lib/hole-map-view";
 
 export type LatLngLiteral = { lat: number; lng: number };
@@ -157,8 +159,18 @@ export function buildHoleMapScene(options: {
   features: GeoJsonFeatureCollection;
   targets: GreenTargets | null;
   playerPosition: GeolocationPosition | null;
+  includeFeatureOverlays?: boolean;
+  preferredTeeKey?: string | null;
+  preferredTeeColor?: string | null;
 }): HoleMapScene | null {
-  const { features, targets, playerPosition } = options;
+  const {
+    features,
+    targets,
+    playerPosition,
+    includeFeatureOverlays = true,
+    preferredTeeKey = null,
+    preferredTeeColor = null,
+  } = options;
   const view = computeHoleMapView({ features, targets, playerPosition });
   if (!view) return null;
 
@@ -166,35 +178,40 @@ export function buildHoleMapScene(options: {
   let holeLinePath: LatLngLiteral[] = [];
   let hasFairway = false;
 
-  features.features.forEach((feature, index) => {
-    const featureType = String(feature.properties?.featureType ?? "other");
-    if (featureType === "fairway") hasFairway = true;
+  if (includeFeatureOverlays) {
+    features.features.forEach((feature, index) => {
+      const featureType = String(feature.properties?.featureType ?? "other");
+      if (featureType === "fairway") hasFairway = true;
 
-    rawOverlays.push(
-      ...overlaysFromGeometry(featureType, feature.geometry, `feature:${index}`)
-    );
+      rawOverlays.push(
+        ...overlaysFromGeometry(featureType, feature.geometry, `feature:${index}`)
+      );
 
-    if (featureType === "hole_line" && feature.geometry) {
-      const geometry = feature.geometry as LineStringGeometry;
-      if (geometry.type === "LineString") {
-        holeLinePath = geometry.coordinates.map(toLatLng);
+      if (featureType === "hole_line" && feature.geometry) {
+        const geometry = feature.geometry as LineStringGeometry;
+        if (geometry.type === "LineString") {
+          holeLinePath = geometry.coordinates.map(toLatLng);
+        }
       }
-    }
-  });
+    });
+  }
 
-  const overlays = [...rawOverlays].sort((left, right) => {
-    const leftIndex = DRAW_ORDER.indexOf(
-      left.featureType as (typeof DRAW_ORDER)[number]
-    );
-    const rightIndex = DRAW_ORDER.indexOf(
-      right.featureType as (typeof DRAW_ORDER)[number]
-    );
-    const normalizedLeft = leftIndex === -1 ? DRAW_ORDER.length : leftIndex;
-    const normalizedRight = rightIndex === -1 ? DRAW_ORDER.length : rightIndex;
-    return normalizedLeft - normalizedRight;
-  });
+  const overlays = includeFeatureOverlays
+    ? [...rawOverlays].sort((left, right) => {
+        const leftIndex = DRAW_ORDER.indexOf(
+          left.featureType as (typeof DRAW_ORDER)[number]
+        );
+        const rightIndex = DRAW_ORDER.indexOf(
+          right.featureType as (typeof DRAW_ORDER)[number]
+        );
+        const normalizedLeft = leftIndex === -1 ? DRAW_ORDER.length : leftIndex;
+        const normalizedRight =
+          rightIndex === -1 ? DRAW_ORDER.length : rightIndex;
+        return normalizedLeft - normalizedRight;
+      })
+    : [];
 
-  if (!hasFairway && holeLinePath.length >= 2) {
+  if (includeFeatureOverlays && !hasFairway && holeLinePath.length >= 2) {
     overlays.push({
       kind: "polyline",
       featureType: "fairway_corridor",
@@ -217,6 +234,8 @@ export function buildHoleMapScene(options: {
     includePlayer = playerDistance <= MAX_PLAYER_INCLUDE_YARDS;
   }
 
+  const teeColor = preferredTeeColor ?? "#2563eb";
+
   if (targets) {
     const from =
       includePlayer && playerPosition
@@ -228,7 +247,9 @@ export function buildHoleMapScene(options: {
         from,
         to: targets.middle,
         holeLinePath: extractHoleLinePath(features),
+        lineBreak: extractSharedLineBreak(features, preferredTeeKey),
         fromKind: includePlayer && playerPosition ? "player" : "tee",
+        teeColor,
       };
       distanceToPin = Math.round(yardsBetween(from, targets.middle));
     }
@@ -239,8 +260,8 @@ export function buildHoleMapScene(options: {
       key: "tee",
       position: view.tee,
       label: "T",
-      fill: "#1d4ed8",
-      stroke: "#ffffff",
+      fill: teeColor,
+      stroke: teeMarkerStrokeColor(teeColor),
       radius: 9,
     });
   }
@@ -276,9 +297,10 @@ export function buildHoleMapScene(options: {
 
   return {
     view,
-    overlays: distanceGuide
-      ? overlays.filter((overlay) => overlay.featureType !== "hole_line")
-      : overlays,
+    overlays:
+      includeFeatureOverlays && distanceGuide
+        ? overlays.filter((overlay) => overlay.featureType !== "hole_line")
+        : overlays,
     markers,
     distanceGuide,
     distanceToPin,

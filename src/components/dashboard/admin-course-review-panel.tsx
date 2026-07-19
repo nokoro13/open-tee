@@ -401,26 +401,31 @@ export function AdminCourseReviewPanel({ course }: AdminCourseReviewPanelProps) 
         </section>
       </div>
 
-      <div className="flex flex-wrap items-end gap-3 rounded-lg border p-4">
-        <Button
-          type="button"
-          disabled={isPending}
-          onClick={() =>
-            runAction(() => verifySubmittedCourse(course.id), true)
-          }
-        >
-          Approve and publish
-        </Button>
-        <div className="flex min-w-[min(100%,20rem)] flex-1 flex-wrap items-center gap-2">
+      <div className="space-y-4 rounded-lg border p-4">
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            disabled={isPending}
+            onClick={() =>
+              runAction(() => verifySubmittedCourse(course.id), true)
+            }
+          >
+            Approve and publish
+          </Button>
+        </div>
+
+        <div className="flex flex-col gap-2 rounded-lg border border-dashed bg-muted/30 p-3 sm:flex-row sm:items-center">
           <Input
-            className="h-9"
+            className="bg-background sm:flex-1"
             placeholder="Rejection notes for the course owner"
             value={rejectNotes}
             onChange={(event) => setRejectNotes(event.target.value)}
           />
           <Button
             type="button"
+            size="sm"
             variant="outline"
+            className="shrink-0 sm:w-auto"
             disabled={isPending}
             onClick={() =>
               runAction(
@@ -429,7 +434,7 @@ export function AdminCourseReviewPanel({ course }: AdminCourseReviewPanelProps) 
               )
             }
           >
-            Reject
+            Reject course
           </Button>
         </div>
       </div>

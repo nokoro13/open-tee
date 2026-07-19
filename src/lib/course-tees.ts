@@ -40,6 +40,22 @@ export function teeMarkerColor(tee: Pick<CourseTee, "teeColor" | "teeKey">): str
   );
 }
 
+export function teeMarkerStrokeColor(fillColor: string): string {
+  const normalized = fillColor.trim().toLowerCase();
+  if (normalized === "#f8fafc" || normalized === "#ffffff" || normalized === "#fff") {
+    return "#94a3b8";
+  }
+  return "#ffffff";
+}
+
+export function teeMarkerLabelColor(fillColor: string): string {
+  const normalized = fillColor.trim().toLowerCase();
+  if (normalized === "#f8fafc" || normalized === "#ffffff" || normalized === "#fff") {
+    return "#111827";
+  }
+  return "#ffffff";
+}
+
 export function manualTeeOsmId(holeNumber: number, teeKey: string): string {
   return `manual:tee:${holeNumber}:${teeKey}`;
 }

@@ -25,6 +25,7 @@ import { MobileShowcase } from "@/components/landing/previews/mobile-showcase";
 import { PartnerBadges } from "@/components/landing/previews/partner-badges";
 import { PrintableScorecardPreview } from "@/components/landing/previews/printable-scorecard-preview";
 import { RegistrationPreview } from "@/components/landing/previews/registration-preview";
+import type { LandingPageStat } from "@/lib/landing-stats";
 import {
   Accordion,
   AccordionContent,
@@ -208,14 +209,18 @@ const faqs = [
   },
 ];
 
-const stats = [
-  { value: "2,500+", label: "Events hosted" },
-  { value: "180K+", label: "Players registered" },
-  { value: "98%", label: "Customer satisfaction" },
-  { value: "40+", label: "States represented" },
+const defaultStats: LandingPageStat[] = [
+  { value: "0", label: "Events hosted" },
+  { value: "0", label: "Players registered" },
+  { value: "0", label: "Courses mapped" },
+  { value: "0", label: "States & provinces" },
 ];
 
-export function LandingPage() {
+type LandingPageProps = {
+  stats?: LandingPageStat[];
+};
+
+export function LandingPage({ stats = defaultStats }: LandingPageProps) {
   return (
     <div className="flex min-h-full flex-col">
       <Navbar />

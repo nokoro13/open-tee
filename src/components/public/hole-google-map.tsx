@@ -21,6 +21,7 @@ import {
 import type { GeolocationPosition } from "@/hooks/use-geolocation";
 import type { GreenTargets } from "@/lib/green-distance";
 import type { GeoJsonFeatureCollection } from "@/lib/geojson";
+import { teeMarkerLabelColor } from "@/lib/course-tees";
 import {
   buildHoleMapScene,
   HOLE_FEATURE_STYLES,
@@ -32,7 +33,7 @@ import { computeHoleMapCamera } from "@/lib/hole-map-view";
 import { HoleDistanceGuideLayer } from "@/components/public/hole-distance-guide";
 
 const MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
-const MAP_PADDING = { top: 48, bottom: 64, left: 28, right: 28 };
+const MAP_PADDING = { top: 120, bottom: 96, left: 32, right: 32 };
 const CIRCLE_SYMBOL_PATH = 0;
 
 // Satellite is the base layer; these styles suppress any remaining POI labels.
@@ -75,6 +76,9 @@ type HoleGoogleMapProps = {
   playerPosition: GeolocationPosition | null;
   holeNumber: number;
   className?: string;
+  onSceneChange?: (scene: HoleMapScene) => void;
+  preferredTeeKey?: string | null;
+  preferredTeeColor?: string | null;
 };
 
 function getOverlayStyle(featureType: string) {
@@ -156,7 +160,10 @@ function HoleMapMarkerLayer({ marker }: { marker: HoleMapMarker }) {
           marker.label
             ? {
                 text: marker.label,
-                color: marker.label === "T" ? "#ffffff" : "#111827",
+                color:
+                  marker.label === "T"
+                    ? teeMarkerLabelColor(marker.fill)
+                    : "#111827",
                 fontWeight: "700",
                 fontSize: "10px",
               }
@@ -183,6 +190,9 @@ function MapCameraController({
   onReady: (fitHole: () => void) => void;
 }) {
   const map = useMap();
+  const viewRef = useRef(scene.view);
+  viewRef.current = scene.view;
+  const needsFitRef = useRef(true);
 
   const fitHole = useCallback(() => {
     if (!map) return;
@@ -192,7 +202,7 @@ function MapCameraController({
     if (rect.width < 50 || rect.height < 50) return;
 
     const camera = computeHoleMapCamera({
-      view: scene.view,
+      view: viewRef.current,
       mapWidth: Math.max(rect.width, 1),
       mapHeight: Math.max(rect.height, 1),
       padding: MAP_PADDING,
@@ -204,29 +214,29 @@ function MapCameraController({
       heading: camera.heading,
       tilt: 0,
     });
-  }, [map, scene.view]);
+  }, [map]);
 
   useEffect(() => {
     onReady(fitHole);
   }, [fitHole, onReady]);
 
+  // Mark for refit when the active hole changes.
   useEffect(() => {
+    needsFitRef.current = true;
+  }, [resetKey]);
+
+  // Refit once the scene geometry for that hole is ready — not on GPS drift.
+  useEffect(() => {
+    if (!needsFitRef.current) return;
+    needsFitRef.current = false;
     fitHole();
-  }, [fitHole, resetKey]);
-
-  useEffect(() => {
-    if (!map) return;
-
-    const div = map.getDiv();
-    const observer = new ResizeObserver(() => {
-      fitHole();
-    });
-    observer.observe(div);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [map, fitHole]);
+  }, [
+    fitHole,
+    resetKey,
+    scene.view.center.lat,
+    scene.view.center.lng,
+    scene.view.bearing,
+  ]);
 
   return null;
 }
@@ -251,7 +261,6 @@ function HoleGoogleMapScene({
       styles={GOLF_MAP_STYLES}
       gestureHandling="greedy"
       disableDefaultUI
-      zoomControl
       rotateControl={false}
       headingInteractionEnabled={false}
       tiltInteractionEnabled={false}
@@ -285,7 +294,7 @@ function HoleGoogleMapScene({
 
 export const HoleGoogleMap = forwardRef<HoleGoogleMapHandle, HoleGoogleMapProps>(
   function HoleGoogleMap(
-    { features, targets, playerPosition, holeNumber, className },
+    { features, targets, playerPosition, holeNumber, className, onSceneChange, preferredTeeKey, preferredTeeColor },
     ref
   ) {
     const fitHoleRef = useRef<(() => void) | null>(null);
@@ -295,9 +304,18 @@ export const HoleGoogleMap = forwardRef<HoleGoogleMapHandle, HoleGoogleMapProps>
           features,
           targets,
           playerPosition,
+          includeFeatureOverlays: false,
+          preferredTeeKey,
+          preferredTeeColor,
         }),
-      [features, targets, playerPosition]
+      [features, targets, playerPosition, preferredTeeKey, preferredTeeColor]
     );
+
+    useEffect(() => {
+      if (scene) {
+        onSceneChange?.(scene);
+      }
+    }, [onSceneChange, scene]);
 
     const handleFitHoleReady = useCallback((fitHole: () => void) => {
       fitHoleRef.current = fitHole;

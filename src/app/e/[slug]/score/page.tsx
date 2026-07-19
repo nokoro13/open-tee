@@ -134,6 +134,7 @@ export default async function ScorePage({ params, searchParams }: ScorePageProps
   const holeNumbers = getHoleNumbers(event.holes);
   const caddieContext = await getCaddieContextForEvent({
     externalCourseId: event.externalCourseId,
+    selectedTeeKey: event.selectedTeeKey,
     holes: event.holes,
     nineSide: event.nineSide,
     holeNumbers,
@@ -158,6 +159,8 @@ export default async function ScorePage({ params, searchParams }: ScorePageProps
       greenTargetsByHole={caddieContext?.greenTargetsByHole}
       holeFeaturesGeoJson={caddieContext?.holeFeaturesByHole}
       hasHeatmapByHole={caddieContext?.hasHeatmapByHole}
+      selectedTeeKey={event.selectedTeeKey}
+      selectedTeeColor={caddieContext?.selectedTeeColor ?? null}
     />
   );
 }

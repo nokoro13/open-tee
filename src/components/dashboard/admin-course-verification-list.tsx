@@ -73,40 +73,46 @@ export function AdminCourseVerificationList({
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <ButtonLink href={`/dashboard/admin/courses/${course.id}`} size="sm">
-              Review course
-            </ButtonLink>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={isPending}
-              onClick={() => runAction(() => verifySubmittedCourse(course.id))}
-            >
-              Quick approve
-            </Button>
-            <Input
-              className="h-9 max-w-xs"
-              placeholder="Rejection notes"
-              id={`reject-${course.id}`}
-            />
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={isPending}
-              onClick={() => {
-                const input = document.getElementById(
-                  `reject-${course.id}`
-                ) as HTMLInputElement | null;
-                runAction(() =>
-                  rejectSubmittedCourse(course.id, input?.value ?? "")
-                );
-              }}
-            >
-              Reject
-            </Button>
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              <ButtonLink href={`/dashboard/admin/courses/${course.id}`} size="sm">
+                Review course
+              </ButtonLink>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={isPending}
+                onClick={() => runAction(() => verifySubmittedCourse(course.id))}
+              >
+                Quick approve
+              </Button>
+            </div>
+
+            <div className="flex flex-col gap-2 rounded-lg border border-dashed bg-muted/30 p-3 sm:flex-row sm:items-center">
+              <Input
+                className="bg-background sm:flex-1"
+                placeholder="Rejection notes for the course owner"
+                id={`reject-${course.id}`}
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="shrink-0 sm:w-auto"
+                disabled={isPending}
+                onClick={() => {
+                  const input = document.getElementById(
+                    `reject-${course.id}`
+                  ) as HTMLInputElement | null;
+                  runAction(() =>
+                    rejectSubmittedCourse(course.id, input?.value ?? "")
+                  );
+                }}
+              >
+                Reject course
+              </Button>
+            </div>
           </div>
         </li>
       ))}

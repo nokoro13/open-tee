@@ -48,7 +48,8 @@ type PinMode =
 type HolePin =
   | { kind: "green"; lat: number; lng: number }
   | { kind: "tee"; teeKey: string; lat: number; lng: number }
-  | { kind: "line_break"; lat: number; lng: number };
+  | { kind: "line_break"; lat: number; lng: number }
+  | { kind: "dogleg"; enabled: boolean };
 
 type DragPreview =
   | { kind: "tee"; teeKey: string; lat: number; lng: number }
@@ -207,6 +208,11 @@ function MapCameraController({
   enabled: boolean;
 }) {
   const map = useMap();
+  const viewRef = useRef(view);
+  const enabledRef = useRef(enabled);
+
+  viewRef.current = view;
+  enabledRef.current = enabled;
 
   const fitHole = useCallback(() => {
     if (!map) return;
@@ -215,9 +221,12 @@ function MapCameraController({
     const rect = div.getBoundingClientRect();
     if (rect.width < 50 || rect.height < 50) return;
 
-    if (!enabled) {
+    const currentView = viewRef.current;
+    const currentEnabled = enabledRef.current;
+
+    if (!currentEnabled) {
       map.moveCamera({
-        center: view.center,
+        center: currentView.center,
         zoom: 17,
         heading: 0,
         tilt: 0,
@@ -226,7 +235,7 @@ function MapCameraController({
     }
 
     const camera = computeHoleMapCamera({
-      view,
+      view: currentView,
       mapWidth: Math.max(rect.width, 1),
       mapHeight: Math.max(rect.height, 1),
       padding: MAP_PADDING,
@@ -238,8 +247,9 @@ function MapCameraController({
       heading: camera.heading,
       tilt: 0,
     });
-  }, [enabled, map, view]);
+  }, [map]);
 
+  // Refit only when switching holes — not when saved pin positions refresh.
   useEffect(() => {
     fitHole();
   }, [fitHole, resetKey]);
@@ -304,6 +314,20 @@ function TeeLineSegments({
   );
 }
 
+function StraightTeeLine({ from, to }: { from: LatLng; to: LatLng }) {
+  return (
+    <>
+      <Polyline
+        path={[from, to]}
+        strokeColor="#f8fafc"
+        strokeOpacity={0.9}
+        strokeWeight={2}
+      />
+      <YardageLineLabel from={from} to={to} />
+    </>
+  );
+}
+
 function SharedDoglegMarker({
   position,
   disabled,
@@ -342,6 +366,7 @@ function HoleYardageGuide({
   sortedTees,
   tees,
   green,
+  hasDogleg,
   lineBreak,
   scorecardYardages,
   isDragging,
@@ -349,6 +374,7 @@ function HoleYardageGuide({
   sortedTees: CourseTee[];
   tees: Record<string, LatLng>;
   green: LatLng | null;
+  hasDogleg: boolean;
   lineBreak: LatLng | null;
   scorecardYardages: Record<string, number>;
   isDragging: boolean;
@@ -357,18 +383,33 @@ function HoleYardageGuide({
     .map((tee) => {
       const from = tees[tee.teeKey];
       const target = scorecardYardages[tee.teeKey];
-      if (from == null || green == null || lineBreak == null || target == null) {
+      if (from == null || green == null || target == null) {
         return null;
       }
 
-      const measured = measureHolePathYardage(from, lineBreak, green);
-      const delta = yardageMatchDelta(measured.total, target);
+      if (hasDogleg) {
+        if (lineBreak == null) return null;
+        const measured = measureHolePathYardage(from, lineBreak, green);
+        const delta = yardageMatchDelta(measured.total, target);
+        const tone = yardageMatchTone(delta);
+
+        return {
+          tee,
+          target,
+          measuredLabel: `${measured.leg1}+${measured.leg2}=${measured.total}`,
+          delta,
+          tone,
+        };
+      }
+
+      const measuredTotal = segmentYards(from, green);
+      const delta = yardageMatchDelta(measuredTotal, target);
       const tone = yardageMatchTone(delta);
 
       return {
         tee,
         target,
-        measured,
+        measuredLabel: String(measuredTotal),
         delta,
         tone,
       };
@@ -402,7 +443,7 @@ function HoleYardageGuide({
                 {row.tee.teeName}
               </span>
               <span className="text-white/65">
-                {row.measured.leg1}+{row.measured.leg2}={row.measured.total}
+                {row.measuredLabel}
                 <span className="text-white/30">/</span>
                 {row.target}
               </span>
@@ -482,6 +523,7 @@ export function CourseHolePinMap({
   const [green, setGreen] = useState<LatLng | null>(initialGreen);
   const [tees, setTees] = useState<Record<string, LatLng>>(initialTees);
   const [lineBreak, setLineBreak] = useState<LatLng | null>(initialLineBreak);
+  const [hasDogleg, setHasDogleg] = useState(() => initialLineBreak != null);
   const [dragPreview, setDragPreview] = useState<DragPreview | null>(null);
   const [isEditing, setIsEditing] = useState(
     () => !isHoleMapped(initialGreen, initialTees, courseTees)
@@ -498,6 +540,7 @@ export function CourseHolePinMap({
     setGreen(initialGreen);
     setTees(initialTees);
     setLineBreak(initialLineBreak);
+    setHasDogleg(initialLineBreak != null);
     setDragPreview(null);
     setMode(nextPinMode(sortedTees, initialGreen, initialTees));
 
@@ -540,13 +583,44 @@ export function CourseHolePinMap({
   }, [dragPreview, tees]);
 
   const sharedLineBreak = useMemo(() => {
+    if (!hasDogleg) return null;
     if (dragPreview?.kind === "line_break") {
       return { lat: dragPreview.lat, lng: dragPreview.lng };
     }
     if (lineBreak) return lineBreak;
     if (!liveGreen) return null;
     return defaultSharedLineBreak(liveGreen, liveTees, sortedTees);
-  }, [dragPreview, lineBreak, liveGreen, liveTees, sortedTees]);
+  }, [dragPreview, hasDogleg, lineBreak, liveGreen, liveTees, sortedTees]);
+
+  const canShowPathControls = liveGreen != null && placedTeeCount > 0;
+  const pathControlsDisabled = readOnly || isLocked || isSaving;
+
+  const handleDoglegToggle = useCallback(
+    (enabled: boolean) => {
+      if (pathControlsDisabled || !onSavePin || enabled === hasDogleg) return;
+
+      setHasDogleg(enabled);
+      if (enabled) {
+        if (!lineBreak && liveGreen) {
+          setLineBreak(defaultSharedLineBreak(liveGreen, liveTees, sortedTees));
+        }
+      } else {
+        setLineBreak(null);
+        setDragPreview(null);
+      }
+
+      void onSavePin({ kind: "dogleg", enabled });
+    },
+    [
+      hasDogleg,
+      lineBreak,
+      liveGreen,
+      liveTees,
+      onSavePin,
+      pathControlsDisabled,
+      sortedTees,
+    ]
+  );
 
   const pinMapView = useMemo(
     () =>
@@ -590,9 +664,9 @@ export function CourseHolePinMap({
     [green, isLocked, isSaving, mode, onSavePin, sortedTees, tees]
   );
 
-  const teeLines = useMemo(
+  const doglegTeeLines = useMemo(
     () =>
-      liveGreen && sharedLineBreak
+      hasDogleg && liveGreen && sharedLineBreak
         ? sortedTees
             .map((tee) => {
               const from = liveTees[tee.teeKey];
@@ -606,7 +680,21 @@ export function CourseHolePinMap({
             })
             .filter((line): line is NonNullable<typeof line> => line != null)
         : [],
-    [liveGreen, sharedLineBreak, sortedTees, liveTees]
+    [hasDogleg, liveGreen, sharedLineBreak, sortedTees, liveTees]
+  );
+
+  const straightTeeLines = useMemo(
+    () =>
+      !hasDogleg && liveGreen
+        ? sortedTees
+            .map((tee) => {
+              const from = liveTees[tee.teeKey];
+              if (!from) return null;
+              return { teeKey: tee.teeKey, from, to: liveGreen };
+            })
+            .filter((line): line is NonNullable<typeof line> => line != null)
+        : [],
+    [hasDogleg, liveGreen, sortedTees, liveTees]
   );
 
   const modeLabel =
@@ -645,10 +733,12 @@ export function CourseHolePinMap({
                 : isLocked
                   ? "Locked — click Edit to adjust pins."
                   : dragToAdjust
-                    ? "Drag pins to adjust. Yardages update live against your scorecard."
+                    ? hasDogleg
+                      ? "Drag pins to adjust. Drag the dogleg anchor to match the fairway bend."
+                      : "Drag pins to adjust. Yardages update live against your scorecard."
                     : hasScorecardYardages
                       ? `Placing ${modeLabel}. Match map yardages to scorecard targets on the map.`
-                      : `Placing ${modeLabel}. Click the map or drag placed pins. Drag the shared fairway dogleg to match doglegs.`}
+                      : `Placing ${modeLabel}. Use Straight for a direct tee-to-green line, or Dogleg when the hole bends.`}
             </p>
           </div>
 
@@ -696,6 +786,28 @@ export function CourseHolePinMap({
           </div>
         )}
 
+        {canShowPathControls && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              Path
+            </span>
+            <div className="flex flex-wrap gap-1 rounded-lg bg-muted/80 p-1">
+              <PinModeToggle
+                active={!hasDogleg}
+                label="Straight"
+                onClick={() => handleDoglegToggle(false)}
+                disabled={pathControlsDisabled}
+              />
+              <PinModeToggle
+                active={hasDogleg}
+                label="Dogleg"
+                onClick={() => handleDoglegToggle(true)}
+                disabled={pathControlsDisabled}
+              />
+            </div>
+          </div>
+        )}
+
       </div>
 
       <div className="relative min-h-0 flex-1 bg-zinc-950/3">
@@ -704,6 +816,7 @@ export function CourseHolePinMap({
             sortedTees={sortedTees}
             tees={liveTees}
             green={liveGreen}
+            hasDogleg={hasDogleg}
             lineBreak={sharedLineBreak}
             scorecardYardages={scorecardYardages}
             isDragging={dragPreview != null}
@@ -730,7 +843,10 @@ export function CourseHolePinMap({
               resetKey={holeNumber}
               enabled={hasPinData}
             />
-            {teeLines.map((line) => (
+            {straightTeeLines.map((line) => (
+              <StraightTeeLine key={line.teeKey} from={line.from} to={line.to} />
+            ))}
+            {doglegTeeLines.map((line) => (
               <TeeLineSegments
                 key={line.teeKey}
                 from={line.from}
@@ -738,7 +854,7 @@ export function CourseHolePinMap({
                 breakPoint={line.breakPoint}
               />
             ))}
-            {sharedLineBreak && (
+            {hasDogleg && sharedLineBreak && (
               <SharedDoglegMarker
                 position={sharedLineBreak}
                 disabled={isSaving || isLocked}
@@ -750,6 +866,7 @@ export function CourseHolePinMap({
                   if (isLocked || !onSavePin) return;
                   setDragPreview(null);
                   setLineBreak(point);
+                  setHasDogleg(true);
                   void onSavePin({
                     kind: "line_break",
                     ...point,

@@ -91,6 +91,8 @@ type ScoreEntryFormProps = {
   greenTargetsByHole?: GreenTargetsByEventHole;
   holeFeaturesGeoJson?: Record<number, GeoJsonFeatureCollection | null>;
   hasHeatmapByHole?: Record<number, boolean>;
+  selectedTeeKey?: string | null;
+  selectedTeeColor?: string | null;
 };
 
 type SlideDirection = "forward" | "back";
@@ -299,6 +301,8 @@ export function ScoreEntryForm({
   greenTargetsByHole,
   holeFeaturesGeoJson,
   hasHeatmapByHole = {},
+  selectedTeeKey = null,
+  selectedTeeColor = null,
 }: ScoreEntryFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -1084,6 +1088,12 @@ export function ScoreEntryForm({
         yardage={activeYardage}
         liveDistances={distances}
         liveDistanceStatus={liveDistanceStatus}
+        selectedTeeKey={selectedTeeKey}
+        selectedTeeColor={selectedTeeColor}
+        canGoPrevious={activeHoleIndex > 0}
+        canGoNext={activeHoleIndex < totalHoles - 1}
+        onPreviousHole={() => navigateToIndex(activeHoleIndex - 1, "back")}
+        onNextHole={() => navigateToIndex(activeHoleIndex + 1, "forward")}
       />
 
       <GreenHeatmapModal
