@@ -22,7 +22,7 @@ import {
 } from "@/lib/event-formats";
 
 export const DASHBOARD_NAV_ITEMS = [
-  { href: "/dashboard", label: "Home", icon: Home },
+  { href: "/dashboard", label: "Events", icon: Home },
   { href: "/dashboard/courses", label: "Verified courses", icon: MapPinned },
   { href: "/dashboard/settings", label: "Organization", icon: Building2 },
 ] as const;

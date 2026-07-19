@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, ChevronLeft, ChevronRight, MapPin, ScanLine, Sparkles, Upload } from "lucide-react";
 
@@ -49,6 +49,7 @@ import {
   type CourseTeeInput,
 } from "@/lib/course-tees";
 import {
+  buildHandicapRowsFromHoles,
   DEFAULT_SCORECARD_HANDICAP_ROWS,
   PRESET_SCORECARD_HANDICAP_ROWS,
   sortScorecardHandicapRows,
@@ -127,7 +128,7 @@ function buildScorecardRows(
       strokeIndex:
         hole?.strokeIndex != null ? String(hole.strokeIndex) : String(holeNumber),
       ladiesStrokeIndex:
-        hole?.strokeIndex != null ? String(hole.strokeIndex) : String(holeNumber),
+        hole?.ladiesStrokeIndex != null ? String(hole.ladiesStrokeIndex) : "",
       teeYardages,
     };
   });
@@ -326,7 +327,7 @@ export function CourseOnboardingWizard({
     buildTeeRows(course.courseTees)
   );
   const [handicapRows, setHandicapRows] = useState<ScorecardHandicapRowInput[]>(
-    () => DEFAULT_SCORECARD_HANDICAP_ROWS.map((row, index) => ({ ...row, sortOrder: index }))
+    () => buildHandicapRowsFromHoles(course.courseHoles)
   );
   const [scorecardRows, setScorecardRows] = useState<ScorecardRow[]>(() =>
     buildScorecardRows(
@@ -335,6 +336,7 @@ export function CourseOnboardingWizard({
       buildTeeRows(course.courseTees).map((tee) => tee.teeKey)
     )
   );
+  const scorecardHydratedRevision = useRef<string | null>(null);
   const [ocrParValidation, setOcrParValidation] =
     useState<ScorecardParValidation | null>(null);
   const [ocrYardageValidation, setOcrYardageValidation] = useState<
@@ -351,6 +353,23 @@ export function CourseOnboardingWizard({
     country,
     excludeCourseId: course.id,
   });
+
+  useEffect(() => {
+    if (step !== "scorecard") return;
+
+    const revision = `${course.id}:${course.updatedAt?.toISOString() ?? "unknown"}:${course.holeCount}`;
+    if (scorecardHydratedRevision.current === revision) return;
+
+    const teeKeys = sortCourseTees(teeRows).map(
+      (tee) => tee.teeKey || normalizeTeeKey(tee.teeName)
+    );
+
+    setHandicapRows(buildHandicapRowsFromHoles(course.courseHoles));
+    setScorecardRows(
+      buildScorecardRows(course.holeCount, course.courseHoles, teeKeys)
+    );
+    scorecardHydratedRevision.current = revision;
+  }, [step, course.id, course.updatedAt, course.holeCount, course.courseHoles, teeRows]);
 
   useEffect(() => {
     if (step !== "details") return;
@@ -432,7 +451,32 @@ export function CourseOnboardingWizard({
     const teeKeys = nextTees.map(
       (tee) => tee.teeKey || normalizeTeeKey(tee.teeName)
     );
-    setScorecardRows(buildScorecardRows(course.holeCount, course.courseHoles, teeKeys));
+    setScorecardRows((currentRows) => {
+      const rebuilt = buildScorecardRows(
+        course.holeCount,
+        course.courseHoles,
+        teeKeys
+      );
+      return rebuilt.map((row) => {
+        const existing = currentRows.find(
+          (entry) => entry.holeNumber === row.holeNumber
+        );
+        if (!existing) return row;
+
+        return {
+          ...row,
+          par: existing.par,
+          strokeIndex: existing.strokeIndex,
+          ladiesStrokeIndex: existing.ladiesStrokeIndex,
+          teeYardages: Object.fromEntries(
+            teeKeys.map((teeKey) => [
+              teeKey,
+              existing.teeYardages[teeKey] ?? row.teeYardages[teeKey] ?? "",
+            ])
+          ),
+        };
+      });
+    });
   }
 
   function addTeeFromPreset(preset: CourseTeeInput) {
@@ -1063,6 +1107,9 @@ export function CourseOnboardingWizard({
                     par: row.par,
                     strokeIndex: row.strokeIndex.trim()
                       ? Number(row.strokeIndex)
+                      : null,
+                    ladiesStrokeIndex: row.ladiesStrokeIndex.trim()
+                      ? Number(row.ladiesStrokeIndex)
                       : null,
                     teeYardages: Object.fromEntries(
                       sortedTees.map((tee) => [

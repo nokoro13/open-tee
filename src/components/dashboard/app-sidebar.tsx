@@ -122,6 +122,21 @@ export function AppSidebar({ showAdminNav = false }: { showAdminNav?: boolean })
           <SidebarGroupLabel>Create</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  render={
+                    <Link
+                      href="/dashboard/events/new"
+                      onClick={closeMobileSidebar}
+                    />
+                  }
+                  isActive={pathname === "/dashboard/events/new" && !selectedFormat}
+                  tooltip="New event"
+                >
+                  <Flag />
+                  <span>New event</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
               {CREATE_FORMAT_SHORTCUTS.map((item) => (
                 <SidebarMenuItem key={item.format}>
                   <SidebarMenuButton

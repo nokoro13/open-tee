@@ -266,6 +266,7 @@ export async function updateCourseOnboardingDetails(
         yardage: existing?.yardage ?? null,
         teeYardages: existing?.teeYardages ?? null,
         strokeIndex: existing?.strokeIndex ?? holeNumber,
+        ladiesStrokeIndex: existing?.ladiesStrokeIndex ?? null,
       };
     });
     await replaceCourseHoles(courseId, holes);
@@ -312,6 +313,7 @@ export async function saveCourseOnboardingScorecard(
       par: number;
       teeYardages: Record<string, number | null>;
       strokeIndex: number | null;
+      ladiesStrokeIndex?: number | null;
     }[];
   }
 ): Promise<OnboardingActionResult> {
@@ -366,6 +368,9 @@ export async function saveCourseOnboardingScorecard(
   }
 
   const normalizedHoles = input.holes.map((hole) => {
+    const existing = course.courseHoles.find(
+      (entry) => entry.holeNumber === hole.holeNumber
+    );
     const teeYardages = Object.fromEntries(
       tees.map((tee) => [tee.teeKey, hole.teeYardages[tee.teeKey] as number])
     );
@@ -377,7 +382,9 @@ export async function saveCourseOnboardingScorecard(
       par: hole.par,
       yardage,
       teeYardages,
-      strokeIndex: hole.strokeIndex,
+      strokeIndex: hole.strokeIndex ?? existing?.strokeIndex ?? null,
+      ladiesStrokeIndex:
+        hole.ladiesStrokeIndex ?? existing?.ladiesStrokeIndex ?? null,
     };
   });
 
@@ -401,6 +408,8 @@ export async function saveCourseOnboardingScorecard(
     .where(eq(golfCourses.id, courseId));
 
   revalidatePath(`/dashboard/courses/${courseId}/onboard`);
+  revalidatePath(`/dashboard/courses/${courseId}`);
+  revalidatePath("/dashboard/courses");
   return { success: true, courseId };
 }
 

@@ -88,7 +88,7 @@ const STEP_COPY: Record<
   },
   course: {
     title: "Where are you playing?",
-    description: "Search for a course or enter one manually to build your scorecard.",
+    description: "Search the verified course catalog to attach an official scorecard.",
   },
   schedule: {
     title: "When do groups start?",
@@ -578,7 +578,7 @@ export function EventCreationWizard({ defaultFormat }: EventCreationWizardProps)
       </div>
 
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border/80 bg-background/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-4px_24px_-8px_rgba(0,0,0,0.08)] backdrop-blur-lg sm:static sm:mt-6 sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none sm:backdrop-blur-none">
-        <div className="mx-auto flex max-w-2xl flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+        <div className="mx-auto flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
           <Button
             type="button"
             variant="ghost"

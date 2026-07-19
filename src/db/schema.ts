@@ -374,6 +374,7 @@ export const courseHoles = pgTable(
     yardage: integer("yardage"),
     teeYardages: jsonb("tee_yardages").$type<Record<string, number>>(),
     strokeIndex: integer("stroke_index"),
+    ladiesStrokeIndex: integer("ladies_stroke_index"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },

@@ -26,7 +26,7 @@ function DashboardHeaderTitle() {
   const searchParams = useSearchParams();
 
   if (pathname === "/dashboard") {
-    return "Home";
+    return "Events";
   }
 
   if (pathname.startsWith("/dashboard/courses")) {

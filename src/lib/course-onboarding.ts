@@ -839,6 +839,7 @@ export async function replaceCourseHoles(
     yardage: number | null;
     teeYardages?: Record<string, number> | null;
     strokeIndex: number | null;
+    ladiesStrokeIndex?: number | null;
   }[]
 ) {
   const db = getDb();
@@ -854,6 +855,7 @@ export async function replaceCourseHoles(
       yardage: hole.yardage,
       teeYardages: hole.teeYardages ?? null,
       strokeIndex: hole.strokeIndex,
+      ladiesStrokeIndex: hole.ladiesStrokeIndex ?? null,
     }))
   );
 }
@@ -970,6 +972,7 @@ export function verifiedCourseToDetail(
     number: hole.holeNumber,
     par: hole.par,
     handicap_index: hole.strokeIndex,
+    ladies_handicap_index: hole.ladiesStrokeIndex,
     yardages: hole.teeYardages ?? (hole.yardage != null ? { default: hole.yardage } : null),
   }));
 
@@ -980,6 +983,7 @@ export function verifiedCourseToDetail(
       (defaultTeeKey ? hole.teeYardages?.[defaultTeeKey] : null) ??
       hole.yardage,
     handicap_index: hole.strokeIndex,
+    ladies_handicap_index: hole.ladiesStrokeIndex,
   }));
 
   const tees = sortedTees.map((tee) => ({

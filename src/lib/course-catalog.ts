@@ -22,12 +22,14 @@ export type CourseScorecardHole = {
   par: number;
   yardage?: number | null;
   handicap_index?: number | null;
+  ladies_handicap_index?: number | null;
 };
 
 export type CourseHoleData = {
   number: number;
   par: number;
   handicap_index?: number | null;
+  ladies_handicap_index?: number | null;
   yardages?: Record<string, number> | null;
 };
 
@@ -132,6 +134,29 @@ export function yardageForTeeColor(
   return typeof value === "number" && value > 0 ? value : null;
 }
 
+export function yardageForTee(
+  yardages: Record<string, number> | null | undefined,
+  teeKey: string | null | undefined,
+  teeColor: string | null | undefined
+): number | null {
+  if (!yardages) return null;
+
+  if (teeKey) {
+    const normalizedKey = teeKey.toLowerCase();
+    for (const [key, value] of Object.entries(yardages)) {
+      if (
+        key.toLowerCase() === normalizedKey &&
+        typeof value === "number" &&
+        value > 0
+      ) {
+        return value;
+      }
+    }
+  }
+
+  return yardageForTeeColor(yardages, teeColor);
+}
+
 function sliceHolesData(
   holesData: CourseHoleData[],
   options: {
@@ -204,6 +229,7 @@ export function formatTeeOptionLabel(tee: CourseTeeOption): string {
 
 function normalizeScorecardFromHolesData(
   holesData: CourseHoleData[],
+  teeKey?: string | null,
   teeColor?: string | null
 ): CourseScorecardHole[] {
   return [...holesData]
@@ -212,9 +238,10 @@ function normalizeScorecardFromHolesData(
       hole: hole.number,
       par: hole.par,
       yardage:
-        yardageForTeeColor(hole.yardages, teeColor) ??
+        yardageForTee(hole.yardages, teeKey, teeColor) ??
         pickPreferredTeeYardage(hole.yardages),
       handicap_index: hole.handicap_index ?? null,
+      ladies_handicap_index: hole.ladies_handicap_index ?? null,
     }));
 }
 
@@ -232,7 +259,11 @@ export function buildScorecardForTee(
   let scorecard: CourseScorecardHole[] = [];
 
   if (course.holes_data?.length) {
-    scorecard = normalizeScorecardFromHolesData(course.holes_data, teeColor);
+    scorecard = normalizeScorecardFromHolesData(
+      course.holes_data,
+      teeKey,
+      teeColor
+    );
   } else if (course.scorecard?.length) {
     scorecard = [...course.scorecard];
   }

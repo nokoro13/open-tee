@@ -26,6 +26,28 @@ export async function getRegistrationCount(eventId: string): Promise<number> {
   return result?.count ?? 0;
 }
 
+export async function getRegistrationCountsByEventIds(
+  eventIds: string[]
+): Promise<Record<string, number>> {
+  if (eventIds.length === 0) return {};
+
+  const rows = await getDb()
+    .select({
+      eventId: registrations.eventId,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(registrations)
+    .where(
+      and(
+        inArray(registrations.eventId, eventIds),
+        inArray(registrations.paymentStatus, ["paid", "pending", "comped"])
+      )
+    )
+    .groupBy(registrations.eventId);
+
+  return Object.fromEntries(rows.map((row) => [row.eventId, row.count]));
+}
+
 export function isRegistrationOpen(event: {
   status: string;
   scoringStatus?: string;

@@ -81,6 +81,7 @@ export function buildCourseSelection(
     par: hole.par,
     yardage: hole.yardage ?? null,
     strokeIndex: hole.handicap_index ?? null,
+    ladiesStrokeIndex: hole.ladies_handicap_index ?? null,
   }));
 
   return {
