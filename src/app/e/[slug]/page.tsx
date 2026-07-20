@@ -5,7 +5,7 @@ import { Calendar, Clock, Flag, MapPin, Trophy } from "lucide-react";
 import {
   formatEventDate,
   formatFee,
-  getPublishedEventBySlug,
+  getPublicEventBySlug,
   getRegistrationCount,
   getPublicRegistrationMessage,
   isRegistrationOpen,
@@ -35,7 +35,7 @@ export default async function PublicEventPage({
 }: PublicEventPageProps) {
   const { slug } = await params;
   const { canceled } = await searchParams;
-  const event = await getPublishedEventBySlug(slug);
+  const event = await getPublicEventBySlug(slug);
 
   if (!event) {
     notFound();

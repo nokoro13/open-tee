@@ -12,12 +12,15 @@ import {
 import { getEventById, getEventByIdWithScorecard } from "@/actions/events";
 import { syncPublishIfPaid } from "@/actions/publish";
 import { CopyRegistrationLink } from "@/components/dashboard/copy-registration-link";
-import { CaddieModeCard } from "@/components/dashboard/caddie-mode-card";
 import { EventDetailTabs } from "@/components/dashboard/event-detail-tabs";
+import { EventSetupChecklist } from "@/components/dashboard/event-setup-checklist";
 import { EventForm } from "@/components/dashboard/event-form";
 import { PairingsPanel } from "@/components/dashboard/pairings-panel";
 import { PublishEventCard } from "@/components/dashboard/publish-event-card";
 import { RegistrationsList } from "@/components/dashboard/registrations-list";
+import { RegistrationWindowFields } from "@/components/dashboard/registration-window-fields";
+import { EventLifecycleCard } from "@/components/dashboard/event-lifecycle-card";
+import { PayoutInfoCard } from "@/components/dashboard/payout-info-card";
 import { ScoringCard } from "@/components/dashboard/scoring-card";
 import { StartFormatCard } from "@/components/dashboard/start-format-card";
 import { DeleteEventButton } from "@/components/dashboard/delete-event-button";
@@ -47,7 +50,6 @@ import { syncTeeTimesForEvent } from "@/actions/start-format";
 import { getEventPairings } from "@/lib/pairings";
 import { requireOrganization } from "@/lib/auth";
 import { getEventFormatLabel } from "@/lib/event-formats";
-import { getPublishedGolfCourseByExternalId } from "@/lib/golf-courses";
 import { cn } from "@/lib/utils";
 import type { Event } from "@/db/schema";
 
@@ -86,6 +88,22 @@ function StatusPill({ event }: { event: Event }) {
     return (
       <span className="inline-flex items-center rounded-full bg-secondary px-3 py-1 text-sm font-medium text-secondary-foreground">
         Draft
+      </span>
+    );
+  }
+
+  if (event.status === "closed") {
+    return (
+      <span className="inline-flex items-center rounded-full bg-amber-500/10 px-3 py-1 text-sm font-medium text-amber-800 dark:text-amber-300">
+        Registration closed
+      </span>
+    );
+  }
+
+  if (event.status === "archived") {
+    return (
+      <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-sm font-medium text-muted-foreground">
+        Archived
       </span>
     );
   }
@@ -150,15 +168,16 @@ export default async function EventDetailPage({
   }
 
   const isDraft = event.status === "draft";
+  const isOperationalEvent = !isDraft;
   const activeTab = parseEventTab(tab, isDraft);
   const registrationUrl = `${getAppUrl()}/e/${event.slug}`;
-  const registrationCount = await getRegistrationCount(event.id);
-  const registrations =
-    event.status === "published"
-      ? await getRegistrationsForEvent(event.id, org.id)
-      : [];
-  const pairings =
-    event.status === "published"
+  const registrationCount = isOperationalEvent
+    ? await getRegistrationCount(event.id)
+    : 0;
+  const registrations = isOperationalEvent
+    ? await getRegistrationsForEvent(event.id, org.id)
+    : [];
+  const pairings = isOperationalEvent
       ? await (async () => {
           if (event.scoringStatus !== "disabled") {
             await syncEventScoringCodes(event.id);
@@ -170,16 +189,20 @@ export default async function EventDetailPage({
         })()
       : null;
 
-  const publishedGolfCourse = event.externalCourseId
-    ? await getPublishedGolfCourseByExternalId(event.externalCourseId)
-    : null;
-
   const nextStep = getCurrentSetupStep({
+    eventId: event.id,
     isDraft,
     registrationCount,
     pairings,
     scoringStatus: event.scoringStatus,
   });
+
+  const showNextStepBanner =
+    nextStep &&
+    ((isDraft && activeTab === "details") ||
+      (!isDraft &&
+        activeTab !== "overview" &&
+        (nextStep.href != null || nextStep.tab !== activeTab)));
 
   const countdown = formatDaysUntilEvent(event.date);
   const eventUpcoming = getDaysUntilEvent(event.date) >= 0;
@@ -204,7 +227,7 @@ export default async function EventDetailPage({
           Events
         </ButtonLink>
 
-        {event.status === "published" && (
+        {isOperationalEvent && (
           <div className="flex gap-2">
             <ButtonLink
               variant="ghost"
@@ -264,7 +287,7 @@ export default async function EventDetailPage({
         </div>
 
         {/* Stats */}
-        {event.status === "published" && (
+        {isOperationalEvent && (
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <StatTile
               label="Players"
@@ -326,28 +349,29 @@ export default async function EventDetailPage({
       </header>
 
       <div className="mt-8 space-y-6">
-        {/* Next step */}
-        {nextStep &&
-          ((isDraft && activeTab === "details") ||
-            (!isDraft && activeTab === "overview")) && (
+        {/* Next step — only when it navigates to a different tab */}
+        {showNextStepBanner && (
             <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-primary p-5 text-primary-foreground shadow-sm sm:p-6">
               <div className="min-w-0">
                 <p className="text-xs font-medium uppercase tracking-wide opacity-80">
                   Up next
                 </p>
                 <p className="mt-1 font-heading text-lg font-semibold">
-                  {nextStep.label}
+                  {nextStep!.label}
                 </p>
                 <p className="mt-0.5 text-sm opacity-90">
-                  {nextStep.description}
+                  {nextStep!.description}
                 </p>
               </div>
               <ButtonLink
-                href={eventTabHref(event.id, nextStep.tab)}
+                href={nextStep!.href ?? eventTabHref(event.id, nextStep!.tab)}
                 variant="secondary"
                 className="shrink-0 bg-primary-foreground text-primary hover:bg-primary-foreground/90"
+                {...(nextStep!.href
+                  ? { target: "_blank", rel: "noopener noreferrer" }
+                  : {})}
               >
-                Continue
+                {nextStep!.href ? "Print" : "Continue"}
                 <ArrowRight />
               </ButtonLink>
             </div>
@@ -396,8 +420,16 @@ export default async function EventDetailPage({
         )}
 
         {/* Published: overview */}
-        {event.status === "published" && activeTab === "overview" && (
+        {isOperationalEvent && activeTab === "overview" && (
           <>
+            <EventSetupChecklist
+              eventId={event.id}
+              registrationCount={registrationCount}
+              maxPlayers={event.maxPlayers}
+              pairings={pairings}
+              scoringStatus={event.scoringStatus}
+            />
+
             <Card className="rounded-2xl">
               <CardHeader>
                 <CardTitle>Registration link</CardTitle>
@@ -432,30 +464,23 @@ export default async function EventDetailPage({
               }}
             />
 
-            <CaddieModeCard
-              eventSlug={event.slug}
-              externalCourseId={event.externalCourseId}
-              courseName={event.courseName}
-              publishedMapAvailable={publishedGolfCourse != null}
-              publishedMappedHoles={publishedGolfCourse?.mappedHoleCount ?? 0}
-              dataQuality={publishedGolfCourse?.dataQuality ?? null}
-            />
           </>
         )}
 
         {/* Published: players */}
-        {event.status === "published" && activeTab === "players" && (
+        {isOperationalEvent && activeTab === "players" && (
           <RegistrationsList
             eventId={event.id}
             registrations={registrations}
             registrationCount={registrationCount}
             maxPlayers={event.maxPlayers}
             scoringStatus={event.scoringStatus}
+            eventStatus={event.status}
           />
         )}
 
         {/* Published: pairings */}
-        {event.status === "published" && activeTab === "pairings" && (
+        {isOperationalEvent && activeTab === "pairings" && (
           pairings && (
             <PairingsPanel
                 eventId={event.id}
@@ -476,7 +501,7 @@ export default async function EventDetailPage({
         )}
 
         {/* Published: scoring */}
-        {event.status === "published" && activeTab === "scoring" && (
+        {isOperationalEvent && activeTab === "scoring" && (
           <ScoringCard
             eventId={event.id}
             slug={event.slug}
@@ -487,75 +512,100 @@ export default async function EventDetailPage({
         )}
 
         {/* Published: settings */}
-        {event.status === "published" && activeTab === "settings" && (
-          <Card className="rounded-2xl">
-            <CardHeader>
-              <CardTitle>Event settings</CardTitle>
-              <CardDescription>
-                Published events are read-only. Contact support to request
-                changes.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-8">
-              <dl className="grid gap-x-8 gap-y-5 text-sm sm:grid-cols-2">
-                {[
-                  { label: "Course", value: event.courseName },
-                  { label: "Date", value: formatEventHeaderDate(event.date) },
-                  {
-                    label: "Format",
-                    value: `${getEventFormatLabel(event.format)} · ${event.holes} holes`,
-                  },
-                  {
-                    label: "Entry fee",
-                    value:
-                      event.entryFeeCents === 0
-                        ? "Free"
-                        : `$${(event.entryFeeCents / 100).toFixed(2)}`,
-                  },
-                  { label: "Capacity", value: `${event.maxPlayers} players` },
-                  ...(eventWithScorecard?.eventHoles &&
-                  eventWithScorecard.eventHoles.length > 0
-                    ? [
-                        {
-                          label: "Scorecard",
-                          value: `Par ${eventWithScorecard.eventHoles.reduce(
-                            (sum, hole) => sum + hole.par,
-                            0
-                          )} · ${eventWithScorecard.eventHoles.length} holes`,
-                        },
-                      ]
-                    : []),
-                ].map((row) => (
-                  <div
-                    key={row.label}
-                    className="flex items-baseline justify-between gap-4 border-b border-border/60 pb-3"
-                  >
-                    <dt className="text-muted-foreground">{row.label}</dt>
-                    <dd className="text-right font-medium">{row.value}</dd>
-                  </div>
-                ))}
-              </dl>
+        {isOperationalEvent && activeTab === "settings" && (
+          <div className="space-y-6">
+            <EventLifecycleCard event={event} />
 
-              <div
-                className={cn(
-                  "rounded-xl border border-destructive/20 bg-destructive/5 p-4"
-                )}
-              >
-                <h3 className="text-sm font-medium">Danger zone</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Permanently delete this event, including registrations,
-                  pairings, and scores.
-                </p>
-                <div className="mt-4">
-                  <DeleteEventButton
+            {event.status === "published" && (
+              <Card className="rounded-2xl">
+                <CardHeader>
+                  <CardTitle>Registration window</CardTitle>
+                  <CardDescription>
+                    Set when players can register. Leave blank to use defaults.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <RegistrationWindowFields
                     eventId={event.id}
-                    eventName={event.name}
-                    status={event.status}
+                    opensAt={event.registrationOpens}
+                    closesAt={event.registrationCloses}
+                    editable
                   />
+                </CardContent>
+              </Card>
+            )}
+
+            <PayoutInfoCard />
+
+            <Card className="rounded-2xl">
+              <CardHeader>
+                <CardTitle>Event details</CardTitle>
+                <CardDescription>
+                  Core settings for this event. Contact support if you need to
+                  change course or format after publishing.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-8">
+                <dl className="grid gap-x-8 gap-y-5 text-sm sm:grid-cols-2">
+                  {[
+                    { label: "Course", value: event.courseName },
+                    { label: "Date", value: formatEventHeaderDate(event.date) },
+                    {
+                      label: "Format",
+                      value: `${getEventFormatLabel(event.format)} · ${event.holes} holes`,
+                    },
+                    {
+                      label: "Entry fee",
+                      value:
+                        event.entryFeeCents === 0
+                          ? "Free"
+                          : `$${(event.entryFeeCents / 100).toFixed(2)}`,
+                    },
+                    { label: "Capacity", value: `${event.maxPlayers} players` },
+                    ...(eventWithScorecard?.eventHoles &&
+                    eventWithScorecard.eventHoles.length > 0
+                      ? [
+                          {
+                            label: "Scorecard",
+                            value: `Par ${eventWithScorecard.eventHoles.reduce(
+                              (sum, hole) => sum + hole.par,
+                              0
+                            )} · ${eventWithScorecard.eventHoles.length} holes`,
+                          },
+                        ]
+                      : []),
+                  ].map((row) => (
+                    <div
+                      key={row.label}
+                      className="flex items-baseline justify-between gap-4 border-b border-border/60 pb-3"
+                    >
+                      <dt className="text-muted-foreground">{row.label}</dt>
+                      <dd className="text-right font-medium">{row.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+
+                <div
+                  className={cn(
+                    "rounded-xl border border-destructive/20 bg-destructive/5 p-4"
+                  )}
+                >
+                  <h3 className="text-sm font-medium">Danger zone</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Permanently delete this event, including registrations,
+                    pairings, and scores.
+                  </p>
+                  <div className="mt-4">
+                    <DeleteEventButton
+                      eventId={event.id}
+                      eventName={event.name}
+                      status={event.status}
+                    />
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </div>
         )}
       </div>
     </div>

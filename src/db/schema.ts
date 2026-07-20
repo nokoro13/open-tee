@@ -165,6 +165,7 @@ export const events = pgTable("events", {
   registrationOpens: timestamp("registration_opens", { withTimezone: true }),
   registrationCloses: timestamp("registration_closes", { withTimezone: true }),
   platformPaidAt: timestamp("platform_paid_at", { withTimezone: true }),
+  reminderSentAt: timestamp("reminder_sent_at", { withTimezone: true }),
   stripePlatformSessionId: text("stripe_platform_session_id"),
   scoringStatus: scoringStatusEnum("scoring_status").notNull().default("disabled"),
   scoringCode: text("scoring_code"),

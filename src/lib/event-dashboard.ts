@@ -94,15 +94,114 @@ export type SetupStep = {
   label: string;
   description: string;
   tab: EventTab;
+  /** When set, overrides tab navigation (e.g. print scorecards). */
+  href?: string;
 };
 
+export type SetupChecklistItem = {
+  id: string;
+  label: string;
+  description: string;
+  tab: PublishedEventTab;
+  href?: string;
+  done: boolean;
+};
+
+export function getEventSetupChecklist(options: {
+  eventId: string;
+  registrationCount: number;
+  maxPlayers: number;
+  pairings: EventPairings | null;
+  scoringStatus: Event["scoringStatus"];
+}): SetupChecklistItem[] {
+  const { eventId, registrationCount, maxPlayers, pairings, scoringStatus } =
+    options;
+
+  const pairingsReady =
+    pairings != null &&
+    pairings.groups.length > 0 &&
+    pairings.unassigned.length === 0;
+
+  const scorecardsPrinted = pairingsReady && scoringStatus !== "disabled";
+
+  const registrationDetail =
+    registrationCount === 0
+      ? "Copy your registration link below and send it to players."
+      : maxPlayers > 0
+        ? `${registrationCount} of ${maxPlayers} spots filled.`
+        : `${registrationCount} player${registrationCount === 1 ? "" : "s"} registered.`;
+
+  const pairingsDetail = pairingsReady
+    ? `${pairings!.groups.length} group${pairings!.groups.length === 1 ? "" : "s"} assigned.`
+    : pairings != null && pairings.unassigned.length > 0
+      ? `${pairings.unassigned.length} player${pairings.unassigned.length === 1 ? "" : "s"} still unassigned.`
+      : "Assign registered players to groups.";
+
+  const printDetail = !pairingsReady
+    ? "Complete pairings first, then print one scorecard per group."
+    : scorecardsPrinted
+      ? "Scorecards ready for tournament day."
+      : pairings!.groups.length === 1
+        ? "Print the group scorecard with QR codes for digital scoring."
+        : `Print ${pairings!.groups.length} group scorecards with QR codes for digital scoring.`;
+
+  return [
+    {
+      id: "registrations",
+      label: "Share registration link",
+      description: registrationDetail,
+      tab: "overview",
+      done: registrationCount > 0,
+    },
+    {
+      id: "pairings",
+      label: "Build pairings",
+      description: pairingsDetail,
+      tab: "pairings",
+      done: pairingsReady,
+    },
+    {
+      id: "print-scorecards",
+      label: "Print scorecards",
+      description: printDetail,
+      tab: "pairings",
+      href: `/print/events/${eventId}/scorecards`,
+      done: scorecardsPrinted,
+    },
+    {
+      id: "scoring",
+      label: "Open scoring",
+      description:
+        scoringStatus === "disabled"
+          ? "Send scoring links when groups tee off."
+          : scoringStatus === "open"
+            ? "Players are entering scores."
+            : "Scoring is complete.",
+      tab: "scoring",
+      done: scoringStatus !== "disabled",
+    },
+    {
+      id: "finalize",
+      label: "Finalize results",
+      description:
+        scoringStatus === "finalized"
+          ? "Final leaderboard is published."
+          : "Lock scores and publish the final leaderboard.",
+      tab: "scoring",
+      done: scoringStatus === "finalized",
+    },
+  ];
+}
+
 export function getCurrentSetupStep(options: {
+  eventId: string;
   isDraft: boolean;
   registrationCount: number;
   pairings: EventPairings | null;
   scoringStatus: Event["scoringStatus"];
 }): SetupStep | null {
-  const { isDraft, registrationCount, pairings, scoringStatus } = options;
+  const { eventId, isDraft, registrationCount, pairings, scoringStatus } =
+    options;
 
   if (isDraft) {
     return {
@@ -130,16 +229,17 @@ export function getCurrentSetupStep(options: {
   if (!pairingsReady) {
     return {
       label: "Build pairings",
-      description: "Assign registered players to groups and print scorecards.",
+      description: "Assign registered players to groups.",
       tab: "pairings",
     };
   }
 
   if (scoringStatus === "disabled") {
     return {
-      label: "Open scoring",
-      description: "Send scoring links when groups are on the course.",
-      tab: "scoring",
+      label: "Print scorecards",
+      description: "Print one scorecard per group with QR codes for digital scoring.",
+      tab: "pairings",
+      href: `/print/events/${eventId}/scorecards`,
     };
   }
 

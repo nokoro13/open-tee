@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { getDb } from "@/db";
-import { registrations } from "@/db/schema";
+import { registrations, events } from "@/db/schema";
 import { sendRegistrationConfirmationEmail } from "@/lib/email";
 import { validateHandicapInput } from "@/lib/handicap-strokes";
 import { syncRegistrationScoringCode } from "@/actions/scoring";
@@ -15,6 +15,7 @@ import {
   getPublishedEventBySlug,
   getRegistrationCount,
   getPublicRegistrationMessage,
+  isOperationalEventStatus,
   isRegistrationOpen,
 } from "@/lib/events";
 import { getAppUrl, getStripe } from "@/lib/stripe";
@@ -267,6 +268,153 @@ export async function updateRegistration(
   revalidatePath(`/dashboard/events/${input.eventId}`);
   revalidatePath(`/print/events/${input.eventId}/scorecards`);
 
+  return { success: true };
+}
+
+export async function compRegistration(
+  registrationId: string,
+  eventId: string
+): Promise<ActionResult> {
+  const org = await requireOrganization();
+
+  const registration = await getDb().query.registrations.findFirst({
+    where: eq(registrations.id, registrationId),
+    with: { event: true },
+  });
+
+  if (!registration || registration.eventId !== eventId) {
+    return { success: false, error: "Registration not found." };
+  }
+
+  if (registration.event.orgId !== org.id) {
+    return { success: false, error: "Registration not found." };
+  }
+
+  if (!isOperationalEventStatus(registration.event.status)) {
+    return {
+      success: false,
+      error: "Comp entries can only be added to live events.",
+    };
+  }
+
+  if (registration.paymentStatus === "comped") {
+    return { success: false, error: "This player is already comped." };
+  }
+
+  if (registration.paymentStatus === "paid") {
+    return {
+      success: false,
+      error:
+        "This player already paid. Issue a refund in Stripe, then comp or re-register them.",
+    };
+  }
+
+  await getDb()
+    .update(registrations)
+    .set({
+      paymentStatus: "comped",
+      updatedAt: new Date(),
+    })
+    .where(eq(registrations.id, registrationId));
+
+  await syncRegistrationScoringCode(registrationId);
+
+  const event = registration.event;
+  const appUrl = getAppUrl();
+
+  try {
+    await sendRegistrationConfirmationEmail({
+      to: registration.email,
+      playerName: registration.name,
+      eventName: event.name,
+      eventDate: event.date,
+      courseName: event.courseName,
+      entryFeeCents: 0,
+      eventUrl: `${appUrl}/e/${event.slug}`,
+    });
+  } catch {
+    // Non-fatal
+  }
+
+  revalidatePath(`/dashboard/events/${eventId}`);
+  revalidatePath(`/e/${event.slug}`);
+  return { success: true };
+}
+
+export async function addCompRegistration(
+  eventId: string,
+  input: RegistrationInput
+): Promise<ActionResult> {
+  const parsed = parseRegistrationInput(input);
+  if ("success" in parsed) {
+    return parsed;
+  }
+
+  const org = await requireOrganization();
+  const event = await getDb().query.events.findFirst({
+    where: and(eq(events.id, eventId), eq(events.orgId, org.id)),
+  });
+
+  if (!event) {
+    return { success: false, error: "Event not found." };
+  }
+
+  if (!isOperationalEventStatus(event.status)) {
+    return { success: false, error: "Comp entries can only be added to live events." };
+  }
+
+  const count = await getRegistrationCount(event.id);
+  if (count >= event.maxPlayers) {
+    return { success: false, error: "This event is at capacity." };
+  }
+
+  const existing = await getDb().query.registrations.findFirst({
+    where: and(
+      eq(registrations.eventId, event.id),
+      eq(registrations.email, parsed.email)
+    ),
+  });
+
+  if (existing) {
+    return {
+      success: false,
+      error: "This email is already registered. Edit the existing registration instead.",
+    };
+  }
+
+  const [registration] = await getDb()
+    .insert(registrations)
+    .values({
+      eventId: event.id,
+      name: parsed.name,
+      email: parsed.email,
+      handicap: parsed.handicap ?? null,
+      paymentStatus: "comped",
+    })
+    .returning({ id: registrations.id });
+
+  if (registration) {
+    await syncRegistrationScoringCode(registration.id);
+  }
+
+  const appUrl = getAppUrl();
+
+  try {
+    await sendRegistrationConfirmationEmail({
+      to: parsed.email,
+      playerName: parsed.name,
+      eventName: event.name,
+      eventDate: event.date,
+      courseName: event.courseName,
+      entryFeeCents: 0,
+      eventUrl: `${appUrl}/e/${event.slug}`,
+    });
+  } catch {
+    // Non-fatal
+  }
+
+  revalidatePath(`/dashboard/events/${eventId}`);
+  revalidatePath(`/e/${event.slug}`);
   return { success: true };
 }
 

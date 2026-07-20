@@ -13,6 +13,7 @@ import { getDb } from "@/db";
 import { pairingGroups, registrations } from "@/db/schema";
 import { requireOrganization } from "@/lib/auth";
 import { assertEventSetupUnlocked } from "@/lib/event-setup-lock";
+import { isOperationalEventStatus } from "@/lib/events";
 
 export type ActionResult =
   | { success: true }
@@ -31,10 +32,10 @@ async function requirePublishedEvent(
     return { ok: false, error: "Event not found." };
   }
 
-  if (event.status !== "published") {
+  if (!isOperationalEventStatus(event.status)) {
     return {
       ok: false,
-      error: "Pairings are only available for published events.",
+      error: "Pairings are only available for live events.",
     };
   }
 
@@ -105,7 +106,7 @@ export async function updatePairingGroup(
     return { success: false, error: "Group not found." };
   }
 
-  if (group.event.status !== "published") {
+  if (!isOperationalEventStatus(group.event.status)) {
     return { success: false, error: "Pairings are only available for published events." };
   }
 
@@ -155,7 +156,7 @@ export async function deletePairingGroup(groupId: string): Promise<ActionResult>
     return { success: false, error: "Group not found." };
   }
 
-  if (group.event.status !== "published") {
+  if (!isOperationalEventStatus(group.event.status)) {
     return { success: false, error: "Pairings are only available for published events." };
   }
 
@@ -185,7 +186,7 @@ export async function assignRegistrationToGroup(
     return { success: false, error: "Registration not found." };
   }
 
-  if (registration.event.status !== "published") {
+  if (!isOperationalEventStatus(registration.event.status)) {
     return { success: false, error: "Pairings are only available for published events." };
   }
 
@@ -234,7 +235,7 @@ export async function assignRegistrationTeamSide(
     return { success: false, error: "Registration not found." };
   }
 
-  if (registration.event.status !== "published") {
+  if (!isOperationalEventStatus(registration.event.status)) {
     return { success: false, error: "Pairings are only available for published events." };
   }
 

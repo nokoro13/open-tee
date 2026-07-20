@@ -8,6 +8,7 @@ import { getDb } from "@/db";
 import { events, holeScores, pairingGroups, registrations } from "@/db/schema";
 import { requireOrganization } from "@/lib/auth";
 import { sendScoringLinkEmail } from "@/lib/email";
+import { isOperationalEventStatus } from "@/lib/events";
 import { isTeamHoleScoring } from "@/lib/event-formats";
 import { getEventPairings, type EventPairings } from "@/lib/pairings";
 import { getGroupScorePageUrl } from "@/lib/scoring-code-storage";
@@ -168,10 +169,10 @@ async function requirePublishedEvent(eventId: string) {
     return { ok: false as const, error: "Event not found." };
   }
 
-  if (event.status !== "published") {
+  if (!isOperationalEventStatus(event.status)) {
     return {
       ok: false as const,
-      error: "Scoring is only available for published events.",
+      error: "Scoring is only available for live events.",
     };
   }
 

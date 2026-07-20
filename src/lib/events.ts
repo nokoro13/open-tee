@@ -3,9 +3,25 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { events, organizations, registrations } from "@/db/schema";
 
+export const PUBLIC_EVENT_STATUSES = ["published", "closed", "archived"] as const;
+
+export type PublicEventStatus = (typeof PUBLIC_EVENT_STATUSES)[number];
+
 export async function getPublishedEventBySlug(slug: string) {
   return getDb().query.events.findFirst({
     where: and(eq(events.slug, slug), eq(events.status, "published")),
+    with: {
+      organization: true,
+    },
+  });
+}
+
+export async function getPublicEventBySlug(slug: string) {
+  return getDb().query.events.findFirst({
+    where: and(
+      eq(events.slug, slug),
+      inArray(events.status, [...PUBLIC_EVENT_STATUSES])
+    ),
     with: {
       organization: true,
     },
@@ -48,6 +64,10 @@ export async function getRegistrationCountsByEventIds(
   return Object.fromEntries(rows.map((row) => [row.eventId, row.count]));
 }
 
+export function isOperationalEventStatus(status: string): boolean {
+  return status === "published" || status === "closed";
+}
+
 export function isRegistrationOpen(event: {
   status: string;
   scoringStatus?: string;
@@ -72,6 +92,12 @@ export function getPublicRegistrationMessage(event: {
   registrationCloses: Date | null;
   status: string;
 }): string {
+  if (event.status === "archived") {
+    return "This event has ended.";
+  }
+  if (event.status === "closed") {
+    return "Registration is closed for this event.";
+  }
   if (event.scoringStatus === "open") {
     return "Registration is closed — the tournament is underway.";
   }

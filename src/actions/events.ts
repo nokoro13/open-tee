@@ -16,6 +16,10 @@ import { getEventFormat } from "@/lib/event-formats";
 import { generateEventSlug } from "@/lib/slug";
 import type { StartFormat } from "@/lib/start-format";
 import {
+  parseRegistrationWindowInput,
+  type RegistrationWindowInput,
+} from "@/lib/registration-window";
+import {
   DEFAULT_FIRST_TEE_TIME,
   DEFAULT_SHOTGUN_START_TIME,
   DEFAULT_TEE_TIME_INTERVAL_MINUTES,
@@ -50,6 +54,10 @@ export type EventFormInput = {
   shotgunStartTime?: string | null;
   firstTeeTime?: string | null;
   teeTimeIntervalMinutes?: number | null;
+  opensDate?: string | null;
+  opensTime?: string | null;
+  closesDate?: string | null;
+  closesTime?: string | null;
 };
 
 export type ActionResult =
@@ -95,7 +103,33 @@ function parseEventInput(input: EventFormInput): EventFormInput | ActionResult {
     return { success: false, error: startFormatError };
   }
 
+  const windowResult = parseRegistrationWindowInput({
+    opensDate: input.opensDate ?? "",
+    opensTime: input.opensTime ?? "",
+    closesDate: input.closesDate ?? "",
+    closesTime: input.closesTime ?? "",
+  });
+  if ("error" in windowResult) {
+    return { success: false, error: windowResult.error };
+  }
+
   return input;
+}
+
+function registrationWindowValues(input: EventFormInput) {
+  const parsed = parseRegistrationWindowInput({
+    opensDate: input.opensDate ?? "",
+    opensTime: input.opensTime ?? "",
+    closesDate: input.closesDate ?? "",
+    closesTime: input.closesTime ?? "",
+  });
+  if ("error" in parsed) {
+    return { registrationOpens: null, registrationCloses: null };
+  }
+  return {
+    registrationOpens: parsed.opens,
+    registrationCloses: parsed.closes,
+  };
 }
 
 function startFormatValues(input: EventFormInput) {
@@ -216,6 +250,7 @@ export async function createEvent(
       teamBName:
         parsed.format === "ryder_cup" ? parsed.teamBName?.trim() || null : null,
       ...startFormatValues(parsed),
+      ...registrationWindowValues(parsed),
       status: "draft",
     })
     .returning();
@@ -268,6 +303,7 @@ export async function updateEvent(
       teamBName:
         parsed.format === "ryder_cup" ? parsed.teamBName?.trim() || null : null,
       ...startFormatValues(parsed),
+      ...registrationWindowValues(parsed),
       updatedAt: new Date(),
     })
     .where(and(eq(events.id, id), eq(events.orgId, org.id)));
@@ -293,4 +329,136 @@ export async function deleteEvent(id: string): Promise<ActionResult> {
 
   revalidatePath("/dashboard");
   redirect("/dashboard");
+}
+
+export async function updateRegistrationWindow(
+  eventId: string,
+  input: RegistrationWindowInput
+): Promise<ActionResult> {
+  const org = await requireOrganization();
+  const existing = await getEventById(eventId);
+
+  if (!existing) {
+    return { success: false, error: "Event not found." };
+  }
+
+  if (existing.status !== "published") {
+    return {
+      success: false,
+      error: "Registration window can only be updated for live events.",
+    };
+  }
+
+  const windowResult = parseRegistrationWindowInput(input);
+  if ("error" in windowResult) {
+    return { success: false, error: windowResult.error };
+  }
+
+  await getDb()
+    .update(events)
+    .set({
+      registrationOpens: windowResult.opens,
+      registrationCloses: windowResult.closes,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(events.id, eventId), eq(events.orgId, org.id)));
+
+  revalidatePath(`/dashboard/events/${eventId}`);
+  revalidatePath(`/e/${existing.slug}`);
+  return { success: true };
+}
+
+export async function closeEventRegistration(eventId: string): Promise<ActionResult> {
+  const org = await requireOrganization();
+  const existing = await getEventById(eventId);
+
+  if (!existing) {
+    return { success: false, error: "Event not found." };
+  }
+
+  if (existing.status !== "published") {
+    return { success: false, error: "Only live events can be closed." };
+  }
+
+  const now = new Date();
+
+  await getDb()
+    .update(events)
+    .set({
+      status: "closed",
+      registrationCloses: existing.registrationCloses ?? now,
+      updatedAt: now,
+    })
+    .where(and(eq(events.id, eventId), eq(events.orgId, org.id)));
+
+  revalidatePath("/dashboard");
+  revalidatePath(`/dashboard/events/${eventId}`);
+  revalidatePath(`/e/${existing.slug}`);
+  return { success: true };
+}
+
+export async function reopenEventRegistration(eventId: string): Promise<ActionResult> {
+  const org = await requireOrganization();
+  const existing = await getEventById(eventId);
+
+  if (!existing) {
+    return { success: false, error: "Event not found." };
+  }
+
+  if (existing.status !== "closed") {
+    return { success: false, error: "Only closed events can be reopened." };
+  }
+
+  if (existing.scoringStatus !== "disabled") {
+    return {
+      success: false,
+      error: "Cannot reopen registration after scoring has started.",
+    };
+  }
+
+  await getDb()
+    .update(events)
+    .set({
+      status: "published",
+      updatedAt: new Date(),
+    })
+    .where(and(eq(events.id, eventId), eq(events.orgId, org.id)));
+
+  revalidatePath("/dashboard");
+  revalidatePath(`/dashboard/events/${eventId}`);
+  revalidatePath(`/e/${existing.slug}`);
+  return { success: true };
+}
+
+export async function archiveEvent(eventId: string): Promise<ActionResult> {
+  const org = await requireOrganization();
+  const existing = await getEventById(eventId);
+
+  if (!existing) {
+    return { success: false, error: "Event not found." };
+  }
+
+  if (existing.status === "draft") {
+    return { success: false, error: "Draft events should be deleted, not archived." };
+  }
+
+  if (existing.status === "archived") {
+    return { success: false, error: "Event is already archived." };
+  }
+
+  const now = new Date();
+
+  await getDb()
+    .update(events)
+    .set({
+      status: "archived",
+      registrationCloses: existing.registrationCloses ?? now,
+      updatedAt: now,
+    })
+    .where(and(eq(events.id, eventId), eq(events.orgId, org.id)));
+
+  revalidatePath("/dashboard");
+  revalidatePath(`/dashboard/events/${eventId}`);
+  revalidatePath(`/e/${existing.slug}`);
+  return { success: true };
 }

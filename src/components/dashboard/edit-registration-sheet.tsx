@@ -32,11 +32,15 @@ import {
 type EditRegistrationSheetProps = {
   eventId: string;
   registration: Registration;
+  canComp?: boolean;
+  onComp?: () => Promise<{ success: boolean; error?: string }>;
 };
 
 export function EditRegistrationSheet({
   eventId,
   registration,
+  canComp = false,
+  onComp,
 }: EditRegistrationSheetProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -89,6 +93,21 @@ export function EditRegistrationSheet({
         return;
       }
 
+      setOpen(false);
+      router.refresh();
+    });
+  }
+
+  function handleComp() {
+    if (!onComp) return;
+    setError(null);
+
+    startTransition(async () => {
+      const result = await onComp();
+      if (!result.success) {
+        setError(result.error ?? "Could not comp this player.");
+        return;
+      }
       setOpen(false);
       router.refresh();
     });
@@ -178,8 +197,19 @@ export function EditRegistrationSheet({
 
           {error && <FieldError>{error}</FieldError>}
 
-          <SheetFooter className="px-0">
-            <Button type="submit" disabled={isPending}>
+          <SheetFooter className="flex-col gap-2 px-0 sm:flex-col">
+            {canComp && onComp && (
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={isPending}
+                onClick={handleComp}
+                className="w-full"
+              >
+                {isPending ? "Updating..." : "Mark as comp (free entry)"}
+              </Button>
+            )}
+            <Button type="submit" disabled={isPending} className="w-full">
               {isPending ? "Saving..." : "Save changes"}
             </Button>
           </SheetFooter>

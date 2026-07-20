@@ -20,7 +20,7 @@ export default async function NewEventPage({ searchParams }: NewEventPageProps) 
   const formatMeta = format ? getEventFormat(format) : undefined;
 
   return (
-    <div className="mx-auto w-full min-w-0 space-y-5 pb-2 sm:space-y-6">
+    <div className="mx-auto w-full max-w-5xl min-w-0 space-y-5 pb-2 sm:space-y-6">
       <div className="min-w-0">
         <h1 className="text-xl font-semibold tracking-tight sm:text-3xl">
           {formatMeta ? `New ${formatMeta.label} event` : "New event"}

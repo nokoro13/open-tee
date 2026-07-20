@@ -8,6 +8,10 @@ import {
   type RegistrationInput,
 } from "@/actions/registrations";
 import { validateHandicapInput } from "@/lib/handicap-strokes";
+import {
+  REFUND_POLICY_DETAILS,
+  REFUND_POLICY_SUMMARY,
+} from "@/lib/refund-policy";
 import { Button } from "@/components/ui/button";
 import {
   Field,
@@ -166,6 +170,17 @@ export function RegistrationForm({
           </Link>
           .
         </p>
+        <details className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2 text-left text-xs text-muted-foreground">
+          <summary className="cursor-pointer font-medium text-foreground">
+            Refund policy
+          </summary>
+          <p className="mt-2 leading-relaxed">{REFUND_POLICY_SUMMARY}</p>
+          <ul className="mt-2 list-disc space-y-1 pl-4">
+            {REFUND_POLICY_DETAILS.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </details>
       </div>
     </form>
   );

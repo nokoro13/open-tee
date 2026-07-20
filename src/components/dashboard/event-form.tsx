@@ -57,6 +57,10 @@ import {
   StartFormatFields,
   type StartFormatFieldValues,
 } from "@/components/dashboard/start-format-fields";
+import {
+  draftRegistrationWindowValues,
+  RegistrationWindowFields,
+} from "@/components/dashboard/registration-window-fields";
 
 type EventFormProps = {
   event?: Event & { eventHoles?: EventHole[] };
@@ -93,6 +97,10 @@ export function EventForm({ event, defaultFormat }: EventFormProps) {
     () => defaultStartFormatFieldValues(event)
   );
 
+  const [registrationWindow, setRegistrationWindow] = useState(() =>
+    draftRegistrationWindowValues(event)
+  );
+
   const [form, setForm] = useState(() =>
     event
       ? {
@@ -124,6 +132,10 @@ export function EventForm({ event, defaultFormat }: EventFormProps) {
       ...form,
       ...startFormatValues,
       ...courseSelection,
+      opensDate: registrationWindow.opensDate,
+      opensTime: registrationWindow.opensTime,
+      closesDate: registrationWindow.closesDate,
+      closesTime: registrationWindow.closesTime,
       ...(form.format === "ryder_cup"
         ? {
             teamAName: form.teamAName,
@@ -332,6 +344,21 @@ export function EventForm({ event, defaultFormat }: EventFormProps) {
             />
             <FieldDescription>Use 0 for free events.</FieldDescription>
           </Field>
+        </div>
+
+        <div className="rounded-xl border border-border/70 bg-muted/10 p-4 sm:p-5">
+          <div className="mb-4">
+            <h3 className="text-sm font-semibold">Registration window</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Optional. Control when players can sign up after you publish.
+            </p>
+          </div>
+          <RegistrationWindowFields
+            opensAt={event?.registrationOpens ?? null}
+            closesAt={event?.registrationCloses ?? null}
+            draftValues={registrationWindow}
+            onDraftChange={setRegistrationWindow}
+          />
         </div>
 
         <Field>

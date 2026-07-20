@@ -166,3 +166,44 @@ export async function sendScoringLinkEmail({
     `,
   });
 }
+
+export async function sendEventReminderEmail({
+  to,
+  playerName,
+  eventName,
+  eventDate,
+  courseName,
+  eventUrl,
+}: {
+  to: string;
+  playerName: string;
+  eventName: string;
+  eventDate: string;
+  courseName: string;
+  eventUrl: string;
+}) {
+  await sendEmail({
+    from: getFromAddress(),
+    to,
+    subject: `Reminder — ${eventName} is tomorrow`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 560px; line-height: 1.5;">
+        <h1 style="font-size: 20px;">See you tomorrow, ${playerName}!</h1>
+        <p>This is a friendly reminder that <strong>${eventName}</strong> is coming up.</p>
+        <ul>
+          <li><strong>Date:</strong> ${formatEventDate(eventDate)}</li>
+          <li><strong>Course:</strong> ${courseName}</li>
+        </ul>
+        <p>Check the event page for tee times, pairings, and any last-minute updates.</p>
+        <p style="margin: 24px 0;">
+          <a href="${eventUrl}" style="display: inline-block; background: #1a5c3a; color: #fff; padding: 12px 20px; border-radius: 8px; text-decoration: none; font-weight: 600;">
+            View event details
+          </a>
+        </p>
+        <p style="color: #666; font-size: 14px;">
+          Questions about your registration? Contact your event organizer through the event page.
+        </p>
+      </div>
+    `,
+  });
+}

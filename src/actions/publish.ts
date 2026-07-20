@@ -91,7 +91,7 @@ export async function handlePlatformFeePaid(
     .set({
       status: "published",
       platformPaidAt: now,
-      registrationOpens: now,
+      registrationOpens: event.registrationOpens ?? now,
       stripePlatformSessionId: sessionId,
       updatedAt: now,
     })

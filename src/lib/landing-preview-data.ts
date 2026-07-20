@@ -42,6 +42,7 @@ function baseEvent(overrides: Partial<Event> = {}): Event {
     registrationOpens: null,
     registrationCloses: null,
     platformPaidAt: previewTimestamp,
+    reminderSentAt: null,
     stripePlatformSessionId: null,
     scoringStatus: "open",
     scoringCode: "MARSH1",
