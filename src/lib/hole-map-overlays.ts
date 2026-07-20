@@ -171,7 +171,12 @@ export function buildHoleMapScene(options: {
     preferredTeeKey = null,
     preferredTeeColor = null,
   } = options;
-  const view = computeHoleMapView({ features, targets, playerPosition });
+  const view = computeHoleMapView({
+    features,
+    targets,
+    playerPosition,
+    preferredTeeKey,
+  });
   if (!view) return null;
 
   const rawOverlays: HoleMapOverlay[] = [];
@@ -246,7 +251,7 @@ export function buildHoleMapScene(options: {
       distanceGuide = {
         from,
         to: targets.middle,
-        holeLinePath: extractHoleLinePath(features),
+        holeLinePath: extractHoleLinePath(features, preferredTeeKey),
         lineBreak: extractSharedLineBreak(features, preferredTeeKey),
         fromKind: includePlayer && playerPosition ? "player" : "tee",
         teeColor,

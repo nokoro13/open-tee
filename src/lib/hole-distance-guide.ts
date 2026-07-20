@@ -25,8 +25,25 @@ function lineStringToPath(geometry: unknown): LatLng[] {
 }
 
 export function extractHoleLinePath(
-  features: GeoJsonFeatureCollection
+  features: GeoJsonFeatureCollection,
+  preferredTeeKey?: string | null
 ): LatLng[] {
+  if (preferredTeeKey) {
+    for (const feature of features.features) {
+      if (feature.properties?.featureType !== "hole_line") continue;
+
+      const osmId =
+        typeof feature.properties?.osmId === "string"
+          ? feature.properties.osmId
+          : null;
+      const parsed = parseManualHoleLineOsmId(osmId);
+      if (parsed?.teeKey !== preferredTeeKey) continue;
+
+      const path = lineStringToPath(feature.geometry);
+      if (path.length >= 2) return path;
+    }
+  }
+
   let bestPath: LatLng[] = [];
   let bestSpan = -1;
 

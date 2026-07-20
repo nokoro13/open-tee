@@ -1,4 +1,8 @@
 import type { GeolocationPosition } from "@/hooks/use-geolocation";
+import {
+  parseManualHoleLineOsmId,
+  parseManualTeeOsmId,
+} from "@/lib/course-tees";
 import type { GreenTargets } from "@/lib/green-distance";
 import { yardsBetween } from "@/lib/green-distance";
 import type { GeoJsonFeatureCollection } from "@/lib/geojson";
@@ -70,6 +74,36 @@ function featureByType(features: GeoJsonFeatureCollection, type: string) {
   return features.features.find(
     (feature) => feature.properties?.featureType === type
   );
+}
+
+function featureOsmId(feature: GeoJsonFeatureCollection["features"][number]) {
+  const osmId = feature.properties?.osmId;
+  return typeof osmId === "string" ? osmId : null;
+}
+
+function teeFeatureForKey(
+  features: GeoJsonFeatureCollection,
+  teeKey: string
+) {
+  return features.features.find((feature) => {
+    if (feature.properties?.featureType !== "tee") return false;
+    return parseManualTeeOsmId(featureOsmId(feature))?.teeKey === teeKey;
+  });
+}
+
+function holeLineForTeeKey(
+  features: GeoJsonFeatureCollection,
+  teeKey: string
+) {
+  return features.features.find((feature) => {
+    if (feature.properties?.featureType !== "hole_line") return false;
+    return parseManualHoleLineOsmId(featureOsmId(feature))?.teeKey === teeKey;
+  });
+}
+
+function pointFromFeatureGeometry(geometry: unknown): Point | null {
+  const points = collectGeometryPoints(geometry);
+  return points[0] ?? null;
 }
 
 function boundsFromPoints(points: Point[]): HoleMapBounds | null {
@@ -159,11 +193,14 @@ export function bearingDegrees(from: Point, to: Point): number {
 
 function collectHoleExtentPoints(
   features: GeoJsonFeatureCollection,
-  targets: GreenTargets | null
+  targets: GreenTargets | null,
+  preferredTeeKey?: string | null
 ): Point[] {
   const points: Point[] = [];
 
-  const holeLine = featureByType(features, "hole_line");
+  const holeLine =
+    (preferredTeeKey ? holeLineForTeeKey(features, preferredTeeKey) : null) ??
+    featureByType(features, "hole_line");
   const green = featureByType(features, "green");
 
   if (holeLine) {
@@ -189,21 +226,39 @@ function collectHoleExtentPoints(
 
 function resolveTeePoint(
   features: GeoJsonFeatureCollection,
-  targets: GreenTargets | null
+  targets: GreenTargets | null,
+  preferredTeeKey?: string | null
 ): Point | null {
+  if (preferredTeeKey) {
+    const preferredTee = teeFeatureForKey(features, preferredTeeKey);
+    if (preferredTee?.geometry) {
+      const point = pointFromFeatureGeometry(preferredTee.geometry);
+      if (point) return point;
+    }
+
+    const preferredLine = holeLineForTeeKey(features, preferredTeeKey);
+    if (preferredLine?.geometry) {
+      const line = preferredLine.geometry as LineStringGeometry;
+      if (line.coordinates.length > 0) {
+        const [lng, lat] = line.coordinates[0]!;
+        return { lat, lng };
+      }
+    }
+  }
+
   const holeLine = featureByType(features, "hole_line");
   if (holeLine?.geometry) {
     const line = holeLine.geometry as LineStringGeometry;
     if (line.coordinates.length > 0) {
-      const [lng, lat] = line.coordinates[0];
+      const [lng, lat] = line.coordinates[0]!;
       return { lat, lng };
     }
   }
 
   const tee = featureByType(features, "tee");
   if (tee?.geometry) {
-    const points = collectGeometryPoints(tee.geometry);
-    if (points[0]) return points[0];
+    const point = pointFromFeatureGeometry(tee.geometry);
+    if (point) return point;
   }
 
   if (targets) return targets.front;
@@ -260,9 +315,13 @@ function resolveGreenPoint(
 function resolveHoleBearing(
   features: GeoJsonFeatureCollection,
   tee: Point | null,
-  green: Point | null
+  green: Point | null,
+  preferredTeeKey?: string | null
 ): number {
-  const holeLine = featureByType(features, "hole_line");
+  const holeLine =
+    (preferredTeeKey ? holeLineForTeeKey(features, preferredTeeKey) : null) ??
+    featureByType(features, "hole_line");
+
   if (holeLine?.geometry) {
     const line = holeLine.geometry as LineStringGeometry;
     if (line.coordinates.length >= 2) {
@@ -334,12 +393,17 @@ export function computeHoleMapView(options: {
   features: GeoJsonFeatureCollection;
   targets: GreenTargets | null;
   playerPosition: GeolocationPosition | null;
+  preferredTeeKey?: string | null;
 }): HoleMapView | null {
-  const { features, targets, playerPosition } = options;
+  const { features, targets, playerPosition, preferredTeeKey = null } = options;
 
-  const tee = resolveTeePoint(features, targets);
+  const tee = resolveTeePoint(features, targets, preferredTeeKey);
   const back = resolveBackPoint(features, targets, tee);
-  let extentPoints = collectHoleExtentPoints(features, targets);
+  let extentPoints = collectHoleExtentPoints(
+    features,
+    targets,
+    preferredTeeKey
+  );
 
   if (tee && !extentPoints.some((point) => point.lat === tee.lat && point.lng === tee.lng)) {
     extentPoints.push(tee);
@@ -371,7 +435,7 @@ export function computeHoleMapView(options: {
   }
 
   const green = resolveGreenPoint(features, targets, back);
-  const bearing = resolveHoleBearing(features, tee, green);
+  const bearing = resolveHoleBearing(features, tee, green, preferredTeeKey);
 
   const center =
     tee && green

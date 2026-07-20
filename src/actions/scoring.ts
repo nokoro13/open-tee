@@ -12,14 +12,18 @@ import { isTeamHoleScoring } from "@/lib/event-formats";
 import { getEventPairings, type EventPairings } from "@/lib/pairings";
 import { getGroupScorePageUrl } from "@/lib/scoring-code-storage";
 import { getAppUrl } from "@/lib/stripe";
+import { validatePriorHolesComplete } from "@/lib/score-entry-utils";
 import {
   canEditScoringGroup,
   generateScoringCode,
   getHoleCount,
+  getHoleNumbers,
   getPublishedEventForScoring,
   getScoreEntryGroups,
+  getScoresForEvent,
   isScoringEditable,
   resolveScoringAccess,
+  scoresToMap,
 } from "@/lib/scoring";
 
 export type ActionResult =
@@ -576,6 +580,38 @@ export async function saveHoleScores(
   const allowedRegistrationIds = new Set(
     targetGroup.players.map((player) => player.id)
   );
+
+  const holeNumbers = getHoleNumbers(event.holes);
+  const entryIds = isTeamHoleScoring(input.format, input.matchType)
+    ? targetGroup.entrySides.map((side) => side.id)
+    : targetGroup.players.map((player) => player.id);
+  const existingScores = await getScoresForEvent(event.id);
+  const scoreMap = scoresToMap(
+    existingScores,
+    event.format,
+    scoreGroups.map((group) => ({
+      id: group.id,
+      matchType: group.matchType ?? null,
+    }))
+  );
+  const savedScores: Record<string, Record<number, number>> = {};
+
+  for (const entryId of entryIds) {
+    const holeMap = scoreMap.get(entryId);
+    if (holeMap) {
+      savedScores[entryId] = Object.fromEntries(holeMap);
+    }
+  }
+
+  const priorHoleError = validatePriorHolesComplete(
+    input.holeNumber,
+    holeNumbers,
+    entryIds,
+    savedScores
+  );
+  if (priorHoleError) {
+    return { success: false, error: priorHoleError };
+  }
 
   const now = new Date();
 

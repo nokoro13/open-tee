@@ -133,6 +133,60 @@ export function computeMatchRunningScore(
   };
 }
 
+export function isHoleCompleteForEntries(
+  hole: number,
+  entryIds: string[],
+  scores: Record<string, Record<number, number>>
+): boolean {
+  return entryIds.every((id) => scores[id]?.[hole] != null);
+}
+
+/** First hole that still needs scores confirmed, in course order. */
+export function findFirstUnconfirmedHoleIndex(
+  holeNumbers: number[],
+  confirmedHoles: ReadonlySet<number>
+): number {
+  for (let i = 0; i < holeNumbers.length; i++) {
+    if (!confirmedHoles.has(holeNumbers[i]!)) return i;
+  }
+  return Math.max(0, holeNumbers.length - 1);
+}
+
+/** Whether the scorer may enter or edit scores on this hole. */
+export function canEnterScoresForHole(
+  holeNumber: number,
+  holeNumbers: number[],
+  confirmedHoles: ReadonlySet<number>
+): boolean {
+  const targetIndex = holeNumbers.indexOf(holeNumber);
+  if (targetIndex === -1) return false;
+
+  const requiredIndex = findFirstUnconfirmedHoleIndex(
+    holeNumbers,
+    confirmedHoles
+  );
+  return targetIndex <= requiredIndex;
+}
+
+export function validatePriorHolesComplete(
+  holeNumber: number,
+  holeNumbers: number[],
+  entryIds: string[],
+  scores: Record<string, Record<number, number>>
+): string | null {
+  const targetIndex = holeNumbers.indexOf(holeNumber);
+  if (targetIndex <= 0) return null;
+
+  for (let i = 0; i < targetIndex; i++) {
+    const hole = holeNumbers[i]!;
+    if (!isHoleCompleteForEntries(hole, entryIds, scores)) {
+      return `Enter scores for hole ${hole} before hole ${holeNumber}.`;
+    }
+  }
+
+  return null;
+}
+
 export function findStartingHoleIndex(
   holeNumbers: number[],
   entryIds: string[],
@@ -140,7 +194,7 @@ export function findStartingHoleIndex(
 ): number {
   for (let i = 0; i < holeNumbers.length; i++) {
     const hole = holeNumbers[i]!;
-    const complete = entryIds.every((id) => scores[id]?.[hole] != null);
+    const complete = isHoleCompleteForEntries(hole, entryIds, scores);
     if (!complete) return i;
   }
   return Math.max(0, holeNumbers.length - 1);
@@ -152,7 +206,7 @@ export function countCompletedHoles(
   scores: Record<string, Record<number, number>>
 ): number {
   return holeNumbers.filter((hole) =>
-    entryIds.every((id) => scores[id]?.[hole] != null)
+    isHoleCompleteForEntries(hole, entryIds, scores)
   ).length;
 }
 
@@ -171,7 +225,7 @@ export function getConfirmedHoles(
 ): Set<number> {
   return new Set(
     holeNumbers.filter((hole) =>
-      entryIds.every((id) => scores[id]?.[hole] != null)
+      isHoleCompleteForEntries(hole, entryIds, scores)
     )
   );
 }
@@ -192,7 +246,7 @@ export function getHoleStatuses(
     }));
     const primaryId = entryIds[0] ?? "";
     const strokes = scores[primaryId]?.[hole];
-    const saved = entryIds.every((id) => scores[id]?.[hole] != null);
+    const saved = isHoleCompleteForEntries(hole, entryIds, scores);
     return {
       hole,
       par: parByHole[hole],

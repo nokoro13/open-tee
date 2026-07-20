@@ -48,10 +48,13 @@ import {
   computeMatchRunningScore,
   computeRunningScores,
   countCompletedHoles,
+  canEnterScoresForHole,
+  findFirstUnconfirmedHoleIndex,
   findStartingHoleIndex,
   getConfirmedHoles,
   getHoleStatuses,
   isRoundComplete,
+  validatePriorHolesComplete,
 } from "@/lib/score-entry-utils";
 import {
   getEventFormatLabel,
@@ -419,6 +422,16 @@ export function ScoreEntryForm({
     yardageByHole
   );
 
+  const requiredHoleIndex = findFirstUnconfirmedHoleIndex(
+    holeNumbers,
+    confirmedHoles
+  );
+  const requiredHole = holeNumbers[requiredHoleIndex] ?? holeNumbers[0] ?? 1;
+  const canEnterScores =
+    readOnly ||
+    canEnterScoresForHole(activeHole, holeNumbers, confirmedHoles);
+  const isPreviewingAhead = !readOnly && !canEnterScores;
+
   const activeHoleConfirmed = confirmedHoles.has(activeHole);
   const showChangeScoresOverlay =
     !readOnly && activeHoleConfirmed && !justSaved && !changeScoresUnlocked;
@@ -433,6 +446,7 @@ export function ScoreEntryForm({
   );
 
   function setScore(entityId: string, hole: number, value: number) {
+    if (!canEnterScoresForHole(hole, holeNumbers, confirmedHoles)) return;
     setScores((prev) => ({
       ...prev,
       [entityId]: { ...prev[entityId], [hole]: value },
@@ -445,6 +459,13 @@ export function ScoreEntryForm({
     setActiveHoleIndex(index);
     setError(null);
     setJustSaved(false);
+  }
+
+  function goToRequiredHole() {
+    navigateToIndex(
+      requiredHoleIndex,
+      requiredHoleIndex > activeHoleIndex ? "forward" : "back"
+    );
   }
 
   function handleGroupChange(groupId: string) {
@@ -465,6 +486,34 @@ export function ScoreEntryForm({
 
   function handleSave() {
     if (!selectedGroup || readOnly) return;
+
+    if (!canEnterScoresForHole(activeHole, holeNumbers, confirmedHoles)) {
+      goToRequiredHole();
+      return;
+    }
+
+    const savedScoresForValidation: Record<string, Record<number, number>> = {};
+    for (const entryId of entryIds) {
+      savedScoresForValidation[entryId] = {};
+      for (const hole of holeNumbers) {
+        if (!confirmedHoles.has(hole)) continue;
+        const strokes = scores[entryId]?.[hole];
+        if (strokes != null) {
+          savedScoresForValidation[entryId][hole] = strokes;
+        }
+      }
+    }
+
+    const priorHoleError = validatePriorHolesComplete(
+      activeHole,
+      holeNumbers,
+      entryIds,
+      savedScoresForValidation
+    );
+    if (priorHoleError) {
+      goToRequiredHole();
+      return;
+    }
 
     setError(null);
     setJustSaved(false);
@@ -678,26 +727,38 @@ export function ScoreEntryForm({
       </Button>
 
       {!readOnly ? (
-        <Button
-          type="button"
-          size="lg"
-          className="h-12 min-w-0 flex-1 text-base font-semibold shadow-md shadow-primary/20 sm:h-11"
-          disabled={isPending || showChangeScoresOverlay}
-          onClick={handleSave}
-        >
-          {isPending ? (
-            "Saving..."
-          ) : activeHoleIndex < totalHoles - 1 ? (
-            <>
-              <span className="sm:hidden">Confirm · Next</span>
-              <span className="hidden sm:inline">
-                Confirm · Hole {activeHole + 1} next
-              </span>
-            </>
-          ) : (
-            "Confirm · Finish round"
-          )}
-        </Button>
+        isPreviewingAhead ? (
+          <Button
+            type="button"
+            size="lg"
+            variant="secondary"
+            className="h-12 min-w-0 flex-1 text-base font-semibold sm:h-11"
+            onClick={goToRequiredHole}
+          >
+            Enter hole {requiredHole} scores
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            size="lg"
+            className="h-12 min-w-0 flex-1 text-base font-semibold shadow-md shadow-primary/20 sm:h-11"
+            disabled={isPending || showChangeScoresOverlay}
+            onClick={handleSave}
+          >
+            {isPending ? (
+              "Saving..."
+            ) : activeHoleIndex < totalHoles - 1 ? (
+              <>
+                <span className="sm:hidden">Confirm · Next</span>
+                <span className="hidden sm:inline">
+                  Confirm · Hole {activeHole + 1} next
+                </span>
+              </>
+            ) : (
+              "Confirm · Finish round"
+            )}
+          </Button>
+        )
       ) : (
         <Button
           type="button"
@@ -1002,7 +1063,12 @@ export function ScoreEntryForm({
                         label={entry.label}
                         value={getEffectiveScore(entry.id, activeHole)}
                         par={activePar}
-                        disabled={readOnly || isPending || showChangeScoresOverlay}
+                        disabled={
+                          readOnly ||
+                          isPending ||
+                          showChangeScoresOverlay ||
+                          !canEnterScores
+                        }
                         size="large"
                         layout="responsive"
                         playerIndex={index}
