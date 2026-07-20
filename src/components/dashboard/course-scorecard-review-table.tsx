@@ -13,12 +13,21 @@ import {
   strokeIndexForHandicapView,
   type HandicapView,
 } from "@/lib/scorecard-handicap-rows";
+import { cn } from "@/lib/utils";
 
 type CourseScorecardReviewTableProps = {
   holeCount: number;
   courseHoles: CourseHole[];
   sortedTees: CourseTee[];
 };
+
+/**
+ * Sticky first column with an opaque background so horizontally scrolled
+ * columns never show through. Rows rely on hairlines and type weight instead
+ * of fills so the sticky cell always matches its row.
+ */
+const STICKY_CELL =
+  "sticky left-0 z-10 bg-card px-3 py-2 whitespace-nowrap after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-border";
 
 function sumYardages(
   holes: CourseHole[],
@@ -29,6 +38,13 @@ function sumYardages(
     const hole = holes.find((entry) => entry.holeNumber === holeNumber);
     const yardage = hole?.teeYardages?.[teeKey] ?? hole?.yardage;
     return total + (yardage ?? 0);
+  }, 0);
+}
+
+function sumPar(holes: CourseHole[], range: number[]): number {
+  return range.reduce((total, holeNumber) => {
+    const hole = holes.find((entry) => entry.holeNumber === holeNumber);
+    return total + (hole?.par ?? 0);
   }, 0);
 }
 
@@ -55,114 +71,109 @@ export function CourseScorecardReviewTable({
   const frontNine = holeNumbers.filter((hole) => hole <= 9);
   const backNine = holeNumbers.filter((hole) => hole > 9);
 
-  return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full text-sm">
-        <thead>
-          <tr className="border-b text-left text-muted-foreground">
-            <th className="px-2 py-2">Hole</th>
-            <th className="px-2 py-2">Par</th>
-            {sortedTees.map((tee) => (
-              <th key={tee.teeKey} className="px-2 py-2">
-                {tee.teeName}
-              </th>
-            ))}
-            <th className="px-2 py-2">
-              {handicapAvailability.hasBoth ? (
-                <HandicapRowToggle
-                  view={activeView}
-                  onChange={setHandicapView}
-                  className="text-xs"
-                />
-              ) : (
-                handicapHeaderLabel
-              )}
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {holeNumbers.map((holeNumber) => {
-            const hole = courseHoles.find(
-              (entry) => entry.holeNumber === holeNumber
-            );
-            const strokeIndex = hole
-              ? strokeIndexForHandicapView(hole, activeView)
-              : null;
+  const totalRows: { label: string; range: number[]; emphasize?: boolean }[] = [
+    ...(frontNine.length > 0 && backNine.length > 0
+      ? [
+          { label: "OUT", range: frontNine },
+          { label: "IN", range: backNine },
+        ]
+      : []),
+    { label: "TOT", range: holeNumbers, emphasize: true },
+  ];
 
-            return (
-              <tr key={holeNumber} className="border-b">
-                <td className="px-2 py-2 font-medium">{holeNumber}</td>
-                <td className="px-2 py-2">{hole?.par ?? "—"}</td>
+  return (
+    <div className="overflow-hidden rounded-lg border bg-card">
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <thead>
+            <tr className="border-b text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+              <th className={cn(STICKY_CELL, "font-medium")}>Hole</th>
+              <th className="px-3 py-2 font-medium">Par</th>
+              {sortedTees.map((tee) => (
+                <th
+                  key={tee.teeKey}
+                  className="whitespace-nowrap px-3 py-2 font-medium"
+                >
+                  <span className="inline-flex items-center gap-1.5">
+                    {tee.teeColor && (
+                      <span
+                        className="size-2 shrink-0 rounded-full border border-black/10"
+                        style={{ backgroundColor: tee.teeColor }}
+                        aria-hidden
+                      />
+                    )}
+                    {tee.teeName}
+                  </span>
+                </th>
+              ))}
+              <th className="whitespace-nowrap px-3 py-2 font-medium normal-case">
+                {handicapAvailability.hasBoth ? (
+                  <HandicapRowToggle
+                    view={activeView}
+                    onChange={setHandicapView}
+                  />
+                ) : (
+                  <span className="uppercase">{handicapHeaderLabel}</span>
+                )}
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border/60">
+            {holeNumbers.map((holeNumber) => {
+              const hole = courseHoles.find(
+                (entry) => entry.holeNumber === holeNumber
+              );
+              const strokeIndex = hole
+                ? strokeIndexForHandicapView(hole, activeView)
+                : null;
+
+              return (
+                <tr key={holeNumber}>
+                  <td className={cn(STICKY_CELL, "font-medium tabular-nums")}>
+                    {holeNumber}
+                  </td>
+                  <td className="px-3 py-2 tabular-nums">{hole?.par ?? "—"}</td>
+                  {sortedTees.map((tee) => (
+                    <td key={tee.teeKey} className="px-3 py-2 tabular-nums">
+                      {hole?.teeYardages?.[tee.teeKey] ?? hole?.yardage ?? "—"}
+                    </td>
+                  ))}
+                  <td className="px-3 py-2 tabular-nums">{strokeIndex ?? "—"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot>
+            {totalRows.map((row) => (
+              <tr
+                key={row.label}
+                className={cn(
+                  "border-t",
+                  row.emphasize ? "font-semibold" : "font-medium text-muted-foreground"
+                )}
+              >
+                <td
+                  className={cn(
+                    STICKY_CELL,
+                    row.emphasize ? "font-semibold" : "font-medium"
+                  )}
+                >
+                  {row.label}
+                </td>
+                <td className="px-3 py-2 tabular-nums">
+                  {sumPar(courseHoles, row.range)}
+                </td>
                 {sortedTees.map((tee) => (
-                  <td key={tee.teeKey} className="px-2 py-2 tabular-nums">
-                    {hole?.teeYardages?.[tee.teeKey] ?? hole?.yardage ?? "—"}
+                  <td key={tee.teeKey} className="px-3 py-2 tabular-nums">
+                    {sumYardages(courseHoles, tee.teeKey, row.range).toLocaleString()}
                   </td>
                 ))}
-                <td className="px-2 py-2 tabular-nums">
-                  {strokeIndex ?? "—"}
-                </td>
+                <td className="px-3 py-2" />
               </tr>
-            );
-          })}
-        </tbody>
-        <tfoot>
-          {frontNine.length > 0 && (
-            <tr className="border-t bg-muted/30 font-medium">
-              <td className="px-2 py-2">OUT</td>
-              <td className="px-2 py-2">
-                {frontNine.reduce((total, holeNumber) => {
-                  const hole = courseHoles.find(
-                    (entry) => entry.holeNumber === holeNumber
-                  );
-                  return total + (hole?.par ?? 0);
-                }, 0)}
-              </td>
-              {sortedTees.map((tee) => (
-                <td key={tee.teeKey} className="px-2 py-2 tabular-nums">
-                  {sumYardages(courseHoles, tee.teeKey, frontNine)}
-                </td>
-              ))}
-              <td className="px-2 py-2" />
-            </tr>
-          )}
-          {backNine.length > 0 && (
-            <tr className="border-t bg-muted/30 font-medium">
-              <td className="px-2 py-2">IN</td>
-              <td className="px-2 py-2">
-                {backNine.reduce((total, holeNumber) => {
-                  const hole = courseHoles.find(
-                    (entry) => entry.holeNumber === holeNumber
-                  );
-                  return total + (hole?.par ?? 0);
-                }, 0)}
-              </td>
-              {sortedTees.map((tee) => (
-                <td key={tee.teeKey} className="px-2 py-2 tabular-nums">
-                  {sumYardages(courseHoles, tee.teeKey, backNine)}
-                </td>
-              ))}
-              <td className="px-2 py-2" />
-            </tr>
-          )}
-          <tr className="border-t bg-muted/40 font-semibold">
-            <td className="px-2 py-2">TOT</td>
-            <td className="px-2 py-2">
-              {holeNumbers.reduce((total, holeNumber) => {
-                const hole = courseHoles.find(
-                  (entry) => entry.holeNumber === holeNumber
-                );
-                return total + (hole?.par ?? 0);
-              }, 0)}
-            </td>
-            {sortedTees.map((tee) => (
-              <td key={tee.teeKey} className="px-2 py-2 tabular-nums">
-                {sumYardages(courseHoles, tee.teeKey, holeNumbers)}
-              </td>
             ))}
-            <td className="px-2 py-2" />
-          </tr>
-        </tfoot>
-      </table>
+          </tfoot>
+        </table>
+      </div>
     </div>
   );
 }

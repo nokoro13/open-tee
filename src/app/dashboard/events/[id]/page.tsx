@@ -47,10 +47,6 @@ import { syncTeeTimesForEvent } from "@/actions/start-format";
 import { getEventPairings } from "@/lib/pairings";
 import { requireOrganization } from "@/lib/auth";
 import { getEventFormatLabel } from "@/lib/event-formats";
-import {
-  eventSetupLockedMessage,
-  isEventSetupLocked,
-} from "@/lib/event-setup-lock";
 import { getPublishedGolfCourseByExternalId } from "@/lib/golf-courses";
 import { cn } from "@/lib/utils";
 import type { Event } from "@/db/schema";
@@ -330,15 +326,6 @@ export default async function EventDetailPage({
       </header>
 
       <div className="mt-8 space-y-6">
-        {/* Setup lock notice */}
-        {event.status === "published" &&
-          isEventSetupLocked(event.scoringStatus) &&
-          (activeTab === "players" || activeTab === "pairings") && (
-            <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-muted-foreground">
-              {eventSetupLockedMessage(event.scoringStatus)}
-            </div>
-          )}
-
         {/* Next step */}
         {nextStep &&
           ((isDraft && activeTab === "details") ||
@@ -415,9 +402,8 @@ export default async function EventDetailPage({
               <CardHeader>
                 <CardTitle>Registration link</CardTitle>
                 <CardDescription>
-                  {isEventSetupLocked(event.scoringStatus)
-                    ? "Registration is closed while scoring is active."
-                    : "Share this link with players — works on any phone, no app needed."}
+                  Share this link with players — works on any phone, no app
+                  needed.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -434,6 +420,17 @@ export default async function EventDetailPage({
                 </ButtonLink>
               </CardContent>
             </Card>
+
+            <StartFormatCard
+              eventId={event.id}
+              scoringStatus={event.scoringStatus}
+              event={{
+                startFormat: event.startFormat,
+                shotgunStartTime: event.shotgunStartTime,
+                firstTeeTime: event.firstTeeTime,
+                teeTimeIntervalMinutes: event.teeTimeIntervalMinutes,
+              }}
+            />
 
             <CaddieModeCard
               eventSlug={event.slug}
@@ -459,19 +456,8 @@ export default async function EventDetailPage({
 
         {/* Published: pairings */}
         {event.status === "published" && activeTab === "pairings" && (
-          <>
-            <StartFormatCard
-              eventId={event.id}
-              scoringStatus={event.scoringStatus}
-              event={{
-                startFormat: event.startFormat,
-                shotgunStartTime: event.shotgunStartTime,
-                firstTeeTime: event.firstTeeTime,
-                teeTimeIntervalMinutes: event.teeTimeIntervalMinutes,
-              }}
-            />
-            {pairings && (
-              <PairingsPanel
+          pairings && (
+            <PairingsPanel
                 eventId={event.id}
                 slug={event.slug}
                 appUrl={getAppUrl()}
@@ -486,8 +472,7 @@ export default async function EventDetailPage({
                 teamBName={event.teamBName}
                 pairings={pairings}
               />
-            )}
-          </>
+          )
         )}
 
         {/* Published: scoring */}

@@ -6,6 +6,7 @@ import { CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react";
 
 import { CourseHolePinMap } from "@/components/dashboard/course-hole-pin-map";
 import { CourseScorecardReviewTable } from "@/components/dashboard/course-scorecard-review-table";
+import { HoleStrip } from "@/components/dashboard/hole-strip";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type {
@@ -106,11 +107,16 @@ export function VerifiedCoursePreviewPanel({
     return mappedHoleNumbers.has(holeNumber) && placedTees >= course.courseTees.length;
   }
 
+  const activeHolePar = course.courseHoles.find(
+    (entry) => entry.holeNumber === activeHole
+  )?.par;
+
   return (
-    <div className="space-y-6">
-      <div className="rounded-lg border p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="space-y-1">
+    <div className="space-y-4 sm:space-y-6">
+      {/* Course summary */}
+      <div className="rounded-xl border bg-card p-4 shadow-sm sm:p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 space-y-1">
             <p className="text-sm text-muted-foreground">
               {formatCourseLocationLine({
                 address: course.address,
@@ -121,61 +127,95 @@ export function VerifiedCoursePreviewPanel({
             </p>
             {course.verifiedAt && (
               <p className="text-xs text-muted-foreground">
-                Verified {new Date(course.verifiedAt).toLocaleDateString()}
+                Verified{" "}
+                {new Date(course.verifiedAt).toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })}
               </p>
             )}
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
             <Badge variant="default">Verified</Badge>
             <Badge variant="outline">{course.holeCount} holes</Badge>
             <Badge variant="outline">
               {mappingProgress.mappedHoleCount}/{course.holeCount} mapped
             </Badge>
-            <Badge variant="outline">
-              {sortedTees.map((tee) => tee.teeName).join(", ")}
+            <Badge variant="outline" className="max-w-full">
+              <span className="truncate">
+                {sortedTees.map((tee) => tee.teeName).join(" · ")}
+              </span>
             </Badge>
           </div>
         </div>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
-        <section className="space-y-3 rounded-lg border p-4">
-          <div>
-            <h2 className="font-medium">Scorecard</h2>
-            <p className="text-sm text-muted-foreground">
+      <div className="grid gap-4 sm:gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+        {/* Scorecard */}
+        <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
+          <div className="border-b px-4 py-3 sm:px-5">
+            <h2 className="text-sm font-semibold sm:text-base">Scorecard</h2>
+            <p className="text-xs text-muted-foreground sm:text-sm">
               Official par, handicap, and yardages for this course.
             </p>
           </div>
 
-          {course.scorecardImageUrl ? (
-            <div className="relative h-56 w-full overflow-hidden rounded-md border bg-muted/20">
-              <Image
-                src={course.scorecardImageUrl}
-                alt={`${course.name} scorecard`}
-                fill
-                className="object-contain"
-                unoptimized
-              />
-            </div>
-          ) : null}
+          <div className="space-y-4 p-4 sm:p-5">
+            {course.scorecardImageUrl ? (
+              <a
+                href={course.scorecardImageUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="relative block h-40 w-full overflow-hidden rounded-lg border bg-muted/20 transition-opacity hover:opacity-90 sm:h-56"
+                aria-label="Open scorecard image in a new tab"
+              >
+                <Image
+                  src={course.scorecardImageUrl}
+                  alt={`${course.name} scorecard`}
+                  fill
+                  className="object-contain"
+                  unoptimized
+                />
+              </a>
+            ) : null}
 
-          <CourseScorecardReviewTable
-            holeCount={course.holeCount}
-            courseHoles={course.courseHoles}
-            sortedTees={sortedTees}
-          />
+            <CourseScorecardReviewTable
+              holeCount={course.holeCount}
+              courseHoles={course.courseHoles}
+              sortedTees={sortedTees}
+            />
+          </div>
         </section>
 
-        <section className="overflow-hidden rounded-lg border">
-          <div className="border-b px-4 py-3">
-            <h2 className="font-medium">Hole map</h2>
-            <p className="text-sm text-muted-foreground">
-              Verified greens, tee boxes, and fairway lines.
+        {/* Hole map */}
+        <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
+          <div className="flex items-center justify-between gap-3 border-b px-4 py-3 sm:px-5">
+            <div className="min-w-0">
+              <h2 className="text-sm font-semibold sm:text-base">Hole map</h2>
+              <p className="hidden text-xs text-muted-foreground sm:block sm:text-sm">
+                Verified greens, tee boxes, and fairway lines.
+              </p>
+            </div>
+            <p className="shrink-0 text-sm font-medium tabular-nums text-muted-foreground">
+              Hole {activeHole}
+              {activeHolePar != null ? ` · Par ${activeHolePar}` : ""}
             </p>
           </div>
 
-          <div className="grid min-h-[min(70vh,720px)] lg:grid-cols-[12rem_1fr]">
-            <aside className="flex flex-col border-b bg-muted/20 lg:border-b-0 lg:border-r">
+          {/* Mobile: horizontal hole strip */}
+          <div className="border-b bg-muted/20 lg:hidden">
+            <HoleStrip
+              holes={holeNumbers}
+              activeHole={activeHole}
+              onSelect={setActiveHole}
+              isHoleComplete={isHoleMappingComplete}
+            />
+          </div>
+
+          <div className="grid lg:min-h-[min(70vh,720px)] lg:grid-cols-[12rem_1fr]">
+            {/* Desktop: hole sidebar */}
+            <aside className="hidden flex-col border-r bg-muted/20 lg:flex">
               <div className="space-y-4 overflow-y-auto px-3 py-3">
                 {[
                   { label: "Front nine", holes: frontNine },
@@ -257,10 +297,10 @@ export function VerifiedCoursePreviewPanel({
               </div>
             </aside>
 
-            <div className="min-h-[min(52vh,560px)] min-w-0 lg:min-h-0">
+            <div className="min-h-[min(55vh,480px)] min-w-0 lg:min-h-0">
               <CourseHolePinMap
                 readOnly
-                className="h-full min-h-[min(52vh,560px)] lg:min-h-full"
+                className="h-full min-h-[min(55vh,480px)] lg:min-h-full"
                 courseCenter={courseCenter}
                 holeNumber={activeHole}
                 courseTees={course.courseTees}
@@ -270,6 +310,35 @@ export function VerifiedCoursePreviewPanel({
                 scorecardYardages={activeHoleScorecardYardages}
               />
             </div>
+          </div>
+
+          {/* Mobile: prev / next bar */}
+          <div className="flex items-center justify-between gap-3 border-t px-4 py-3 lg:hidden">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-10 flex-1"
+              disabled={activeHole <= 1}
+              onClick={() => setActiveHole((current) => current - 1)}
+            >
+              <ChevronLeft />
+              Previous
+            </Button>
+            <span className="shrink-0 text-xs font-medium tabular-nums text-muted-foreground">
+              {activeHole} / {course.holeCount}
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-10 flex-1"
+              disabled={activeHole >= course.holeCount}
+              onClick={() => setActiveHole((current) => current + 1)}
+            >
+              Next
+              <ChevronRight />
+            </Button>
           </div>
         </section>
       </div>

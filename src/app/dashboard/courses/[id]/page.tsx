@@ -50,8 +50,8 @@ export default async function VerifiedCoursePage({ params }: VerifiedCoursePageP
         Back to courses
       </ButtonLink>
 
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-1">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
             {course.name}
           </h1>
@@ -60,7 +60,10 @@ export default async function VerifiedCoursePage({ params }: VerifiedCoursePageP
           </p>
         </div>
         {canEdit && (
-          <ButtonLink href={`/dashboard/courses/${course.id}/onboard`}>
+          <ButtonLink
+            href={`/dashboard/courses/${course.id}/onboard`}
+            className="h-11 w-full shrink-0 sm:h-9 sm:w-auto"
+          >
             <Pencil />
             Edit course
           </ButtonLink>

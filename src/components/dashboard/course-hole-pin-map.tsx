@@ -10,7 +10,7 @@ import {
   useMap,
   type MapMouseEvent,
 } from "@vis.gl/react-google-maps";
-import { Flag, Pencil, ShieldCheck } from "lucide-react";
+import { ChevronDown, Flag, Pencil, Ruler, ShieldCheck } from "lucide-react";
 
 import type { CourseTee } from "@/db/schema";
 import type { LatLng } from "@/lib/green-distance";
@@ -379,6 +379,8 @@ function HoleYardageGuide({
   scorecardYardages: Record<string, number>;
   isDragging: boolean;
 }) {
+  const [expanded, setExpanded] = useState(false);
+
   const rows = sortedTees
     .map((tee) => {
       const from = tees[tee.teeKey];
@@ -418,16 +420,60 @@ function HoleYardageGuide({
 
   if (rows.length === 0) return null;
 
+  const isOpen = expanded || isDragging;
+
+  if (!isOpen) {
+    return (
+      <div className="pointer-events-none absolute left-3 top-3 z-10">
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          className="pointer-events-auto inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/78 py-1.5 pl-2.5 pr-3 text-white shadow-lg backdrop-blur-sm transition-colors hover:bg-black/90"
+        >
+          <Ruler className="size-3 text-white/70" />
+          <span className="text-[10px] font-medium uppercase tracking-wide text-white/70">
+            Yardage
+          </span>
+          <span className="inline-flex items-center gap-1">
+            {rows.map((row) => (
+              <span
+                key={row.tee.teeKey}
+                className={cn(
+                  "size-1.5 rounded-full",
+                  row.tone === "match" && "bg-emerald-400",
+                  row.tone === "close" && "bg-amber-400",
+                  row.tone === "off" && "bg-red-400"
+                )}
+              />
+            ))}
+          </span>
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className="pointer-events-none absolute left-3 top-3 z-10 w-[min(calc(100%-1.5rem),18rem)]">
-      <div className="rounded-lg border border-white/15 bg-black/78 px-3 py-2.5 text-white shadow-lg backdrop-blur-sm">
+    <div className="pointer-events-none absolute left-3 top-3 z-10 w-[min(calc(100%-1.5rem),17rem)]">
+      <div className="pointer-events-auto rounded-lg border border-white/15 bg-black/78 px-3 py-2.5 text-white shadow-lg backdrop-blur-sm">
         <div className="mb-2 flex items-center justify-between gap-2">
           <p className="text-[10px] font-medium uppercase tracking-wide text-white/70">
             Yardage guide
           </p>
-          {isDragging && (
-            <span className="text-[10px] font-semibold text-emerald-400">Live</span>
-          )}
+          <div className="flex items-center gap-2">
+            {isDragging && (
+              <span className="text-[10px] font-semibold text-emerald-400">
+                Live
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => setExpanded(false)}
+              className="-m-1 rounded p-1 text-white/60 transition-colors hover:text-white"
+              aria-label="Collapse yardage guide"
+            >
+              <ChevronDown className="size-3.5 rotate-180" />
+            </button>
+          </div>
         </div>
         <div className="space-y-1.5">
           {rows.map((row) => (

@@ -14,6 +14,7 @@ import {
   updateCourseOnboardingDetails,
 } from "@/actions/course-onboarding";
 import { CourseHolePinMap } from "@/components/dashboard/course-hole-pin-map";
+import { HoleStrip } from "@/components/dashboard/hole-strip";
 import { compressScorecardImage } from "@/lib/compress-scorecard-image";
 import {
   CourseDuplicateWarning,
@@ -617,23 +618,35 @@ export function CourseOnboardingWizard({
 
   return (
     <div className={cn("space-y-6", step === "mapping" && "space-y-4")}>
-      <div className="flex flex-wrap items-center gap-2">
-        {STEPS.map((entry, index) => (
-          <Button
-            key={entry.id}
-            type="button"
-            size="sm"
-            variant={step === entry.id ? "default" : "outline"}
-            onClick={() => setStep(entry.id)}
-            className={cn(step === "mapping" && "h-8 px-3 text-xs")}
-          >
-            <span className="mr-1.5 hidden text-muted-foreground sm:inline">
-              {index + 1}.
-            </span>
-            {entry.label}
-          </Button>
-        ))}
-        <Badge variant="outline" className="ml-auto capitalize">
+      <div className="flex items-center gap-3">
+        <nav
+          aria-label="Onboarding steps"
+          className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto rounded-full bg-muted p-1 [-ms-overflow-style:none] scrollbar-none [&::-webkit-scrollbar]:hidden"
+        >
+          {STEPS.map((entry, index) => {
+            const isActive = step === entry.id;
+            return (
+              <button
+                key={entry.id}
+                type="button"
+                onClick={() => setStep(entry.id)}
+                aria-current={isActive ? "step" : undefined}
+                className={cn(
+                  "shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium transition-all duration-200",
+                  isActive
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <span className="mr-1 hidden text-muted-foreground sm:inline">
+                  {index + 1}.
+                </span>
+                {entry.label}
+              </button>
+            );
+          })}
+        </nav>
+        <Badge variant="outline" className="hidden shrink-0 capitalize sm:inline-flex">
           {course.onboardingStatus}
         </Badge>
       </div>
@@ -755,6 +768,7 @@ export function CourseOnboardingWizard({
           <div className="sm:col-span-2">
             <Button
               type="button"
+              className="h-11 w-full sm:h-9 sm:w-auto"
               disabled={isPending || duplicateCheck.hasExactMatch}
               onClick={() =>
                 runAction(async () => {
@@ -985,113 +999,131 @@ export function CourseOnboardingWizard({
             )}
           </Field>
 
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="border-b text-left text-muted-foreground">
-                  <th className="px-2 py-2">Hole</th>
-                  <th className="px-2 py-2">Par</th>
-                  {sortedTees.map((tee) => (
-                    <th key={tee.teeKey} className="px-2 py-2">
-                      {tee.teeName} yds
+          <div className="overflow-hidden rounded-lg border">
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                    <th className="sticky left-0 z-10 whitespace-nowrap bg-card px-3 py-2 font-medium after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-border">
+                      Hole
                     </th>
-                  ))}
-                  {extractMensHandicap && (
-                    <th className="px-2 py-2">Men HCP</th>
-                  )}
-                  {extractLadiesHandicap && (
-                    <th className="px-2 py-2">Ladies HCP</th>
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {scorecardRows.map((row, index) => (
-                  <tr key={row.holeNumber} className="border-b">
-                    <td className="px-2 py-2 font-medium">{row.holeNumber}</td>
-                    <td className="px-2 py-2">
-                      <Input
-                        type="number"
-                        min={3}
-                        max={5}
-                        className="h-9 w-20"
-                        value={row.par}
-                        onChange={(event) => {
-                          const next = [...scorecardRows];
-                          next[index] = {
-                            ...row,
-                            par: Number(event.target.value),
-                          };
-                          setScorecardRows(next);
-                        }}
-                      />
-                    </td>
+                    <th className="whitespace-nowrap px-2 py-2 font-medium">Par</th>
                     {sortedTees.map((tee) => (
-                      <td key={tee.teeKey} className="px-2 py-2">
-                        <Input
-                          type="number"
-                          min={0}
-                          className="h-9 w-24"
-                          value={row.teeYardages[tee.teeKey] ?? ""}
-                          onChange={(event) => {
-                            const next = [...scorecardRows];
-                            next[index] = {
-                              ...row,
-                              teeYardages: {
-                                ...row.teeYardages,
-                                [tee.teeKey]: event.target.value,
-                              },
-                            };
-                            setScorecardRows(next);
-                          }}
-                        />
-                      </td>
+                      <th
+                        key={tee.teeKey}
+                        className="whitespace-nowrap px-2 py-2 font-medium"
+                      >
+                        {tee.teeName} yds
+                      </th>
                     ))}
                     {extractMensHandicap && (
-                      <td className="px-2 py-2">
-                        <Input
-                          type="number"
-                          min={1}
-                          max={18}
-                          className="h-9 w-20"
-                          value={row.strokeIndex}
-                          onChange={(event) => {
-                            const next = [...scorecardRows];
-                            next[index] = {
-                              ...row,
-                              strokeIndex: event.target.value,
-                            };
-                            setScorecardRows(next);
-                          }}
-                        />
-                      </td>
+                      <th className="whitespace-nowrap px-2 py-2 font-medium">
+                        Men HCP
+                      </th>
                     )}
                     {extractLadiesHandicap && (
-                      <td className="px-2 py-2">
+                      <th className="whitespace-nowrap px-2 py-2 font-medium">
+                        Ladies HCP
+                      </th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {scorecardRows.map((row, index) => (
+                    <tr key={row.holeNumber}>
+                      <td className="sticky left-0 z-10 bg-card px-3 py-1.5 font-medium tabular-nums after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-border">
+                        {row.holeNumber}
+                      </td>
+                      <td className="px-2 py-1.5">
                         <Input
                           type="number"
-                          min={1}
-                          max={18}
-                          className="h-9 w-20"
-                          value={row.ladiesStrokeIndex}
+                          inputMode="numeric"
+                          min={3}
+                          max={5}
+                          className="h-10 w-16 text-center sm:h-9"
+                          value={row.par}
                           onChange={(event) => {
                             const next = [...scorecardRows];
                             next[index] = {
                               ...row,
-                              ladiesStrokeIndex: event.target.value,
+                              par: Number(event.target.value),
                             };
                             setScorecardRows(next);
                           }}
                         />
                       </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      {sortedTees.map((tee) => (
+                        <td key={tee.teeKey} className="px-2 py-1.5">
+                          <Input
+                            type="number"
+                            inputMode="numeric"
+                            min={0}
+                            className="h-10 w-20 text-center sm:h-9"
+                            value={row.teeYardages[tee.teeKey] ?? ""}
+                            onChange={(event) => {
+                              const next = [...scorecardRows];
+                              next[index] = {
+                                ...row,
+                                teeYardages: {
+                                  ...row.teeYardages,
+                                  [tee.teeKey]: event.target.value,
+                                },
+                              };
+                              setScorecardRows(next);
+                            }}
+                          />
+                        </td>
+                      ))}
+                      {extractMensHandicap && (
+                        <td className="px-2 py-1.5">
+                          <Input
+                            type="number"
+                            inputMode="numeric"
+                            min={1}
+                            max={18}
+                            className="h-10 w-16 text-center sm:h-9"
+                            value={row.strokeIndex}
+                            onChange={(event) => {
+                              const next = [...scorecardRows];
+                              next[index] = {
+                                ...row,
+                                strokeIndex: event.target.value,
+                              };
+                              setScorecardRows(next);
+                            }}
+                          />
+                        </td>
+                      )}
+                      {extractLadiesHandicap && (
+                        <td className="px-2 py-1.5">
+                          <Input
+                            type="number"
+                            inputMode="numeric"
+                            min={1}
+                            max={18}
+                            className="h-10 w-16 text-center sm:h-9"
+                            value={row.ladiesStrokeIndex}
+                            onChange={(event) => {
+                              const next = [...scorecardRows];
+                              next[index] = {
+                                ...row,
+                                ladiesStrokeIndex: event.target.value,
+                              };
+                              setScorecardRows(next);
+                            }}
+                          />
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           <Button
             type="button"
+            className="h-11 w-full sm:h-9 sm:w-auto"
             disabled={isPending}
             onClick={() =>
               runAction(async () => {
@@ -1143,7 +1175,7 @@ export function CourseOnboardingWizard({
               type="button"
               variant="outline"
               size="sm"
-              className="shrink-0"
+              className="h-10 w-full shrink-0 sm:h-8 sm:w-auto"
               disabled={isPending || course.courseTees.length === 0}
               onClick={() => {
                 setError(null);
@@ -1169,8 +1201,33 @@ export function CourseOnboardingWizard({
           </div>
 
           <div className="mx-auto w-full overflow-hidden rounded-xl border bg-card shadow-sm">
-            <div className="grid min-h-[min(78vh,820px)] lg:grid-cols-[14rem_1fr]">
-              <aside className="flex flex-col border-b bg-muted/20 lg:border-b-0 lg:border-r">
+            {/* Mobile: progress + hole strip */}
+            <div className="border-b bg-muted/20 lg:hidden">
+              <div className="flex items-center justify-between gap-3 px-4 pt-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Hole {activeHole} · {mappingProgress.mappedHoleCount}/
+                  {course.holeCount} greens
+                </p>
+                <span className="text-xs font-medium tabular-nums text-primary">
+                  {mappingPercent}%
+                </span>
+              </div>
+              <div className="mx-4 mt-2 h-1 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-primary transition-all duration-300"
+                  style={{ width: `${mappingPercent}%` }}
+                />
+              </div>
+              <HoleStrip
+                holes={holeNumbersForCount(course.holeCount)}
+                activeHole={activeHole}
+                onSelect={setActiveHole}
+                isHoleComplete={isHoleMappingComplete}
+              />
+            </div>
+
+            <div className="grid lg:min-h-[min(78vh,820px)] lg:grid-cols-[14rem_1fr]">
+              <aside className="hidden flex-col bg-muted/20 lg:flex lg:border-r">
                 <div className="space-y-3 border-b px-4 py-4">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -1327,6 +1384,46 @@ export function CourseOnboardingWizard({
                   }}
                 />
               </div>
+            </div>
+
+            {/* Mobile: prev / next bar */}
+            <div className="space-y-2 border-t px-4 py-3 lg:hidden">
+              <div className="flex items-center justify-between gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-10 flex-1"
+                  disabled={activeHole <= 1}
+                  onClick={() => setActiveHole((current) => current - 1)}
+                >
+                  <ChevronLeft />
+                  Previous
+                </Button>
+                <span className="shrink-0 text-xs font-medium tabular-nums text-muted-foreground">
+                  {activeHole} / {course.holeCount}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-10 flex-1"
+                  disabled={activeHole >= course.holeCount}
+                  onClick={() => setActiveHole((current) => current + 1)}
+                >
+                  Next
+                  <ChevronRight />
+                </Button>
+              </div>
+              {mappingProgress.isComplete && (
+                <Button
+                  type="button"
+                  className="h-10 w-full"
+                  onClick={() => setStep("review")}
+                >
+                  Continue to review
+                </Button>
+              )}
             </div>
           </div>
         </div>

@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { AlertTriangle, Lock, Plus, Printer, Trash2, Users } from "lucide-react";
+import { AlertTriangle, Plus, Printer, Trash2, Users } from "lucide-react";
 
 import {
   assignRegistrationTeamSide,
@@ -49,10 +49,7 @@ import {
   getStartFormatSummary,
   type StartFormat,
 } from "@/lib/start-format";
-import {
-  eventSetupLockedMessage,
-  isEventSetupLocked,
-} from "@/lib/event-setup-lock";
+import { isEventSetupLocked } from "@/lib/event-setup-lock";
 
 type PairingsPanelProps = {
   eventId: string;
@@ -202,13 +199,6 @@ export function PairingsPanel({
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
-        {setupLocked && (
-          <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2.5 text-sm text-muted-foreground">
-            <Lock className="mt-0.5 size-4 shrink-0 text-amber-700" />
-            <span>{eventSetupLockedMessage(scoringStatus)}</span>
-          </div>
-        )}
-
         {error && (
           <p className="text-sm text-destructive" role="alert">
             {error}

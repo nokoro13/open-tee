@@ -147,7 +147,14 @@ export function AdminCourseReviewPanel({ course }: AdminCourseReviewPanelProps) 
             </p>
             {course.submittedAt && (
               <p className="text-xs text-muted-foreground">
-                Submitted {new Date(course.submittedAt).toLocaleString()}
+                Submitted{" "}
+                {new Date(course.submittedAt).toLocaleString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}
               </p>
             )}
           </div>
