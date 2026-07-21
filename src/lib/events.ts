@@ -73,8 +73,10 @@ export function isRegistrationOpen(event: {
   scoringStatus?: string;
   registrationOpens: Date | null;
   registrationCloses: Date | null;
+  registrationFinalizedAt?: Date | null;
 }): boolean {
   if (event.status !== "published") return false;
+  if (event.registrationFinalizedAt) return false;
   if (event.scoringStatus === "open" || event.scoringStatus === "finalized") {
     return false;
   }

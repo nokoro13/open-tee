@@ -7,6 +7,7 @@ import {
   registerForEvent,
   type RegistrationInput,
 } from "@/actions/registrations";
+import { WaitlistForm } from "@/components/public/waitlist-form";
 import { validateHandicapInput } from "@/lib/handicap-strokes";
 import {
   REFUND_POLICY_DETAILS,
@@ -25,26 +26,33 @@ import { Input } from "@/components/ui/input";
 type RegistrationFormProps = {
   slug: string;
   entryFeeCents: number;
+  pricingLabel?: string;
   spotsLeft: number;
   soldOut: boolean;
   registrationClosed: boolean;
+  waitlistEnabled?: boolean;
   demoMode?: boolean;
 };
 
 export function RegistrationForm({
   slug,
   entryFeeCents,
+  pricingLabel,
   spotsLeft,
   soldOut,
   registrationClosed,
+  waitlistEnabled = false,
   demoMode = false,
 }: RegistrationFormProps) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [showWaitlist, setShowWaitlist] = useState(false);
   const [form, setForm] = useState<RegistrationInput>({
     name: "",
     email: "",
     handicap: "",
+    phone: "",
+    smsOptIn: false,
   });
 
   const disabled = soldOut || registrationClosed || isPending;
@@ -66,9 +74,25 @@ export function RegistrationForm({
         handicap: handicapResult.value ?? undefined,
       });
       if ("success" in result && !result.success) {
+        if (result.error === "WAITLIST") {
+          setShowWaitlist(true);
+          return;
+        }
         setError(result.error);
       }
     });
+  }
+
+  if (soldOut && waitlistEnabled) {
+    return (
+      <div className="space-y-4">
+        <p className="rounded-lg border border-border bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
+          This event is sold out. Join the waitlist and we&apos;ll notify you if a
+          spot opens.
+        </p>
+        <WaitlistForm slug={slug} />
+      </div>
+    );
   }
 
   if (soldOut) {
@@ -84,6 +108,17 @@ export function RegistrationForm({
       <p className="rounded-lg border border-border bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
         Registration is closed for this event.
       </p>
+    );
+  }
+
+  if (showWaitlist) {
+    return (
+      <div className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          This event just filled up. Join the waitlist instead.
+        </p>
+        <WaitlistForm slug={slug} />
+      </div>
     );
   }
 
@@ -123,6 +158,20 @@ export function RegistrationForm({
         </Field>
 
         <Field>
+          <FieldLabel htmlFor="reg-phone">Phone (optional)</FieldLabel>
+          <Input
+            id="reg-phone"
+            type="tel"
+            value={form.phone}
+            onChange={(e) => setForm({ ...form, phone: e.target.value })}
+            placeholder="(555) 555-5555"
+            className="h-11 text-base sm:text-sm"
+            disabled={disabled}
+            autoComplete="tel"
+          />
+        </Field>
+
+        <Field>
           <FieldLabel htmlFor="reg-handicap">Handicap (optional)</FieldLabel>
           <Input
             id="reg-handicap"
@@ -138,6 +187,16 @@ export function RegistrationForm({
             (better than scratch): use +3.
           </FieldDescription>
         </Field>
+
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={form.smsOptIn ?? false}
+            onChange={(e) => setForm({ ...form, smsOptIn: e.target.checked })}
+            disabled={disabled}
+          />
+          Text me event reminders
+        </label>
       </FieldGroup>
 
       {error && <FieldError>{error}</FieldError>}
@@ -152,7 +211,9 @@ export function RegistrationForm({
           {isPending
             ? "Processing..."
             : entryFeeCents > 0
-              ? `Register & pay`
+              ? pricingLabel
+                ? `Register & pay (${pricingLabel})`
+                : "Register & pay"
               : "Register for free"}
         </Button>
         <p className="text-center text-xs text-muted-foreground">

@@ -6,8 +6,13 @@ type LeaderboardRouteProps = {
   params: Promise<{ slug: string }>;
 };
 
-export async function GET(_request: Request, { params }: LeaderboardRouteProps) {
+export async function GET(request: Request, { params }: LeaderboardRouteProps) {
   const { slug } = await params;
+  const url = new URL(request.url);
+  const scoreBasis =
+    url.searchParams.get("basis") === "net" ? "net" : "gross";
+  const flightId = url.searchParams.get("flight");
+
   const event = await getPublishedEventForScoring(slug);
 
   if (!event) {
@@ -30,7 +35,11 @@ export async function GET(_request: Request, { params }: LeaderboardRouteProps) 
   const { entries, ryderCup } = await buildLeaderboard(
     event.id,
     event.format,
-    event.holes
+    event.holes,
+    {
+      scoreBasis,
+      flightId,
+    }
   );
 
   return NextResponse.json({
@@ -44,6 +53,8 @@ export async function GET(_request: Request, { params }: LeaderboardRouteProps) 
     },
     entries,
     ryderCup,
+    scoreBasis,
+    flightId,
     updatedAt: new Date().toISOString(),
   });
 }

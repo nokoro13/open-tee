@@ -1,5 +1,6 @@
 import { relations } from "drizzle-orm";
 import {
+  boolean,
   date,
   integer,
   jsonb,
@@ -56,6 +57,8 @@ export const ryderMatchTypeEnum = pgEnum("ryder_match_type", [
 export const nineSideEnum = pgEnum("nine_side", ["front", "back"]);
 
 export const startFormatEnum = pgEnum("start_format", ["shotgun", "tee_times"]);
+
+export const platformTierEnum = pgEnum("platform_tier", ["starter", "pro"]);
 
 export const golfCourseStatusEnum = pgEnum("golf_course_status", [
   "draft",
@@ -160,12 +163,31 @@ export const events = pgTable("events", {
   holes: holesEnum("holes").notNull().default("18"),
   maxPlayers: integer("max_players").notNull().default(72),
   entryFeeCents: integer("entry_fee_cents").notNull().default(0),
+  platformTier: platformTierEnum("platform_tier").notNull().default("starter"),
+  logoUrl: text("logo_url"),
+  coverImageUrl: text("cover_image_url"),
+  primaryColor: text("primary_color"),
+  accentColor: text("accent_color"),
+  waitlistEnabled: boolean("waitlist_enabled").notNull().default(false),
+  groupRegistrationEnabled: boolean("group_registration_enabled")
+    .notNull()
+    .default(false),
+  maxGroupSize: integer("max_group_size").notNull().default(4),
+  smsRemindersEnabled: boolean("sms_reminders_enabled").notNull().default(false),
+  earlyBirdFeeCents: integer("early_bird_fee_cents"),
+  earlyBirdEndsAt: timestamp("early_bird_ends_at", { withTimezone: true }),
   status: eventStatusEnum("status").notNull().default("draft"),
   description: text("description"),
   registrationOpens: timestamp("registration_opens", { withTimezone: true }),
   registrationCloses: timestamp("registration_closes", { withTimezone: true }),
+  registrationFinalizedAt: timestamp("registration_finalized_at", {
+    withTimezone: true,
+  }),
+  pairingsFinalizedAt: timestamp("pairings_finalized_at", { withTimezone: true }),
+  scorecardsReadyAt: timestamp("scorecards_ready_at", { withTimezone: true }),
   platformPaidAt: timestamp("platform_paid_at", { withTimezone: true }),
   reminderSentAt: timestamp("reminder_sent_at", { withTimezone: true }),
+  smsReminderSentAt: timestamp("sms_reminder_sent_at", { withTimezone: true }),
   stripePlatformSessionId: text("stripe_platform_session_id"),
   scoringStatus: scoringStatusEnum("scoring_status").notNull().default("disabled"),
   scoringCode: text("scoring_code"),
@@ -198,11 +220,101 @@ export const eventHoles = pgTable(
   ]
 );
 
+export const flights = pgTable(
+  "flights",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("flights_event_name_idx").on(table.eventId, table.name),
+  ]
+);
+
+export const registrationGroups = pgTable("registration_groups", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  eventId: uuid("event_id")
+    .notNull()
+    .references(() => events.id, { onDelete: "cascade" }),
+  leaderName: text("leader_name").notNull(),
+  leaderEmail: text("leader_email").notNull(),
+  paymentStatus: paymentStatusEnum("payment_status")
+    .notNull()
+    .default("pending"),
+  stripeCheckoutSessionId: text("stripe_checkout_session_id"),
+  stripePaymentIntentId: text("stripe_payment_intent_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const sponsorPackages = pgTable("sponsor_packages", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  eventId: uuid("event_id")
+    .notNull()
+    .references(() => events.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description"),
+  priceCents: integer("price_cents").notNull().default(0),
+  logoUrl: text("logo_url"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const sponsorPurchases = pgTable("sponsor_purchases", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  eventId: uuid("event_id")
+    .notNull()
+    .references(() => events.id, { onDelete: "cascade" }),
+  packageId: uuid("package_id")
+    .notNull()
+    .references(() => sponsorPackages.id, { onDelete: "cascade" }),
+  companyName: text("company_name").notNull(),
+  contactName: text("contact_name").notNull(),
+  contactEmail: text("contact_email").notNull(),
+  amountCents: integer("amount_cents").notNull(),
+  paymentStatus: paymentStatusEnum("payment_status")
+    .notNull()
+    .default("pending"),
+  stripeCheckoutSessionId: text("stripe_checkout_session_id"),
+  stripePaymentIntentId: text("stripe_payment_intent_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const waitlistEntries = pgTable(
+  "waitlist_entries",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    email: text("email").notNull(),
+    phone: text("phone"),
+    notifiedAt: timestamp("notified_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("waitlist_event_email_idx").on(table.eventId, table.email),
+  ]
+);
+
 export const pairingGroups = pgTable("pairing_groups", {
   id: uuid("id").defaultRandom().primaryKey(),
   eventId: uuid("event_id")
     .notNull()
     .references(() => events.id, { onDelete: "cascade" }),
+  flightId: uuid("flight_id").references(() => flights.id, {
+    onDelete: "set null",
+  }),
   label: text("label").notNull(),
   teeTime: text("tee_time"),
   startingHole: integer("starting_hole"),
@@ -223,9 +335,19 @@ export const registrations = pgTable(
     pairingGroupId: uuid("pairing_group_id").references(() => pairingGroups.id, {
       onDelete: "set null",
     }),
+    registrationGroupId: uuid("registration_group_id").references(
+      () => registrationGroups.id,
+      { onDelete: "set null" }
+    ),
+    flightId: uuid("flight_id").references(() => flights.id, {
+      onDelete: "set null",
+    }),
     name: text("name").notNull(),
     email: text("email").notNull(),
+    phone: text("phone"),
+    smsOptIn: boolean("sms_opt_in").notNull().default(false),
     handicap: text("handicap"),
+    entryFeePaidCents: integer("entry_fee_paid_cents"),
     teamSide: teamSideEnum("team_side"),
     scoringCode: text("scoring_code"),
     paymentStatus: paymentStatusEnum("payment_status")
@@ -488,10 +610,67 @@ export const eventsRelations = relations(events, ({ one, many }) => ({
     references: [organizations.id],
   }),
   registrations: many(registrations),
+  registrationGroups: many(registrationGroups),
   pairingGroups: many(pairingGroups),
+  flights: many(flights),
+  sponsorPackages: many(sponsorPackages),
+  sponsorPurchases: many(sponsorPurchases),
+  waitlistEntries: many(waitlistEntries),
   holeScores: many(holeScores),
   eventHoles: many(eventHoles),
   mappingRequests: many(mappingRequests),
+}));
+
+export const flightsRelations = relations(flights, ({ one, many }) => ({
+  event: one(events, {
+    fields: [flights.eventId],
+    references: [events.id],
+  }),
+  registrations: many(registrations),
+  pairingGroups: many(pairingGroups),
+}));
+
+export const registrationGroupsRelations = relations(
+  registrationGroups,
+  ({ one, many }) => ({
+    event: one(events, {
+      fields: [registrationGroups.eventId],
+      references: [events.id],
+    }),
+    registrations: many(registrations),
+  })
+);
+
+export const sponsorPackagesRelations = relations(
+  sponsorPackages,
+  ({ one, many }) => ({
+    event: one(events, {
+      fields: [sponsorPackages.eventId],
+      references: [events.id],
+    }),
+    purchases: many(sponsorPurchases),
+  })
+);
+
+export const sponsorPurchasesRelations = relations(
+  sponsorPurchases,
+  ({ one }) => ({
+    event: one(events, {
+      fields: [sponsorPurchases.eventId],
+      references: [events.id],
+    }),
+    package: one(sponsorPackages, {
+      fields: [sponsorPurchases.packageId],
+      references: [sponsorPackages.id],
+    }),
+  })
+);
+
+export const waitlistEntriesRelations = relations(waitlistEntries, ({ one }) => ({
+  event: one(events, {
+    fields: [waitlistEntries.eventId],
+    references: [events.id],
+  }),
 }));
 
 export const eventHolesRelations = relations(eventHoles, ({ one }) => ({
@@ -506,6 +685,10 @@ export const pairingGroupsRelations = relations(pairingGroups, ({ one, many }) =
     fields: [pairingGroups.eventId],
     references: [events.id],
   }),
+  flight: one(flights, {
+    fields: [pairingGroups.flightId],
+    references: [flights.id],
+  }),
   registrations: many(registrations),
 }));
 
@@ -517,6 +700,14 @@ export const registrationsRelations = relations(registrations, ({ one, many }) =
   pairingGroup: one(pairingGroups, {
     fields: [registrations.pairingGroupId],
     references: [pairingGroups.id],
+  }),
+  registrationGroup: one(registrationGroups, {
+    fields: [registrations.registrationGroupId],
+    references: [registrationGroups.id],
+  }),
+  flight: one(flights, {
+    fields: [registrations.flightId],
+    references: [flights.id],
   }),
   holeScores: many(holeScores),
 }));
@@ -539,6 +730,11 @@ export const holeScoresRelations = relations(holeScores, ({ one }) => ({
 export type Organization = typeof organizations.$inferSelect;
 export type Event = typeof events.$inferSelect;
 export type NewEvent = typeof events.$inferInsert;
+export type Flight = typeof flights.$inferSelect;
+export type RegistrationGroup = typeof registrationGroups.$inferSelect;
+export type SponsorPackage = typeof sponsorPackages.$inferSelect;
+export type SponsorPurchase = typeof sponsorPurchases.$inferSelect;
+export type WaitlistEntry = typeof waitlistEntries.$inferSelect;
 export type PairingGroup = typeof pairingGroups.$inferSelect;
 export type Registration = typeof registrations.$inferSelect;
 export type HoleScore = typeof holeScores.$inferSelect;

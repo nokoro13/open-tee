@@ -9,17 +9,25 @@ import {
   Users,
 } from "lucide-react";
 
+import { syncRegistrationWorkflow } from "@/actions/event-workflow";
 import { getEventById, getEventByIdWithScorecard } from "@/actions/events";
 import { syncPublishIfPaid } from "@/actions/publish";
 import { CopyRegistrationLink } from "@/components/dashboard/copy-registration-link";
 import { EventDetailTabs } from "@/components/dashboard/event-detail-tabs";
-import { EventSetupChecklist } from "@/components/dashboard/event-setup-checklist";
 import { EventForm } from "@/components/dashboard/event-form";
 import { PairingsPanel } from "@/components/dashboard/pairings-panel";
 import { PublishEventCard } from "@/components/dashboard/publish-event-card";
 import { RegistrationsList } from "@/components/dashboard/registrations-list";
 import { RegistrationWindowFields } from "@/components/dashboard/registration-window-fields";
 import { EventLifecycleCard } from "@/components/dashboard/event-lifecycle-card";
+import { getFlightsForEvent } from "@/actions/flights";
+import { getSponsorPackagesForDashboard } from "@/actions/sponsors";
+import { getWaitlistForEvent } from "@/actions/waitlist";
+import { EventAnalyticsReportCard } from "@/components/dashboard/event-analytics-report";
+import { EventBrandingPanel } from "@/components/dashboard/event-branding-panel";
+import { FlightsPanel } from "@/components/dashboard/flights-panel";
+import { ProFeaturesPanel } from "@/components/dashboard/pro-features-panel";
+import { SponsorPackagesPanel } from "@/components/dashboard/sponsor-packages-panel";
 import { PayoutInfoCard } from "@/components/dashboard/payout-info-card";
 import { ScoringCard } from "@/components/dashboard/scoring-card";
 import { StartFormatCard } from "@/components/dashboard/start-format-card";
@@ -44,7 +52,10 @@ import {
   getRegistrationsForEvent,
   getRegistrationCount,
 } from "@/lib/events";
-import { getPlatformFeeCents, getAppUrl } from "@/lib/stripe";
+import { buildEventAnalyticsReport } from "@/lib/event-analytics";
+import { getEventPlatformTier, isProEvent } from "@/lib/platform-tier";
+import { buildEventWorkflowSnapshot } from "@/lib/event-workflow";
+import { getAppUrl } from "@/lib/stripe";
 import { syncEventScoringCodes } from "@/actions/scoring";
 import { syncTeeTimesForEvent } from "@/actions/start-format";
 import { getEventPairings } from "@/lib/pairings";
@@ -189,6 +200,40 @@ export default async function EventDetailPage({
         })()
       : null;
 
+  const flights = isOperationalEvent && isProEvent(event)
+    ? await getFlightsForEvent(event.id, org.id)
+    : [];
+
+  const sponsorData =
+    isOperationalEvent && isProEvent(event)
+      ? await getSponsorPackagesForDashboard(event.id, org.id)
+      : { packages: [], purchases: [] };
+
+  const waitlist =
+    isOperationalEvent && isProEvent(event) && event.waitlistEnabled
+      ? await getWaitlistForEvent(event.id, org.id)
+      : [];
+
+  const analyticsReport =
+    isOperationalEvent && isProEvent(event)
+      ? await buildEventAnalyticsReport(event.id, org.id)
+      : null;
+
+  if (isOperationalEvent) {
+    await syncRegistrationWorkflow(event.id);
+    event = (await getEventById(id)) ?? event;
+  }
+
+  const workflow = isOperationalEvent
+    ? buildEventWorkflowSnapshot({
+        event,
+        eventId: event.id,
+        format: event.format,
+        registrationCount,
+        pairings,
+      })
+    : null;
+
   const nextStep = getCurrentSetupStep({
     eventId: event.id,
     isDraft,
@@ -198,11 +243,7 @@ export default async function EventDetailPage({
   });
 
   const showNextStepBanner =
-    nextStep &&
-    ((isDraft && activeTab === "details") ||
-      (!isDraft &&
-        activeTab !== "overview" &&
-        (nextStep.href != null || nextStep.tab !== activeTab)));
+    nextStep && isDraft && activeTab === "details";
 
   const countdown = formatDaysUntilEvent(event.date);
   const eventUpcoming = getDaysUntilEvent(event.date) >= 0;
@@ -399,7 +440,8 @@ export default async function EventDetailPage({
             <PublishEventCard
               eventId={event.id}
               eventName={event.name}
-              platformFeeCents={getPlatformFeeCents()}
+              currentTier={getEventPlatformTier(event)}
+              maxPlayers={event.maxPlayers}
             />
             <Card className="rounded-2xl border-dashed">
               <CardHeader>
@@ -419,23 +461,14 @@ export default async function EventDetailPage({
           </>
         )}
 
-        {/* Published: overview */}
-        {isOperationalEvent && activeTab === "overview" && (
-          <>
-            <EventSetupChecklist
-              eventId={event.id}
-              registrationCount={registrationCount}
-              maxPlayers={event.maxPlayers}
-              pairings={pairings}
-              scoringStatus={event.scoringStatus}
-            />
-
+        {/* Published: players */}
+        {isOperationalEvent && activeTab === "players" && (
+          <div className="space-y-6">
             <Card className="rounded-2xl">
               <CardHeader>
                 <CardTitle>Registration link</CardTitle>
                 <CardDescription>
-                  Share this link with players — works on any phone, no app
-                  needed.
+                  Share with players — works on any phone, no app needed.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -453,6 +486,20 @@ export default async function EventDetailPage({
               </CardContent>
             </Card>
 
+            <RegistrationsList
+              eventId={event.id}
+              registrations={registrations}
+              registrationCount={registrationCount}
+              maxPlayers={event.maxPlayers}
+              scoringStatus={event.scoringStatus}
+              eventStatus={event.status}
+            />
+          </div>
+        )}
+
+        {/* Published: pairings */}
+        {isOperationalEvent && activeTab === "pairings" && pairings && (
+          <div className="space-y-6">
             <StartFormatCard
               eventId={event.id}
               scoringStatus={event.scoringStatus}
@@ -463,52 +510,103 @@ export default async function EventDetailPage({
                 teeTimeIntervalMinutes: event.teeTimeIntervalMinutes,
               }}
             />
-
-          </>
-        )}
-
-        {/* Published: players */}
-        {isOperationalEvent && activeTab === "players" && (
-          <RegistrationsList
-            eventId={event.id}
-            registrations={registrations}
-            registrationCount={registrationCount}
-            maxPlayers={event.maxPlayers}
-            scoringStatus={event.scoringStatus}
-            eventStatus={event.status}
-          />
-        )}
-
-        {/* Published: pairings */}
-        {isOperationalEvent && activeTab === "pairings" && (
-          pairings && (
             <PairingsPanel
-                eventId={event.id}
-                slug={event.slug}
-                appUrl={getAppUrl()}
-                scoringStatus={event.scoringStatus}
-                startFormat={event.startFormat}
-                shotgunStartTime={event.shotgunStartTime}
-                firstTeeTime={event.firstTeeTime}
-                teeTimeIntervalMinutes={event.teeTimeIntervalMinutes}
-                holes={event.holes}
-                format={event.format}
-                teamAName={event.teamAName}
-                teamBName={event.teamBName}
-                pairings={pairings}
-              />
-          )
+              eventId={event.id}
+              slug={event.slug}
+              appUrl={getAppUrl()}
+              scoringStatus={event.scoringStatus}
+              startFormat={event.startFormat}
+              shotgunStartTime={event.shotgunStartTime}
+              firstTeeTime={event.firstTeeTime}
+              teeTimeIntervalMinutes={event.teeTimeIntervalMinutes}
+              holes={event.holes}
+              format={event.format}
+              teamAName={event.teamAName}
+              teamBName={event.teamBName}
+              pairings={pairings}
+            />
+          </div>
         )}
 
         {/* Published: scoring */}
-        {isOperationalEvent && activeTab === "scoring" && (
+        {isOperationalEvent && activeTab === "scoring" && workflow && (
           <ScoringCard
             eventId={event.id}
             slug={event.slug}
             scoringStatus={event.scoringStatus}
             scoringCode={event.scoringCode}
             appUrl={getAppUrl()}
+            canOpenScoring={workflow.canOpenScoring}
+            workflow={workflow}
           />
+        )}
+
+        {/* Published: pro */}
+        {isOperationalEvent && activeTab === "pro" && (
+          isProEvent(event) ? (
+            <div className="space-y-6">
+              <ProFeaturesPanel event={event} />
+              <EventBrandingPanel event={event} />
+              <FlightsPanel eventId={event.id} flights={flights} />
+              <SponsorPackagesPanel
+                eventId={event.id}
+                packages={sponsorData.packages}
+                purchases={sponsorData.purchases}
+              />
+              {event.waitlistEnabled && waitlist.length > 0 && (
+                <Card className="rounded-2xl">
+                  <CardHeader>
+                    <CardTitle>Waitlist</CardTitle>
+                    <CardDescription>
+                      {waitlist.length} player{waitlist.length === 1 ? "" : "s"} waiting for a spot.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ul className="space-y-2 text-sm">
+                      {waitlist.map((entry) => (
+                        <li
+                          key={entry.id}
+                          className="flex items-center justify-between rounded-lg border border-border/70 px-3 py-2"
+                        >
+                          <span>
+                            {entry.name} · {entry.email}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {entry.notifiedAt ? "Notified" : "Waiting"}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          ) : (
+            <Card className="rounded-2xl">
+              <CardHeader>
+                <CardTitle>Pro features</CardTitle>
+                <CardDescription>
+                  Branding, sponsors, waitlist, group registration, SMS, flights, and analytics are available on Pro events.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          )
+        )}
+
+        {/* Published: analytics */}
+        {isOperationalEvent && activeTab === "analytics" && (
+          analyticsReport ? (
+            <EventAnalyticsReportCard eventId={event.id} report={analyticsReport} />
+          ) : (
+            <Card className="rounded-2xl">
+              <CardHeader>
+                <CardTitle>Analytics</CardTitle>
+                <CardDescription>
+                  Post-event analytics reports are included with Pro events.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          )
         )}
 
         {/* Published: settings */}

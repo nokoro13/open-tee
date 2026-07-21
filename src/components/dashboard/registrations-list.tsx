@@ -141,6 +141,22 @@ export function RegistrationsList({
           <CardTitle>Registrations</CardTitle>
           <CardDescription>
             {registrationCount} of {maxPlayers} spots filled
+            {eventStatus === "published" && scoringStatus === "disabled" && (
+              <>
+                {" "}
+                · Online signup is open (
+                <a
+                  href="?tab=settings"
+                  className="text-primary hover:underline"
+                >
+                  close in Settings
+                </a>
+                )
+              </>
+            )}
+            {eventStatus === "closed" && scoringStatus === "disabled" && (
+              <> · Online signup is closed</>
+            )}
           </CardDescription>
         </div>
         <div className="flex flex-wrap gap-2">

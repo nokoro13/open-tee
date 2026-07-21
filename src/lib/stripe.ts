@@ -19,7 +19,11 @@ export function getAppUrl(): string {
   return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 }
 
-export function getPlatformFeeCents(): number {
-  const cents = process.env.STRIPE_PLATFORM_FEE_CENTS;
-  return cents ? Number.parseInt(cents, 10) : 4900;
+import {
+  getPlatformFeeCentsForTier,
+  type PlatformTier,
+} from "@/lib/platform-tier";
+
+export function getPlatformFeeCents(tier: PlatformTier = "starter"): number {
+  return getPlatformFeeCentsForTier(tier);
 }

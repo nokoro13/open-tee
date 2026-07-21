@@ -4,10 +4,11 @@ import type { EventPairings } from "@/lib/pairings";
 export type EventListFilter = "all" | "drafts" | "upcoming" | "past";
 
 export type PublishedEventTab =
-  | "overview"
   | "players"
   | "pairings"
   | "scoring"
+  | "pro"
+  | "analytics"
   | "settings";
 
 export type DraftEventTab = "details" | "publish";
@@ -15,10 +16,11 @@ export type DraftEventTab = "details" | "publish";
 export type EventTab = PublishedEventTab | DraftEventTab;
 
 export const PUBLISHED_EVENT_TABS: { id: PublishedEventTab; label: string }[] = [
-  { id: "overview", label: "Overview" },
   { id: "players", label: "Players" },
   { id: "pairings", label: "Pairings" },
   { id: "scoring", label: "Scoring" },
+  { id: "pro", label: "Pro" },
+  { id: "analytics", label: "Analytics" },
   { id: "settings", label: "Settings" },
 ];
 
@@ -38,9 +40,13 @@ export function parseEventTab(
     return tab && DRAFT_TAB_SET.has(tab) ? (tab as DraftEventTab) : "details";
   }
 
+  if (tab === "overview") {
+    return "players";
+  }
+
   return tab && PUBLISHED_TAB_SET.has(tab)
     ? (tab as PublishedEventTab)
-    : "overview";
+    : "players";
 }
 
 export function eventTabHref(eventId: string, tab: EventTab): string {
@@ -150,7 +156,7 @@ export function getEventSetupChecklist(options: {
       id: "registrations",
       label: "Share registration link",
       description: registrationDetail,
-      tab: "overview",
+      tab: "players",
       done: registrationCount > 0,
     },
     {
@@ -217,27 +223,18 @@ export function getCurrentSetupStep(options: {
     return {
       label: "Share the registration link",
       description: "Send your public signup page to players.",
-      tab: "overview",
+      tab: "players",
     };
   }
 
-  const pairingsReady =
-    pairings != null &&
-    pairings.groups.length > 0 &&
-    pairings.unassigned.length === 0;
-
-  if (!pairingsReady) {
-    return {
-      label: "Build pairings",
-      description: "Assign registered players to groups.",
-      tab: "pairings",
-    };
-  }
-
-  if (scoringStatus === "disabled") {
+  if (
+    pairings &&
+    pairings.groups.some((group) => group.players.length > 0) &&
+    scoringStatus === "disabled"
+  ) {
     return {
       label: "Print scorecards",
-      description: "Print one scorecard per group with QR codes for digital scoring.",
+      description: "Print one scorecard per group before tournament day.",
       tab: "pairings",
       href: `/print/events/${eventId}/scorecards`,
     };

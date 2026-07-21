@@ -4,7 +4,9 @@ import Stripe from "stripe";
 
 import { handlePlatformFeePaid } from "@/actions/publish";
 import { handleRegistrationPaid } from "@/actions/registrations";
+import { handleSponsorPurchasePaid } from "@/actions/sponsors";
 import { getStripe } from "@/lib/stripe";
+import type { PlatformTier } from "@/lib/platform-tier";
 
 export const runtime = "nodejs";
 
@@ -39,17 +41,36 @@ export async function POST(request: Request) {
     if (type === "platform_fee") {
       const eventId = session.metadata?.eventId;
       const orgId = session.metadata?.orgId;
+      const tier = session.metadata?.platformTier as PlatformTier | undefined;
       if (eventId && orgId) {
-        await handlePlatformFeePaid(eventId, orgId, session.id);
+        await handlePlatformFeePaid(eventId, orgId, session.id, tier);
       }
     }
 
-    if (type === "registration") {
+    if (type === "registration" || type === "group_registration") {
       const registrationId = session.metadata?.registrationId;
+      const registrationGroupId = session.metadata?.registrationGroupId;
       const eventId = session.metadata?.eventId;
-      if (registrationId && eventId) {
+      if (eventId) {
         await handleRegistrationPaid(
-          registrationId,
+          registrationId ?? null,
+          registrationGroupId ?? null,
+          eventId,
+          session.id,
+          typeof session.payment_intent === "string"
+            ? session.payment_intent
+            : session.payment_intent?.id ?? null,
+          session.amount_total ?? null
+        );
+      }
+    }
+
+    if (type === "sponsor_purchase") {
+      const purchaseId = session.metadata?.purchaseId;
+      const eventId = session.metadata?.eventId;
+      if (purchaseId && eventId) {
+        await handleSponsorPurchasePaid(
+          purchaseId,
           eventId,
           session.id,
           typeof session.payment_intent === "string"

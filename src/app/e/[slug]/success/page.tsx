@@ -15,7 +15,7 @@ import {
 
 type SuccessPageProps = {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ session_id?: string; free?: string }>;
+  searchParams: Promise<{ session_id?: string; free?: string; group?: string }>;
 };
 
 export default async function RegistrationSuccessPage({
@@ -23,7 +23,7 @@ export default async function RegistrationSuccessPage({
   searchParams,
 }: SuccessPageProps) {
   const { slug } = await params;
-  const { session_id, free } = await searchParams;
+  const { session_id, free, group } = await searchParams;
   const event = await getPublishedEventBySlug(slug);
 
   if (!event) {
@@ -33,10 +33,18 @@ export default async function RegistrationSuccessPage({
   let playerName: string | undefined;
 
   if (session_id) {
-    const registration = await verifyRegistrationSession(session_id);
-    if (registration?.event.slug === slug) {
-      playerName = registration.name;
+    const result = await verifyRegistrationSession(session_id);
+    if (result && "event" in result && result.event.slug === slug) {
+      if ("leaderName" in result) {
+        playerName = result.leaderName;
+      } else if ("name" in result) {
+        playerName = result.name;
+      }
     }
+  }
+
+  if (group === "1" && !playerName) {
+    playerName = "Your group";
   }
 
   if (free === "1" && !playerName) {

@@ -31,6 +31,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { getScorePageHref } from "@/lib/scoring-code-storage";
+import type { EventWorkflowSnapshot } from "@/lib/event-workflow";
 
 type ScoringCardProps = {
   eventId: string;
@@ -38,6 +39,8 @@ type ScoringCardProps = {
   scoringStatus: "disabled" | "open" | "finalized";
   scoringCode: string | null;
   appUrl: string;
+  canOpenScoring?: boolean;
+  workflow?: EventWorkflowSnapshot;
 };
 
 const statusLabel = {
@@ -58,6 +61,8 @@ export function ScoringCard({
   scoringStatus,
   scoringCode,
   appUrl,
+  canOpenScoring = true,
+  workflow,
 }: ScoringCardProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -149,9 +154,21 @@ export function ScoringCard({
 
         {scoringStatus === "disabled" && (
           <>
+            {!canOpenScoring && workflow && workflow.pairingsIssues.length > 0 && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm">
+                <p className="font-medium text-amber-950 dark:text-amber-100">
+                  Before opening scoring
+                </p>
+                <ul className="mt-1 list-disc pl-4 text-amber-950 dark:text-amber-100">
+                  {workflow.pairingsIssues.map((issue) => (
+                    <li key={issue}>{issue}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <p className="text-sm text-muted-foreground">
-              Opening scoring closes public registration and locks the start
-              schedule and pairings.
+              Opening scoring closes public registration and locks pairings and
+              the start schedule.
             </p>
             <AlertDialog
               open={openScoringDialogOpen}
@@ -161,7 +178,7 @@ export function ScoringCard({
                 type="button"
                 size="lg"
                 className="h-11 w-full sm:w-auto"
-                disabled={isPending}
+                disabled={isPending || !canOpenScoring}
                 onClick={() => setOpenScoringDialogOpen(true)}
               >
                 <Play />

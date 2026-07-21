@@ -10,6 +10,7 @@ import { requireOrganization } from "@/lib/auth";
 import { sendScoringLinkEmail } from "@/lib/email";
 import { isOperationalEventStatus } from "@/lib/events";
 import { isTeamHoleScoring } from "@/lib/event-formats";
+import { validatePairingsForFormat } from "@/lib/event-workflow";
 import { getEventPairings, type EventPairings } from "@/lib/pairings";
 import { getGroupScorePageUrl } from "@/lib/scoring-code-storage";
 import { getAppUrl } from "@/lib/stripe";
@@ -328,9 +329,20 @@ export async function openScoring(eventId: string): Promise<ActionResult> {
   }
 
   const { event } = result;
+  const org = await requireOrganization();
 
   if (event.scoringStatus === "finalized") {
     return { success: false, error: "Scoring is finalized and cannot be reopened." };
+  }
+
+  const pairings = await getEventPairings(eventId, org.id);
+  if (!pairings) {
+    return { success: false, error: "Could not load pairings." };
+  }
+
+  const pairingsIssues = validatePairingsForFormat(event.format, pairings);
+  if (pairingsIssues.length > 0) {
+    return { success: false, error: pairingsIssues[0] };
   }
 
   const marshalCode = event.scoringCode ?? (await createUniqueScoringCode(eventId));
@@ -341,7 +353,10 @@ export async function openScoring(eventId: string): Promise<ActionResult> {
     .set({
       scoringStatus: "open",
       scoringCode: marshalCode,
-      registrationCloses: now,
+      registrationCloses: event.registrationCloses ?? now,
+      registrationFinalizedAt: event.registrationFinalizedAt ?? now,
+      status: event.status === "published" ? "closed" : event.status,
+      pairingsFinalizedAt: event.pairingsFinalizedAt ?? now,
       updatedAt: now,
     })
     .where(eq(events.id, eventId));

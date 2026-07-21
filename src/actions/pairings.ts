@@ -13,6 +13,7 @@ import { getDb } from "@/db";
 import { pairingGroups, registrations } from "@/db/schema";
 import { requireOrganization } from "@/lib/auth";
 import { assertEventSetupUnlocked } from "@/lib/event-setup-lock";
+import { isPairingsFinalized } from "@/lib/event-workflow";
 import { isOperationalEventStatus } from "@/lib/events";
 
 export type ActionResult =
@@ -49,6 +50,14 @@ function assertSetupUnlocked(
   if (!lockResult.ok) {
     return { success: false, error: lockResult.error };
   }
+
+  if (isPairingsFinalized(event)) {
+    return {
+      success: false,
+      error: "Pairings are finalized. Reopen pairings to make changes.",
+    };
+  }
+
   return null;
 }
 

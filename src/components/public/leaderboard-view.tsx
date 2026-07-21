@@ -48,6 +48,7 @@ type LeaderboardViewProps = {
   initialData: LeaderboardPayload;
   pollIntervalMs?: number;
   embed?: boolean;
+  showNetToggle?: boolean;
 };
 
 function MatchEntryNames({ entry }: { entry: LeaderboardEntry }) {
@@ -100,8 +101,10 @@ export function LeaderboardView({
   initialData,
   pollIntervalMs = 8000,
   embed = false,
+  showNetToggle = false,
 }: LeaderboardViewProps) {
   const [data, setData] = useState(initialData);
+  const [scoreBasis, setScoreBasis] = useState<"gross" | "net">("gross");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [expandedEntryId, setExpandedEntryId] = useState<string | null>(null);
   const [scoreHref, setScoreHref] = useState(() => getScorePageHref(slug));
@@ -117,9 +120,12 @@ export function LeaderboardView({
 
     async function refresh() {
       try {
-        const response = await fetch(`/api/e/${slug}/leaderboard`, {
-          cache: "no-store",
-        });
+        const response = await fetch(
+          `/api/e/${slug}/leaderboard?basis=${scoreBasis}`,
+          {
+            cache: "no-store",
+          }
+        );
         if (response.ok) {
           const json = (await response.json()) as LeaderboardPayload;
           setData(json);
@@ -135,7 +141,24 @@ export function LeaderboardView({
     }, pollIntervalMs);
 
     return () => clearInterval(interval);
-  }, [slug, pollIntervalMs, initialData.event.scoringStatus]);
+  }, [slug, pollIntervalMs, initialData.event.scoringStatus, scoreBasis]);
+
+  useEffect(() => {
+    if (!showNetToggle || initialData.event.scoringStatus === "disabled") return;
+
+    async function refreshBasis() {
+      const response = await fetch(
+        `/api/e/${slug}/leaderboard?basis=${scoreBasis}`,
+        { cache: "no-store" }
+      );
+      if (response.ok) {
+        const json = (await response.json()) as LeaderboardPayload;
+        setData(json);
+      }
+    }
+
+    void refreshBasis();
+  }, [scoreBasis, showNetToggle, slug, initialData.event.scoringStatus]);
 
   const { event, entries, ryderCup } = data;
   const isLive = event.scoringStatus === "open";
@@ -224,6 +247,34 @@ export function LeaderboardView({
           <div className="flex flex-wrap gap-2">
             <Badge variant="outline">{getEventFormatLabel(event.format)}</Badge>
             <Badge variant="outline">{event.holes} holes</Badge>
+            {showNetToggle && (
+              <div className="inline-flex rounded-full border border-border bg-background p-0.5">
+                <button
+                  type="button"
+                  className={cn(
+                    "rounded-full px-3 py-1 text-xs font-medium",
+                    scoreBasis === "gross"
+                      ? "bg-muted text-foreground"
+                      : "text-muted-foreground"
+                  )}
+                  onClick={() => setScoreBasis("gross")}
+                >
+                  Gross
+                </button>
+                <button
+                  type="button"
+                  className={cn(
+                    "rounded-full px-3 py-1 text-xs font-medium",
+                    scoreBasis === "net"
+                      ? "bg-muted text-foreground"
+                      : "text-muted-foreground"
+                  )}
+                  onClick={() => setScoreBasis("net")}
+                >
+                  Net
+                </button>
+              </div>
+            )}
           </div>
         </div>
 

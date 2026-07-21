@@ -4,6 +4,10 @@ import { getEventParMap, formatScoreToPar, getEventScorecard } from "@/lib/score
 import { attachLeaderboardScorecards, type LeaderboardScorecard } from "@/lib/leaderboard-scorecard";
 import { dedupeScoresByHole, sumDedupedStrokes } from "@/lib/score-aggregation";
 import {
+  parseCourseHandicap,
+  strokesReceivedOnHole,
+} from "@/lib/handicap-strokes";
+import {
   computeBestBallTotal,
   computeFourballMatch,
   computeFoursomesMatch,
@@ -52,6 +56,11 @@ export type RyderCupSummary = {
   teamBName: string;
   teamAPoints: number;
   teamBPoints: number;
+};
+
+export type LeaderboardOptions = {
+  scoreBasis?: "gross" | "net";
+  flightId?: string | null;
 };
 
 export type LeaderboardResult = {
@@ -250,12 +259,17 @@ function strokeEntry(
 
 async function buildIndividualStrokeLeaderboard(
   eventId: string,
-  holes: "9" | "18"
+  holes: "9" | "18",
+  options: LeaderboardOptions = {}
 ): Promise<LeaderboardEntry[]> {
   const holeCount = getHoleCount(holes);
   const holeNumbers = getHoleNumbers(holes);
   const scores = await getScoresForEvent(eventId);
   const parMap = await getEventParMap(eventId);
+  const eventHoles = await getEventScorecard(eventId);
+  const strokeIndexByHole = new Map(
+    eventHoles.map((hole) => [hole.holeNumber, hole.strokeIndex ?? hole.holeNumber])
+  );
 
   const activePlayers = await getDb().query.registrations.findMany({
     where: eq(registrations.eventId, eventId),
@@ -263,9 +277,31 @@ async function buildIndividualStrokeLeaderboard(
 
   const entries = activePlayers
     .filter((player) => player.paymentStatus !== "refunded")
+    .filter((player) =>
+      options.flightId ? player.flightId === options.flightId : true
+    )
     .map((player) => {
       const playerScores = scores.filter((s) => s.registrationId === player.id);
-      const { total, thru, scoredHoles } = sumDedupedStrokes(playerScores);
+      const { total: grossTotal, thru, scoredHoles } = sumDedupedStrokes(playerScores);
+
+      let total = grossTotal;
+      if (options.scoreBasis === "net" && grossTotal != null) {
+        const courseHandicap = parseCourseHandicap(player.handicap);
+        if (courseHandicap != null && courseHandicap > 0) {
+          let netTotal = 0;
+          for (const score of playerScores) {
+            const strokeIndex =
+              strokeIndexByHole.get(score.holeNumber) ?? score.holeNumber;
+            const received = strokesReceivedOnHole(
+              courseHandicap,
+              strokeIndex,
+              holeCount
+            );
+            netTotal += score.strokes - received;
+          }
+          total = netTotal;
+        }
+      }
 
       return strokeEntry(
         {
@@ -324,12 +360,17 @@ async function buildTeamStrokeLeaderboard(
 
 async function buildTeamBestBallLeaderboard(
   eventId: string,
-  holes: "9" | "18"
+  holes: "9" | "18",
+  options: LeaderboardOptions = {}
 ): Promise<LeaderboardEntry[]> {
   const holeCount = getHoleCount(holes);
   const holeNumbers = getHoleNumbers(holes);
   const scores = await getScoresForEvent(eventId);
   const parMap = await getEventParMap(eventId);
+  const eventHoles = await getEventScorecard(eventId);
+  const strokeIndexByHole = new Map(
+    eventHoles.map((hole) => [hole.holeNumber, hole.strokeIndex ?? hole.holeNumber])
+  );
 
   const groups = await getDb().query.pairingGroups.findMany({
     where: eq(pairingGroups.eventId, eventId),
@@ -339,14 +380,47 @@ async function buildTeamBestBallLeaderboard(
 
   const entries = groups
     .filter((group) => group.registrations.length > 0)
+    .filter((group) =>
+      options.flightId ? group.flightId === options.flightId : true
+    )
     .map((group) => {
       const playerMaps = group.registrations.map((player) =>
         playerScoreMap(scores, player.id)
       );
-      const { total, thru, scoredHoles } = computeBestBallTotal(
-        playerMaps,
-        holeNumbers
-      );
+
+      let total: number | null;
+      let thru: number;
+      let scoredHoles: number[];
+
+      if (options.scoreBasis === "net") {
+        const netScoresByHole: number[] = [];
+        for (const holeNumber of holeNumbers) {
+          let bestNet: number | null = null;
+          for (let i = 0; i < group.registrations.length; i++) {
+            const player = group.registrations[i];
+            const gross = playerMaps[i]?.get(holeNumber);
+            if (gross == null) continue;
+            const courseHandicap = parseCourseHandicap(player.handicap);
+            const strokeIndex =
+              strokeIndexByHole.get(holeNumber) ?? holeNumber;
+            const received =
+              courseHandicap != null && courseHandicap > 0
+                ? strokesReceivedOnHole(courseHandicap, strokeIndex, holeCount)
+                : 0;
+            const net = gross - received;
+            if (bestNet == null || net < bestNet) bestNet = net;
+          }
+          if (bestNet != null) netScoresByHole.push(bestNet);
+        }
+        total = netScoresByHole.length > 0 ? netScoresByHole.reduce((a, b) => a + b, 0) : null;
+        thru = netScoresByHole.length;
+        scoredHoles = netScoresByHole.map((_, index) => holeNumbers[index]);
+      } else {
+        const computed = computeBestBallTotal(playerMaps, holeNumbers);
+        total = computed.total;
+        thru = computed.thru;
+        scoredHoles = computed.scoredHoles;
+      }
 
       return strokeEntry(
         {
@@ -566,7 +640,8 @@ async function buildRyderCupLeaderboard(
 export async function buildLeaderboard(
   eventId: string,
   format: string,
-  holes: "9" | "18"
+  holes: "9" | "18",
+  options: LeaderboardOptions = {}
 ): Promise<LeaderboardResult> {
   const mode = getLeaderboardMode(format);
 
@@ -577,7 +652,9 @@ export async function buildLeaderboard(
       result = { entries: await buildTeamStrokeLeaderboard(eventId, holes) };
       break;
     case "team_best_ball":
-      result = { entries: await buildTeamBestBallLeaderboard(eventId, holes) };
+      result = {
+        entries: await buildTeamBestBallLeaderboard(eventId, holes, options),
+      };
       break;
     case "stableford":
       result = { entries: await buildStablefordLeaderboard(eventId, holes) };
@@ -590,7 +667,9 @@ export async function buildLeaderboard(
       break;
     case "individual_stroke":
     default:
-      result = { entries: await buildIndividualStrokeLeaderboard(eventId, holes) };
+      result = {
+        entries: await buildIndividualStrokeLeaderboard(eventId, holes, options),
+      };
       break;
   }
 

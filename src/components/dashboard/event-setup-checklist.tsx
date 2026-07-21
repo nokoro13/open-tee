@@ -59,7 +59,7 @@ function ChecklistRow({
           <p className="mt-0.5 text-sm text-muted-foreground">{step.description}</p>
         </div>
       </div>
-      {isNext && step.tab !== "overview" && (
+      {isNext && (
         <ButtonLink
           href={step.href ?? eventTabHref(eventId, step.tab)}
           size="sm"

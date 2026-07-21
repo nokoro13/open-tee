@@ -8,14 +8,20 @@ import { getDb } from "@/db";
 import { events, organizations } from "@/db/schema";
 import { requireOrganization } from "@/lib/auth";
 import { sendPublishConfirmationEmail } from "@/lib/email";
-import { getAppUrl, getPlatformFeeCents, getStripe } from "@/lib/stripe";
+import {
+  getPlatformFeeCentsForTier,
+  PLATFORM_TIER_LABELS,
+  type PlatformTier,
+} from "@/lib/platform-tier";
+import { getAppUrl, getStripe } from "@/lib/stripe";
 
 export type ActionResult =
   | { success: true }
   | { success: false; error: string };
 
 export async function startPublishCheckout(
-  eventId: string
+  eventId: string,
+  tier: PlatformTier = "starter"
 ): Promise<ActionResult> {
   const org = await requireOrganization();
   const event = await getEventById(eventId);
@@ -30,7 +36,16 @@ export async function startPublishCheckout(
 
   const appUrl = getAppUrl();
   const stripe = getStripe();
-  const feeCents = getPlatformFeeCents();
+  const feeCents = getPlatformFeeCentsForTier(tier);
+  const tierLabel = PLATFORM_TIER_LABELS[tier];
+
+  await getDb()
+    .update(events)
+    .set({
+      platformTier: tier,
+      updatedAt: new Date(),
+    })
+    .where(eq(events.id, event.id));
 
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
@@ -39,7 +54,7 @@ export async function startPublishCheckout(
         price_data: {
           currency: "usd",
           product_data: {
-            name: "OpenRound Starter — Event publish",
+            name: `OpenRound ${tierLabel} — Event publish`,
             description: `Publish "${event.name}" and open registration`,
           },
           unit_amount: feeCents,
@@ -51,6 +66,7 @@ export async function startPublishCheckout(
       type: "platform_fee",
       eventId: event.id,
       orgId: org.id,
+      platformTier: tier,
     },
     customer_email: org.contactEmail ?? undefined,
     success_url: `${appUrl}/dashboard/events/${event.id}?published=1`,
@@ -75,7 +91,8 @@ export async function startPublishCheckout(
 export async function handlePlatformFeePaid(
   eventId: string,
   orgId: string,
-  sessionId: string
+  sessionId: string,
+  tier?: PlatformTier
 ) {
   const event = await getDb().query.events.findFirst({
     where: eq(events.id, eventId),
@@ -91,6 +108,7 @@ export async function handlePlatformFeePaid(
     .set({
       status: "published",
       platformPaidAt: now,
+      platformTier: tier ?? event.platformTier,
       registrationOpens: event.registrationOpens ?? now,
       stripePlatformSessionId: sessionId,
       updatedAt: now,
@@ -131,10 +149,12 @@ export async function syncPublishIfPaid(eventId: string) {
   );
 
   if (session.payment_status === "paid" && session.metadata?.orgId) {
+    const tier = session.metadata.platformTier as PlatformTier | undefined;
     await handlePlatformFeePaid(
       eventId,
       session.metadata.orgId,
-      session.id
+      session.id,
+      tier
     );
     return getDb().query.events.findFirst({
       where: eq(events.id, eventId),

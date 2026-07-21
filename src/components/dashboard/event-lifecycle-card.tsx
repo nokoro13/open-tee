@@ -61,7 +61,8 @@ export function EventLifecycleCard({ event }: EventLifecycleCardProps) {
       <CardHeader>
         <CardTitle>Event lifecycle</CardTitle>
         <CardDescription>
-          Control registration availability and archive the event when it is complete.
+          Close online registration when you are ready, archive the event when it
+          is complete, and manage the public event status here.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

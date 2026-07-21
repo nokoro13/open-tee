@@ -20,6 +20,11 @@ import {
   type RegistrationWindowInput,
 } from "@/lib/registration-window";
 import {
+  getMaxPlayersForTier,
+  validateMaxPlayersForTier,
+  type PlatformTier,
+} from "@/lib/platform-tier";
+import {
   DEFAULT_FIRST_TEE_TIME,
   DEFAULT_SHOTGUN_START_TIME,
   DEFAULT_TEE_TIME_INTERVAL_MINUTES,
@@ -47,6 +52,7 @@ export type EventFormInput = {
   holes: "9" | "18";
   maxPlayers: number;
   entryFeeDollars: number;
+  platformTier?: PlatformTier;
   description?: string;
   teamAName?: string;
   teamBName?: string;
@@ -74,8 +80,14 @@ function parseEventInput(input: EventFormInput): EventFormInput | ActionResult {
   if (!input.courseName.trim()) {
     return { success: false, error: "Course name is required." };
   }
-  if (input.maxPlayers < 1 || input.maxPlayers > 500) {
-    return { success: false, error: "Max players must be between 1 and 500." };
+  if (input.maxPlayers < 1) {
+    return { success: false, error: "Max players must be at least 1." };
+  }
+
+  const tier = input.platformTier ?? "starter";
+  const maxPlayersError = validateMaxPlayersForTier(input.maxPlayers, tier);
+  if (maxPlayersError) {
+    return { success: false, error: maxPlayersError };
   }
   if (input.entryFeeDollars < 0) {
     return { success: false, error: "Entry fee cannot be negative." };
@@ -386,6 +398,7 @@ export async function closeEventRegistration(eventId: string): Promise<ActionRes
     .update(events)
     .set({
       status: "closed",
+      registrationFinalizedAt: existing.registrationFinalizedAt ?? now,
       registrationCloses: existing.registrationCloses ?? now,
       updatedAt: now,
     })
@@ -420,6 +433,7 @@ export async function reopenEventRegistration(eventId: string): Promise<ActionRe
     .update(events)
     .set({
       status: "published",
+      registrationFinalizedAt: null,
       updatedAt: new Date(),
     })
     .where(and(eq(events.id, eventId), eq(events.orgId, org.id)));

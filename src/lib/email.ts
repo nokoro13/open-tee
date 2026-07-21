@@ -207,3 +207,33 @@ export async function sendEventReminderEmail({
     `,
   });
 }
+
+export async function sendWaitlistSpotAvailableEmail({
+  to,
+  playerName,
+  eventName,
+  eventUrl,
+}: {
+  to: string;
+  playerName: string;
+  eventName: string;
+  eventUrl: string;
+}) {
+  await sendEmail({
+    from: getFromAddress(),
+    to,
+    subject: `Spot available — ${eventName}`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 560px; line-height: 1.5;">
+        <h1 style="font-size: 20px;">Good news, ${playerName}!</h1>
+        <p>A spot opened up for <strong>${eventName}</strong>.</p>
+        <p>Register now before it fills again:</p>
+        <p style="margin: 24px 0;">
+          <a href="${eventUrl}" style="display: inline-block; background: #1a5c3a; color: #fff; padding: 12px 20px; border-radius: 8px; text-decoration: none; font-weight: 600;">
+            Register now
+          </a>
+        </p>
+      </div>
+    `,
+  });
+}
