@@ -255,14 +255,14 @@ export default async function EventDetailPage({
   const unassignedCount = pairings?.unassigned.length ?? 0;
 
   return (
-    <div className="mx-auto w-full min-w-0 max-w-5xl overflow-x-hidden">
+    <div className="mx-auto w-full max-w-5xl min-w-0 space-y-6">
       {/* Top bar */}
       <div className="flex items-center justify-between gap-2">
         <ButtonLink
           variant="ghost"
           size="sm"
           href="/dashboard"
-          className="-ml-2 w-fit shrink-0 text-muted-foreground"
+          className="w-fit shrink-0 text-muted-foreground"
         >
           <ArrowLeft />
           Events
@@ -303,19 +303,19 @@ export default async function EventDetailPage({
 
       {/* Notices */}
       {published === "1" && (
-        <div className="mt-4 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
+        <div className="rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
           Payment received. Your event is live and accepting registrations.
         </div>
       )}
 
       {publish_canceled === "1" && (
-        <div className="mt-4 rounded-xl border bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
+        <div className="rounded-xl border bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
           Publish checkout was canceled. Your event remains in draft.
         </div>
       )}
 
       {/* Hero */}
-      <header className="mt-6 space-y-5 sm:mt-8 sm:space-y-6">
+      <header className="space-y-5 sm:space-y-6">
         <div className="space-y-3 sm:space-y-4">
           <StatusPill event={event} />
           <div className="min-w-0">

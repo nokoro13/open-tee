@@ -62,8 +62,8 @@ export function EventDetailView({
 
   return (
     <EventDetailTabContext.Provider value={{ activeTab, setActiveTab }}>
-      <div className="mt-6 min-w-0 sm:mt-8">
-        <div className="sticky top-0 z-20 -mx-4 bg-background/95 px-4 pb-px backdrop-blur-sm supports-backdrop-filter:bg-background/80 sm:-mx-6 sm:px-6 md:static md:mx-0 md:bg-transparent md:px-0 md:backdrop-blur-none">
+      <div className="min-w-0">
+        <div className="sticky top-0 z-20 bg-background/95 pb-px backdrop-blur-sm supports-backdrop-filter:bg-background/80 md:static md:bg-transparent md:backdrop-blur-none">
           <EventDetailTabs
             activeTab={activeTab}
             onTabChange={setActiveTab}
