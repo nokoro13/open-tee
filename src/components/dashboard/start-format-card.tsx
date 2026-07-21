@@ -68,13 +68,13 @@ export function StartFormatCard({
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Clock className="size-4" />
+    <Card className="min-w-0 overflow-hidden">
+      <CardHeader className="space-y-1">
+        <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+          <Clock className="size-4 shrink-0" />
           Start schedule
         </CardTitle>
-        <CardDescription>
+        <CardDescription className="text-pretty text-xs sm:text-sm">
           {getStartFormatSummary({
             startFormat: event.startFormat,
             shotgunStartTime: event.shotgunStartTime,

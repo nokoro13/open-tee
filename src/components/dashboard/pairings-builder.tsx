@@ -5,6 +5,7 @@ import {
   DragOverlay,
   KeyboardSensor,
   PointerSensor,
+  TouchSensor,
   useDraggable,
   useDroppable,
   useSensor,
@@ -12,7 +13,6 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { useRouter } from "next/navigation";
 import {
   forwardRef,
   useEffect,
@@ -25,6 +25,7 @@ import {
 } from "react";
 import {
   AlertTriangle,
+  ChevronDown,
   GripVertical,
   Plus,
   Printer,
@@ -131,7 +132,6 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
     pairings,
   } = props;
 
-  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -180,10 +180,16 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 200, tolerance: 6 },
+    }),
     useSensor(KeyboardSensor)
   );
 
-  function refreshAfter(action: () => Promise<{ success: boolean; error?: string }>) {
+  function runAction<T extends { success: boolean; error?: string }>(
+    action: () => Promise<T>,
+    onSuccess?: (result: T) => void
+  ) {
     setError(null);
     startTransition(async () => {
       const result = await action();
@@ -192,8 +198,72 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
         setLocalPairings(pairings);
         return;
       }
-      router.refresh();
+      onSuccess?.(result);
     });
+  }
+
+  function updateGroupLocally(
+    groupId: string,
+    input: {
+      label?: string;
+      teeTime?: string | null;
+      startingHole?: number | null;
+      matchType?: "singles" | "fourball" | "foursomes" | null;
+    }
+  ) {
+    setLocalPairings((current) => ({
+      ...current,
+      groups: current.groups.map((group) =>
+        group.id === groupId ? { ...group, ...input } : group
+      ),
+    }));
+  }
+
+  function deleteGroupLocally(groupId: string) {
+    setLocalPairings((current) => {
+      const group = current.groups.find((entry) => entry.id === groupId);
+      if (!group) return current;
+
+      return {
+        groups: current.groups.filter((entry) => entry.id !== groupId),
+        unassigned: [
+          ...current.unassigned,
+          ...group.players.map((player) => ({
+            ...player,
+            scoringCode: null,
+          })),
+        ].sort((a, b) => a.name.localeCompare(b.name)),
+      };
+    });
+  }
+
+  function updateTeamSideLocally(
+    registrationId: string,
+    teamSide: "a" | "b" | null
+  ) {
+    setLocalPairings((current) => ({
+      groups: current.groups.map((group) => ({
+        ...group,
+        players: group.players.map((player) =>
+          player.id === registrationId ? { ...player, teamSide } : player
+        ),
+      })),
+      unassigned: current.unassigned.map((player) =>
+        player.id === registrationId ? { ...player, teamSide } : player
+      ),
+    }));
+  }
+
+  function autoAssignShotgunHolesLocally() {
+    const holeCount = holes === "9" ? 9 : 18;
+    setLocalPairings((current) => ({
+      ...current,
+      groups: current.groups.map((group, index) => ({
+        ...group,
+        startingHole: (index % holeCount) + 1,
+        teeTime: null,
+      })),
+    }));
   }
 
   function movePlayerLocally(
@@ -268,7 +338,7 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
     if (data.fromGroupId === targetGroupId) return;
 
     movePlayerLocally(data.registrationId, data.fromGroupId, targetGroupId);
-    refreshAfter(() =>
+    runAction(() =>
       assignRegistrationToGroup(data.registrationId, targetGroupId)
     );
   }
@@ -278,32 +348,35 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
   }
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
-        <div className="space-y-1">
+    <Card className="min-w-0 overflow-hidden">
+      <CardHeader className="flex flex-col gap-4 space-y-0 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-1">
           <CardTitle className="flex items-center gap-2">
-            <Users className="size-4" />
+            <Users className="size-4 shrink-0" />
             Pairings
           </CardTitle>
-          <CardDescription>
+          <CardDescription className="text-pretty">
             {showMatchType
               ? `Drag players into matches and set ${sideALabel} / ${sideBLabel} sides.`
-              : "Drag registrants from the sidebar into groups."}{" "}
-            {totalAssigned} assigned, {localPairings.unassigned.length} unassigned.
-            <span className="mt-1 block">{scheduleSummary}</span>
+              : "Drag registrants into groups."}{" "}
+            <span className="whitespace-nowrap">
+              {totalAssigned} assigned · {localPairings.unassigned.length} unassigned
+            </span>
+            <span className="mt-1 block text-xs sm:text-sm">{scheduleSummary}</span>
           </CardDescription>
         </div>
-        <div className="flex flex-col gap-2 sm:items-end">
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-col sm:items-stretch lg:items-end">
           {localPairings.groups.some((group) => group.players.length > 0) && (
             <ButtonLink
               variant="outline"
               size="sm"
+              className="col-span-2 h-10 w-full sm:col-span-1 sm:w-auto"
               href={`/print/events/${eventId}/scorecards`}
               target="_blank"
               rel="noopener noreferrer"
             >
               <Printer />
-              Print all scorecards
+              <span className="truncate">Print scorecards</span>
             </ButtonLink>
           )}
           {startFormat === "shotgun" &&
@@ -313,8 +386,12 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
                 type="button"
                 variant="outline"
                 size="sm"
+                className="h-10 w-full sm:w-auto"
                 disabled={controlsDisabled}
-                onClick={() => refreshAfter(() => autoAssignShotgunHoles(eventId))}
+                onClick={() => {
+                  autoAssignShotgunHolesLocally();
+                  runAction(() => autoAssignShotgunHoles(eventId));
+                }}
               >
                 Auto-assign holes
               </Button>
@@ -324,8 +401,18 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
               type="button"
               variant="outline"
               size="sm"
+              className="h-10 w-full sm:w-auto"
               disabled={controlsDisabled}
-              onClick={() => refreshAfter(() => createPairingGroup(eventId))}
+              onClick={() =>
+                runAction(() => createPairingGroup(eventId), (result) => {
+                  if ("group" in result && result.group) {
+                    setLocalPairings((current) => ({
+                      ...current,
+                      groups: [...current.groups, result.group],
+                    }));
+                  }
+                })
+              }
             >
               <Plus />
               {showMatchType ? "Add match" : "Add group"}
@@ -334,7 +421,7 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-4">
+      <CardContent className="min-w-0 space-y-4">
         {error && (
           <p className="text-sm text-destructive" role="alert">
             {error}
@@ -353,7 +440,7 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
             onDragEnd={handleDragEnd}
             onDragCancel={handleDragCancel}
           >
-            <div className="flex min-h-[520px] min-w-0 flex-col gap-4 overflow-x-hidden lg:flex-row lg:gap-6">
+            <div className="flex min-w-0 flex-col gap-4 overflow-x-hidden lg:min-h-[520px] lg:flex-row lg:gap-6">
               <RegistrantsSidebar
                 players={filteredUnassigned}
                 totalCount={localPairings.unassigned.length}
@@ -362,7 +449,17 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
                 disabled={controlsDisabled}
               />
 
-              <div className="min-w-0 flex-1 space-y-4">
+              <div className="min-w-0 w-full max-w-full flex-1 space-y-3">
+                {localPairings.groups.length > 0 && (
+                  <div className="flex items-center justify-between lg:hidden">
+                    <h3 className="text-sm font-semibold">
+                      {showMatchType ? "Matches" : "Groups"}
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      {localPairings.groups.length} total
+                    </p>
+                  </div>
+                )}
                 {localPairings.groups.length === 0 ? (
                   <div className="flex h-full min-h-64 flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/20 px-6 py-12 text-center">
                     <p className="text-sm font-medium">
@@ -381,7 +478,14 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
                         className="mt-4"
                         disabled={controlsDisabled}
                         onClick={() =>
-                          refreshAfter(() => createPairingGroup(eventId))
+                          runAction(() => createPairingGroup(eventId), (result) => {
+                            if ("group" in result && result.group) {
+                              setLocalPairings((current) => ({
+                                ...current,
+                                groups: [...current.groups, result.group],
+                              }));
+                            }
+                          })
                         }
                       >
                         <Plus />
@@ -390,7 +494,7 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
                     )}
                   </div>
                 ) : (
-                  <div className="grid gap-4 xl:grid-cols-2">
+                  <div className="grid min-w-0 w-full max-w-full gap-4 xl:grid-cols-2">
                     {localPairings.groups.map((group) => {
                       const teamACount = group.players.filter(
                         (p) => p.teamSide === "a"
@@ -426,17 +530,20 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
                           canEmailPlayers={canEmailPlayers}
                           appUrl={appUrl}
                           slug={slug}
-                          onUpdate={(input) =>
-                            refreshAfter(() => updatePairingGroup(group.id, input))
-                          }
-                          onDelete={() =>
-                            refreshAfter(() => deletePairingGroup(group.id))
-                          }
-                          onTeamSide={(registrationId, teamSide) =>
-                            refreshAfter(() =>
+                          onUpdate={(input) => {
+                            updateGroupLocally(group.id, input);
+                            runAction(() => updatePairingGroup(group.id, input));
+                          }}
+                          onDelete={() => {
+                            deleteGroupLocally(group.id);
+                            runAction(() => deletePairingGroup(group.id));
+                          }}
+                          onTeamSide={(registrationId, teamSide) => {
+                            updateTeamSideLocally(registrationId, teamSide);
+                            runAction(() =>
                               assignRegistrationTeamSide(registrationId, teamSide)
-                            )
-                          }
+                            );
+                          }}
                         />
                       );
                     })}
@@ -447,7 +554,7 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
 
             <DragOverlay dropAnimation={null}>
               {activePlayer ? (
-                <div className="w-72 max-w-[calc(100vw-2rem)]">
+                <div className="w-[min(100vw-2rem,18rem)] touch-none">
                   <PlayerChip player={activePlayer} isOverlay disabled />
                 </div>
               ) : null}
@@ -474,6 +581,14 @@ function RegistrantsSidebar({
   onSearchChange,
   disabled,
 }: RegistrantsSidebarProps) {
+  const [mobileExpanded, setMobileExpanded] = useState(totalCount > 0);
+
+  useEffect(() => {
+    if (totalCount > 0) {
+      setMobileExpanded(true);
+    }
+  }, [totalCount]);
+
   const { isOver, setNodeRef } = useDroppable({
     id: UNASSIGNED_DROP_ID,
     disabled,
@@ -481,49 +596,90 @@ function RegistrantsSidebar({
 
   return (
     <aside className="flex w-full min-w-0 shrink-0 flex-col overflow-x-hidden lg:w-72 xl:w-80">
-      <div className="mb-3 space-y-1">
-        <h3 className="text-sm font-semibold">Registrants</h3>
-        <p className="text-xs text-muted-foreground">
-          {totalCount} unassigned · drag into a group
-        </p>
-      </div>
-
-      <div className="relative mb-3">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={search}
-          onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Search name or email"
-          className="pl-9"
-          aria-label="Search registrants"
-        />
-      </div>
-
       <div
         ref={setNodeRef}
         className={cn(
-          "flex min-h-64 flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto rounded-xl border bg-muted/10 p-3 transition-colors lg:max-h-[calc(100vh-18rem)]",
-          isOver && "border-primary bg-primary/5 ring-2 ring-primary/20",
-          !isOver && "border-border"
+          "flex flex-col rounded-xl transition-colors lg:rounded-none",
+          isOver && "ring-2 ring-primary/20 lg:ring-0"
         )}
       >
-        {totalCount === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">
-            All players are assigned.
+        <button
+          type="button"
+          className={cn(
+            "mb-3 flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left lg:hidden",
+            isOver
+              ? "border-primary bg-primary/5"
+              : "border-border bg-muted/20"
+          )}
+          aria-expanded={mobileExpanded}
+          onClick={() => setMobileExpanded((open) => !open)}
+        >
+          <div className="min-w-0">
+            <p className="text-sm font-semibold">Registrants</p>
+            <p className="text-xs text-muted-foreground">
+              {totalCount === 0
+                ? "All players assigned · drop here to unassign"
+                : `${totalCount} unassigned · hold & drag to assign`}
+            </p>
+          </div>
+          <ChevronDown
+            className={cn(
+              "size-4 shrink-0 text-muted-foreground transition-transform",
+              mobileExpanded && "rotate-180"
+            )}
+          />
+        </button>
+
+        <div className="mb-3 hidden space-y-1 lg:block">
+          <h3 className="text-sm font-semibold">Registrants</h3>
+          <p className="text-xs text-muted-foreground">
+            {totalCount} unassigned · drag into a group
           </p>
-        ) : players.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">
-            No registrants match your search.
-          </p>
-        ) : (
-          players.map((player) => (
-            <SidebarPlayerCard
-              key={player.id}
-              player={player}
-              disabled={disabled}
+        </div>
+
+        <div
+          className={cn(
+            "flex flex-col",
+            !mobileExpanded && "hidden lg:flex"
+          )}
+        >
+          <div className="relative mb-3">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder="Search name or email"
+              className="h-10 pl-9"
+              aria-label="Search registrants"
             />
-          ))
-        )}
+          </div>
+
+          <div
+            className={cn(
+              "flex min-h-40 flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto rounded-xl border bg-muted/10 p-2.5 sm:p-3 lg:max-h-[calc(100vh-18rem)]",
+              isOver && "border-primary bg-primary/5",
+              !isOver && "border-border"
+            )}
+          >
+            {totalCount === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground sm:py-8">
+                All players are assigned.
+              </p>
+            ) : players.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground sm:py-8">
+                No registrants match your search.
+              </p>
+            ) : (
+              players.map((player) => (
+                <SidebarPlayerCard
+                  key={player.id}
+                  player={player}
+                  disabled={disabled}
+                />
+              ))
+            )}
+          </div>
+        </div>
       </div>
     </aside>
   );
@@ -615,7 +771,7 @@ function GroupCard({
       : formatTimeDisplay(group.teeTime);
 
   return (
-    <div className="flex flex-col rounded-xl border border-border bg-muted/20">
+    <div className="min-w-0 max-w-full overflow-hidden rounded-xl border border-border bg-muted/20">
       <GroupHeader
         eventId={eventId}
         groupId={group.id}
@@ -642,7 +798,7 @@ function GroupCard({
       />
 
       {warning && (
-        <div className="mx-4 mb-3 flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-100">
+        <div className="mx-3 mb-3 flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 sm:text-sm dark:text-amber-100 lg:mx-4">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
           <span>{warning}</span>
         </div>
@@ -651,10 +807,10 @@ function GroupCard({
       <div
         ref={setNodeRef}
         className={cn(
-          "mx-4 mb-4 min-h-28 flex-1 rounded-lg border border-dashed p-3 transition-colors",
+          "mx-3 mb-3 min-h-24 flex-1 rounded-lg border border-dashed p-2.5 transition-colors sm:min-h-28 sm:p-3 lg:mx-4 lg:mb-4",
           group.players.length === 0 && "flex items-center justify-center",
           isOver
-            ? "border-primary bg-primary/5 ring-2 ring-primary/20"
+            ? "border-primary bg-primary/5 ring-2 ring-inset ring-primary/20"
             : "border-border/80 bg-background/60"
         )}
       >
@@ -736,16 +892,22 @@ function GroupHeader({
   }, [label]);
 
   return (
-    <div className="space-y-3 p-4 pb-3">
-      <div className="flex items-start justify-between gap-3">
-        <Badge variant="secondary" className="shrink-0 font-medium">
-          {startFormat === "shotgun" ? "Starting hole" : "Tee time"} ·{" "}
-          {scheduleBadge}
+    <div className="min-w-0 space-y-3 overflow-hidden p-3 pb-2 sm:p-4 sm:pb-3">
+      <div className="flex items-start justify-between gap-2">
+        <Badge
+          variant="secondary"
+          className="max-w-[calc(100%-2.5rem)] shrink font-medium text-[11px] sm:text-xs"
+        >
+          <span className="truncate">
+            {startFormat === "shotgun" ? "Starting hole" : "Tee time"} ·{" "}
+            {scheduleBadge}
+          </span>
         </Badge>
         <Button
           type="button"
           variant="ghost"
           size="icon-sm"
+          className="shrink-0"
           disabled={disabled}
           aria-label="Delete group"
           onClick={onDelete}
@@ -754,7 +916,7 @@ function GroupHeader({
         </Button>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid min-w-0 gap-3">
         <div className="space-y-1">
           <label className="text-xs font-medium text-muted-foreground">
             {showMatchType ? "Match label" : "Group label"}
@@ -805,7 +967,7 @@ function GroupHeader({
             <label className="text-xs font-medium text-muted-foreground">
               Tee time
             </label>
-            <div className="flex h-9 items-center rounded-lg border border-border bg-muted/30 px-3 text-sm font-medium">
+            <div className="flex h-9 w-full min-w-0 items-center rounded-lg border border-border bg-muted/30 px-3 text-sm font-medium">
               {formatTimeDisplay(teeTime)}
             </div>
           </div>
@@ -844,27 +1006,28 @@ function GroupHeader({
       )}
 
       {showScoringLink && scoringUrl && (
-        <div className="space-y-1.5 border-t border-border pt-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs font-medium text-muted-foreground">
+        <div className="min-w-0 space-y-2 border-t border-border pt-3">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="text-xs font-medium text-muted-foreground">
               Scoring link
-              {scoringCode ? (
-                <span className="ml-2 font-mono text-[11px] tracking-wider text-foreground">
-                  {scoringCode}
-                </span>
-              ) : null}
-            </p>
-            <ButtonLink
-              variant="outline"
-              size="sm"
-              href={`/print/events/${eventId}/scorecards/${groupId}`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Printer />
-              Print scorecard
-            </ButtonLink>
+            </span>
+            {scoringCode ? (
+              <span className="font-mono text-[10px] tracking-wider text-foreground sm:text-[11px]">
+                {scoringCode}
+              </span>
+            ) : null}
           </div>
+          <ButtonLink
+            variant="outline"
+            size="sm"
+            className="h-9 w-full max-w-full"
+            href={`/print/events/${eventId}/scorecards/${groupId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Printer />
+            <span className="truncate">Print scorecard</span>
+          </ButtonLink>
           <CopyRegistrationLink url={scoringUrl} />
         </div>
       )}
@@ -917,12 +1080,13 @@ function GroupPlayerRow({
         isDragging={isDragging}
         dragHandleProps={{ ...attributes, ...listeners }}
         trailing={
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex w-full min-w-0 max-w-full flex-col gap-1.5 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
             {canEmailPlayers && player.paymentStatus !== "refunded" && (
               <SendScoringLinkButton
                 eventId={eventId}
                 registrationId={player.id}
                 disabled={isPending}
+                className="w-full sm:w-auto"
               />
             )}
             {showTeamSides && (
@@ -935,7 +1099,7 @@ function GroupPlayerRow({
                     onTeamSide(player.id, value);
                 }}
               >
-                <SelectTrigger className="h-8 w-28 text-xs">
+                <SelectTrigger className="h-9 w-full min-w-0 text-xs sm:h-8 sm:w-28">
                   <SelectValue placeholder="Team">
                     {teamValue === "a"
                       ? sideALabel
@@ -986,37 +1150,39 @@ const PlayerChip = forwardRef<HTMLDivElement, PlayerChipProps>(
         ref={ref}
         style={style}
         className={cn(
-          "flex w-full max-w-full items-start gap-2 rounded-lg border border-border bg-background px-2.5 py-2 shadow-sm",
+          "flex w-full max-w-full flex-col gap-2 rounded-lg border border-border bg-background px-2.5 py-2.5 shadow-sm sm:flex-row sm:items-start sm:py-2",
           isDragging && "opacity-40",
           isOverlay && "opacity-100 shadow-md ring-2 ring-primary/30",
           disabled && "opacity-70"
         )}
       >
-        <button
-          type="button"
-          className={cn(
-            "mt-0.5 shrink-0 touch-none text-muted-foreground",
-            disabled
-              ? "cursor-not-allowed"
-              : "cursor-grab active:cursor-grabbing"
-          )}
-          aria-label={`Drag ${player.name}`}
-          disabled={disabled}
-          {...dragHandleProps}
-        >
-          <GripVertical className="size-4" />
-        </button>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">{player.name}</p>
-          <p className="truncate text-xs text-muted-foreground">{player.email}</p>
-          {player.handicap && (
-            <p className="text-xs text-muted-foreground">
-              HCP {player.handicap}
-            </p>
-          )}
+        <div className="flex min-w-0 flex-1 items-start gap-2">
+          <button
+            type="button"
+            className={cn(
+              "mt-0.5 shrink-0 touch-none rounded-md p-0.5 text-muted-foreground",
+              disabled
+                ? "cursor-not-allowed"
+                : "cursor-grab active:cursor-grabbing active:bg-muted"
+            )}
+            aria-label={`Drag ${player.name}`}
+            disabled={disabled}
+            {...dragHandleProps}
+          >
+            <GripVertical className="size-4" />
+          </button>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">{player.name}</p>
+            <p className="truncate text-xs text-muted-foreground">{player.email}</p>
+            {player.handicap && (
+              <p className="text-xs text-muted-foreground">
+                HCP {player.handicap}
+              </p>
+            )}
+          </div>
         </div>
-        <div className="flex shrink-0 flex-col items-end gap-1.5">
-          <Badge variant="outline" className="capitalize text-[10px]">
+        <div className="flex w-full min-w-0 max-w-full flex-col gap-1.5 pl-7 sm:w-auto sm:max-w-full sm:shrink-0 sm:pl-0">
+          <Badge variant="outline" className="w-fit capitalize text-[10px]">
             {player.paymentStatus}
           </Badge>
           {trailing}

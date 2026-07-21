@@ -15,9 +15,14 @@ import { requireOrganization } from "@/lib/auth";
 import { assertEventSetupUnlocked } from "@/lib/event-setup-lock";
 import { isPairingsFinalized } from "@/lib/event-workflow";
 import { isOperationalEventStatus } from "@/lib/events";
+import type { PairingGroupWithPlayers } from "@/lib/pairings";
 
 export type ActionResult =
   | { success: true }
+  | { success: false; error: string };
+
+export type CreatePairingGroupResult =
+  | { success: true; group: PairingGroupWithPlayers }
   | { success: false; error: string };
 
 async function requirePublishedEvent(
@@ -61,14 +66,18 @@ function assertSetupUnlocked(
   return null;
 }
 
-export async function createPairingGroup(eventId: string): Promise<ActionResult> {
+export async function createPairingGroup(
+  eventId: string
+): Promise<CreatePairingGroupResult> {
   const result = await requirePublishedEvent(eventId);
   if (!result.ok) {
     return { success: false, error: result.error };
   }
 
   const locked = assertSetupUnlocked(result.event);
-  if (locked) return locked;
+  if (locked && !locked.success) {
+    return locked;
+  }
 
   const [countResult] = await getDb()
     .select({ count: sql<number>`count(*)::int` })
@@ -86,13 +95,35 @@ export async function createPairingGroup(eventId: string): Promise<ActionResult>
     })
     .returning({ id: pairingGroups.id });
 
-  if (inserted) {
-    await ensurePairingGroupScoringCode(inserted.id);
-    await syncTeeTimesForEvent(eventId);
+  if (!inserted) {
+    return { success: false, error: "Could not create group." };
+  }
+
+  await ensurePairingGroupScoringCode(inserted.id);
+  await syncTeeTimesForEvent(eventId);
+
+  const group = await getDb().query.pairingGroups.findFirst({
+    where: eq(pairingGroups.id, inserted.id),
+  });
+
+  if (!group) {
+    return { success: false, error: "Could not load new group." };
   }
 
   revalidatePath(`/dashboard/events/${eventId}`);
-  return { success: true };
+  return {
+    success: true,
+    group: {
+      id: group.id,
+      label: group.label,
+      teeTime: group.teeTime,
+      startingHole: group.startingHole,
+      matchType: group.matchType,
+      sortOrder: group.sortOrder,
+      scoringCode: group.scoringCode,
+      players: [],
+    },
+  };
 }
 
 export async function updatePairingGroup(

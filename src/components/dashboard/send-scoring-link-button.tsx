@@ -43,11 +43,12 @@ export function SendScoringLinkButton({
   }
 
   return (
-    <div className={cn("flex flex-col items-end gap-1", className)}>
+    <div className={cn("flex w-full min-w-0 flex-col gap-1 sm:w-auto sm:items-end", className)}>
       <Button
         type="button"
         variant="outline"
         size="sm"
+        className="h-9 w-full sm:w-auto"
         disabled={disabled || isPending}
         onClick={handleClick}
       >

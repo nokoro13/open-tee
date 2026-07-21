@@ -15,17 +15,23 @@ export type DraftEventTab = "details" | "publish";
 
 export type EventTab = PublishedEventTab | DraftEventTab;
 
-export const PUBLISHED_EVENT_TABS: { id: PublishedEventTab; label: string }[] = [
+export type EventTabDefinition = {
+  id: EventTab;
+  label: string;
+  shortLabel?: string;
+};
+
+export const PUBLISHED_EVENT_TABS: EventTabDefinition[] = [
   { id: "players", label: "Players" },
   { id: "pairings", label: "Pairings" },
   { id: "scoring", label: "Scoring" },
   { id: "pro", label: "Pro" },
-  { id: "analytics", label: "Analytics" },
+  { id: "analytics", label: "Analytics", shortLabel: "Stats" },
   { id: "settings", label: "Settings" },
 ];
 
-export const DRAFT_EVENT_TABS: { id: DraftEventTab; label: string }[] = [
-  { id: "details", label: "Event details" },
+export const DRAFT_EVENT_TABS: EventTabDefinition[] = [
+  { id: "details", label: "Event details", shortLabel: "Details" },
   { id: "publish", label: "Publish" },
 ];
 

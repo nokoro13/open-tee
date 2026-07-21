@@ -15,15 +15,15 @@ export function CopyRegistrationLink({ url }: { url: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-2 sm:flex-row">
-      <code className="flex-1 truncate rounded-lg border border-border bg-muted/50 px-3 py-2 text-xs sm:text-sm">
+    <div className="grid min-w-0 w-full max-w-full gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+      <code className="block min-w-0 truncate rounded-lg border border-border bg-muted/50 px-3 py-2 text-xs sm:text-sm">
         {url}
       </code>
       <Button
         type="button"
         variant="outline"
         size="sm"
-        className="h-9 shrink-0"
+        className="h-9 w-full shrink-0 sm:w-auto"
         onClick={copy}
       >
         {copied ? <Check /> : <Copy />}

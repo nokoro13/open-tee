@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 
 import { getEventParMap, formatScoreToPar, getEventScorecard } from "@/lib/scorecard";
 import { attachLeaderboardScorecards, type LeaderboardScorecard } from "@/lib/leaderboard-scorecard";
@@ -783,7 +783,10 @@ export async function getScoreEntryGroups(
 
 export async function getPublishedEventForScoring(slug: string) {
   return getDb().query.events.findFirst({
-    where: and(eq(events.slug, slug), eq(events.status, "published")),
+    where: and(
+      eq(events.slug, slug),
+      inArray(events.status, ["published", "closed"])
+    ),
     with: {
       organization: true,
       eventHoles: {
