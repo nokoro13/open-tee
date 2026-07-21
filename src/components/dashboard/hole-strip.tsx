@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { CheckCircle2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -13,8 +14,8 @@ type HoleStripProps = {
 };
 
 /**
- * Horizontally scrolling hole selector for small screens. Keeps the active
- * hole centered as the user navigates.
+ * Horizontally scrolling hole tabs styled like event management section tabs.
+ * Keeps the active hole centered on small screens.
  */
 export function HoleStrip({
   holes,
@@ -23,63 +24,92 @@ export function HoleStrip({
   isHoleComplete,
   className,
 }: HoleStripProps) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const activeRef = useRef<HTMLButtonElement | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const tabRefs = useRef(new Map<number, HTMLButtonElement>());
 
   useEffect(() => {
-    const container = containerRef.current;
-    const button = activeRef.current;
-    if (!container || !button) return;
+    const activeButton = tabRefs.current.get(activeHole);
+    if (!activeButton || !scrollRef.current) return;
+
+    const container = scrollRef.current;
+    const containerRect = container.getBoundingClientRect();
+    const buttonRect = activeButton.getBoundingClientRect();
+    const offset =
+      buttonRect.left -
+      containerRect.left -
+      (containerRect.width - buttonRect.width) / 2;
 
     container.scrollTo({
-      left: button.offsetLeft - container.clientWidth / 2 + button.clientWidth / 2,
+      left: container.scrollLeft + offset,
       behavior: "smooth",
     });
   }, [activeHole]);
 
   return (
-    <div
-      ref={containerRef}
-      className={cn(
-        "flex gap-1.5 overflow-x-auto px-4 py-3 [-ms-overflow-style:none] scrollbar-none [&::-webkit-scrollbar]:hidden",
-        className
-      )}
-      role="tablist"
-      aria-label="Holes"
-    >
-      {holes.map((holeNumber) => {
-        const complete = isHoleComplete?.(holeNumber) ?? false;
-        const isActive = activeHole === holeNumber;
+    <nav aria-label="Holes" className={cn("relative min-w-0", className)}>
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 left-0 z-10 w-6 bg-linear-to-r from-background to-transparent sm:w-8 md:hidden"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 right-0 z-10 w-6 bg-linear-to-l from-background to-transparent sm:w-8 md:hidden"
+      />
 
-        return (
-          <button
-            key={holeNumber}
-            ref={isActive ? activeRef : undefined}
-            type="button"
-            role="tab"
-            aria-selected={isActive}
-            onClick={() => onSelect(holeNumber)}
-            className={cn(
-              "relative flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-medium transition-colors",
-              isActive
-                ? "bg-primary text-primary-foreground shadow-sm"
-                : "bg-background text-foreground ring-1 ring-foreground/10 active:bg-muted",
-              complete && !isActive && "ring-primary/40"
-            )}
-          >
-            {holeNumber}
-            {complete && (
-              <span
-                className={cn(
-                  "absolute -right-0.5 -top-0.5 size-2 rounded-full ring-2 ring-card",
-                  isActive ? "bg-primary-foreground" : "bg-primary"
+      <div
+        ref={scrollRef}
+        role="tablist"
+        className={cn(
+          "flex min-w-0 border-b border-border",
+          "overflow-x-auto overscroll-x-contain scroll-smooth [-ms-overflow-style:none] scrollbar-none [&::-webkit-scrollbar]:hidden",
+          "snap-x snap-mandatory touch-pan-x",
+          "md:snap-none md:overflow-visible"
+        )}
+      >
+        {holes.map((holeNumber) => {
+          const complete = isHoleComplete?.(holeNumber) ?? false;
+          const isActive = activeHole === holeNumber;
+
+          return (
+            <button
+              key={holeNumber}
+              ref={(node) => {
+                if (node) {
+                  tabRefs.current.set(holeNumber, node);
+                } else {
+                  tabRefs.current.delete(holeNumber);
+                }
+              }}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => onSelect(holeNumber)}
+              className={cn(
+                "relative shrink-0 snap-start border-b-2 px-3.5 py-3 text-sm font-medium tabular-nums transition-colors",
+                "min-h-11 touch-manipulation whitespace-nowrap",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                "md:flex-1 md:px-2 md:text-center lg:px-3",
+                isActive
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:border-border hover:text-foreground"
+              )}
+            >
+              <span className="inline-flex items-center justify-center gap-1">
+                {holeNumber}
+                {complete && (
+                  <CheckCircle2
+                    className={cn(
+                      "size-3 shrink-0",
+                      isActive ? "text-primary" : "text-primary/70"
+                    )}
+                    aria-hidden
+                  />
                 )}
-                aria-hidden
-              />
-            )}
-          </button>
-        );
-      })}
-    </div>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </nav>
   );
 }

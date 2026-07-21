@@ -1,4 +1,8 @@
-import { sortCourseTees, type CourseTeeInput } from "@/lib/course-tees";
+import {
+  normalizeTeeKey,
+  sortCourseTees,
+  type CourseTeeInput,
+} from "@/lib/course-tees";
 import {
   DEFAULT_SCORECARD_HANDICAP_ROWS,
   ocrRowLabelForHandicapRow,
@@ -68,7 +72,19 @@ type LadiesHandicapByHolePayload = {
 const MIN_YARDAGE = 70;
 const MAX_YARDAGE = 700;
 const TOTAL_TOLERANCE = 3;
-const OCR_MODEL = process.env.SCORECARD_OCR_MODEL?.trim() || "gpt-4o";
+// gpt-5.6-terra: balanced GPT-5.6 tier — multimodal, reads the image at its
+// original resolution (auto detail), and supports strict structured outputs.
+const OCR_MODEL = process.env.SCORECARD_OCR_MODEL?.trim() || "gpt-5.6-terra";
+const OCR_REASONING_EFFORT =
+  process.env.SCORECARD_OCR_REASONING_EFFORT?.trim() || "medium";
+
+// GPT-5 family and o-series reasoning models reject `temperature` and take
+// `reasoning_effort`; reasoning tokens count against the completion budget.
+const REASONING_MODEL_PATTERN = /^(gpt-5|o\d)/i;
+
+function isReasoningModel(model: string): boolean {
+  return REASONING_MODEL_PATTERN.test(model);
+}
 
 const NON_HOLE_COLUMNS = new Set([
   "OUT",
@@ -114,48 +130,107 @@ const CANONICAL_18_COLUMNS = [
   "TOT",
 ] as const;
 
-const GRID_SYSTEM_PROMPT = `You read golf scorecard images as a spreadsheet grid.
+const FRONT_NINE_COLUMNS = [
+  "1",
+  "2",
+  "3",
+  "4",
+  "5",
+  "6",
+  "7",
+  "8",
+  "9",
+  "OUT",
+] as const;
 
-Column headers for 18-hole cards are always:
-1, 2, 3, 4, 5, 6, 7, 8, 9, OUT, 10, 11, 12, 13, 14, 15, 16, 17, 18, IN, TOT
+const BACK_NINE_COLUMNS = [
+  "10",
+  "11",
+  "12",
+  "13",
+  "14",
+  "15",
+  "16",
+  "17",
+  "18",
+  "IN",
+  "TOT",
+] as const;
 
-Each stat is its own row (BLUE, WHITE, RED, PAR, etc.).
-Cell value = row ∩ column intersection.
-Skip the rating/slope label column on the far left.
+const TEE_SECTION_SYSTEM_PROMPT = `You read one section of a golf scorecard tee yardage row with perfect fidelity.
 
-Rules:
-- Every row array length MUST equal columns.length (21 for 18-hole cards).
-- Read left-to-right, one value per column, index-for-index with columns.
-- Use null for unreadable cells — never guess or shift values.`;
+Many scorecards split into two separate blocks or panels:
+- FRONT NINE block: columns 1, 2, 3, 4, 5, 6, 7, 8, 9, OUT (often the upper or left panel)
+- BACK NINE block: columns 10, 11, 12, 13, 14, 15, 16, 17, 18, IN, TOT (often the lower or right panel)
 
-const MENS_HANDICAP_ROW_SYSTEM_PROMPT = `You read the MEN'S HDCP row from a golf scorecard.
+Every tee name appears in BOTH blocks — including lower rows like Stewart and Palmer. The front-nine block is easy to miss; read it carefully for every requested tee.
+
+Match the tee row by its printed text label only — never by row ink or background color.
+
+Return exactly one value per column in the requested section, left to right. Use null for blank cells.`;
+
+const GRID_SYSTEM_PROMPT = `You are a meticulous transcriber of golf scorecard images. You convert the printed scorecard grid into structured data with perfect cell-by-cell fidelity.
+
+Scorecard anatomy:
+- Hole columns for 18-hole cards are always: 1, 2, 3, 4, 5, 6, 7, 8, 9, OUT, 10, 11, 12, 13, 14, 15, 16, 17, 18, IN, TOT (21 columns). OUT = front-nine total, IN = back-nine total, TOT/TOTAL = 18-hole total.
+- Many cards print the front nine and back nine as two stacked blocks, or on facing halves of the card. Each tee row (Championship, Regular, Stewart, Palmer, etc.) appears in BOTH blocks — read holes 1–9 and OUT from the front block, then holes 10–18, IN, and TOT from the back block. Never return back-nine yardages for holes 1–9 or skip the front block for lower tee rows.
+- Some cards add extra columns (RATING, SLOPE, HCP, NET, INITIALS, +/-) at the edges or between OUT and 10 — ignore those columns entirely; do not let them shift your alignment.
+- Each stat is its own row: one row per tee box, plus PAR and handicap rows.
+
+Tee box rows — match by PRINTED NAME ONLY:
+- Identify each tee row by the text label printed on the scorecard (left margin or row header): "Championship", "Regular", "Palmer", "Stewart", "Blue", etc.
+- Row ink/background colors are NOT tee names and must NEVER be used to pick a row. Example: "Championship" may be printed in blue, "Regular" in white, "Palmer" in black, "Stewart" in green, and a "Total Yards" summary row in red — those colors do not tell you which tee is which.
+- Match each requested tee to the row whose printed label matches (case-insensitive; ignore trailing "TEES"/"TEE"/"YDS"). Partial matches are OK only when unambiguous (e.g. "PALMER TEES" → Palmer).
+- Do NOT read summary/stat rows as tee yardages: TOTAL YARDS, YARDAGE, YDS, COMBINED, COMPOSITE, ALL TEES, etc.
+- Combination tees like "Blue/White" are their own separate rows — never merge or average rows.
+- If a requested name has no matching printed label, return nulls for that row and explain in "warnings".
+
+Transcription rules:
+- Every row array MUST have exactly the same length as the columns array — one value per column, index-for-index.
+- Read each row strictly left to right. If a cell is blank, unreadable, or obscured, use null. Never guess, interpolate, or shift values to fill gaps.
+- Per-hole yardages are 2–4 digit numbers (roughly 70–700). OUT/IN totals are ~4 digits; TOT is ~4–5 digits. Par per hole is 3, 4, or 5 (occasionally 6).
+
+Mandatory self-verification before answering:
+1. For every tee row: sum the nine values under columns 1–9 and compare with the value you read under OUT; sum columns 10–18 and compare with IN; OUT + IN must equal TOT. If any check fails, re-read that row cell by cell and correct the misread digits.
+2. For the PAR row: the same sums must match OUT/IN/TOT exactly.
+3. Confirm every value sits under the correct hole column — cross-check a few cells against the printed hole numbers.
+Report any cell you remain unsure about in "warnings" and use null for it.`;
+
+const MENS_HANDICAP_ROW_SYSTEM_PROMPT = `You read the men's stroke-index (handicap) row from a golf scorecard image with perfect fidelity.
+
+The row may be labeled MEN'S HDCP, MEN'S HCP, MEN'S HANDICAP, HANDICAP, HDCP, HCP, STROKE INDEX, S.I., or INDEX. If the card has only one handicap row, that is the men's row. If it has two, the men's row is usually adjacent to the men's tee yardages (above the ladies row).
 
 The column headers are fixed (same as tee yardage rows):
 1, 2, 3, 4, 5, 6, 7, 8, 9, OUT, 10, 11, 12, 13, 14, 15, 16, 17, 18, IN, TOT
 
-Read the MEN'S HDCP / MEN'S HCP row exactly like a tee yardage row:
+Read the row exactly like a tee yardage row:
 - One cell per column, left to right, 21 values total
 - Hole N handicap = cell under column header "N"
 - OUT, IN, TOT are blank → use null at those three positions
 - Do NOT skip blank OUT/IN/TOT — keep all 21 slots so column "11" stays at index 11
+- Handicap values are 1–18 (or 1–9 on nine-hole cards), each used exactly once
 
-Never read handicaps as a compressed list of 18 numbers.`;
+Never read handicaps as a compressed list of 18 numbers.
 
-const LADIES_HANDICAP_ROW_SYSTEM_PROMPT = `You read the LADIES' HDCP row from a golf scorecard.
+Self-check before answering: the 18 hole values must be exactly the numbers 1 through 18 with no repeats and no gaps. If a number repeats or is missing, re-read the row cell by cell and correct it.`;
 
-The LADIES' HDCP row is a separate row below MEN'S HDCP. It has DIFFERENT numbers.
+const LADIES_HANDICAP_ROW_SYSTEM_PROMPT = `You read the ladies' stroke-index (handicap) row from a golf scorecard image with perfect fidelity.
+
+The row may be labeled LADIES' HDCP, LADIES HCP, LADIES HANDICAP, WOMEN'S HANDICAP, WHC, or LADIES S.I. It is a separate row from the men's handicap row (usually below it, or adjacent to the forward tee yardages). It has DIFFERENT numbers from the men's row.
 
 Column headers (fixed, same as tee rows):
 1, 2, 3, 4, 5, 6, 7, 8, 9, OUT, 10, 11, 12, 13, 14, 15, 16, 17, 18, IN, TOT
 
-Read ONLY the LADIES' HDCP / LADIES HCP / LADIES HDCP row:
+Read ONLY the ladies' handicap row:
 - One cell per column, left to right, 21 values total
 - Hole N ladies handicap = cell under column header "N" on the LADIES row
 - OUT, IN, TOT are blank on the ladies row → use null at those three positions
-- Do NOT read from MEN'S HDCP — that is the row above with different values
+- Do NOT read from the men's handicap row — that row has different values
 - Do NOT skip blank OUT/IN/TOT — keep all 21 slots
 
-Never read handicaps as a compressed list of 18 numbers.`;
+Never read handicaps as a compressed list of 18 numbers.
+
+Self-check before answering: the 18 hole values must be exactly the numbers 1 through 18 with no repeats and no gaps, and they must NOT be identical to the men's row. If a check fails, re-read the ladies row cell by cell.`;
 
 function canonicalScorecardColumns(holeCount: number): string[] {
   if (holeCount === 18) return [...CANONICAL_18_COLUMNS];
@@ -204,7 +279,22 @@ function valueForHole(
 }
 
 function teeToRowKeys(tee: CourseTeeInput): string[] {
-  return TEE_ROW_ALIASES[tee.teeKey] ?? [tee.teeName.trim().toUpperCase()];
+  const nameKey = tee.teeName.trim().toUpperCase();
+  const keys = [nameKey];
+  // Color aliases apply only when the user named the tee with that color word
+  // (e.g. teeName "Blue"). Never alias by teeKey alone — preset keys like "blue"
+  // must not pull in a differently named row just because it is printed in blue.
+  const colorAliases = TEE_ROW_ALIASES[normalizeTeeKey(tee.teeName)] ?? [];
+  return [...new Set([...keys, ...colorAliases].filter((key) => key.length > 0))];
+}
+
+function normalizeRowKeyForMatch(raw: string): string {
+  return raw
+    .toUpperCase()
+    .replace(/['']/g, "")
+    .replace(/[^A-Z0-9]+/g, " ")
+    .replace(/\s+(TEES?|COURSE|YARDS?|YDS?)$/g, "")
+    .trim();
 }
 
 function findRowValues(
@@ -217,27 +307,35 @@ function findRowValues(
     if (rows[alias] != null) return rows[alias]!;
   }
 
+  const normalizedAliases = aliases.map(normalizeRowKeyForMatch);
   for (const [key, values] of Object.entries(rows)) {
-    const normalizedKey = key.toUpperCase().replace(/['']/g, "'");
-    if (
-      aliases.some(
-        (alias) => normalizedKey === alias.toUpperCase().replace(/['']/g, "'")
-      )
-    ) {
-      return values ?? null;
+    if (values == null) continue;
+    const normalizedKey = normalizeRowKeyForMatch(key);
+    if (normalizedAliases.includes(normalizedKey)) {
+      return values;
     }
   }
 
   return null;
 }
 
+function describeTeeForPrompt(tee: CourseTeeInput): string {
+  const rowKey = teeToRowKeys(tee)[0];
+  return `- "${rowKey}" — find the row whose printed text label is "${tee.teeName.trim()}" (ignore row color)`;
+}
+
 function buildSpreadsheetPrompt(
   holeCount: number,
   requestedTees: CourseTeeInput[]
 ): string {
-  const teeRows = requestedTees.map((tee) => teeToRowKeys(tee)[0]).join(", ");
+  const teeDescriptions = requestedTees.map(describeTeeForPrompt).join("\n");
   const teeRowKeys = requestedTees
-    .map((tee) => `"${teeToRowKeys(tee)[0]}": [/* 21 values, same order as columns */]`)
+    .map(
+      (tee) =>
+        `"${teeToRowKeys(tee)[0]}": [/* ${
+          holeCount === 18 ? 21 : holeCount
+        } values, same order as columns */]`
+    )
     .join(",\n    ");
 
   const columnExample =
@@ -247,12 +345,15 @@ function buildSpreadsheetPrompt(
           ","
         );
 
-  return `Extract tee yardages and PAR from this scorecard grid.
+  return `Extract the per-hole yardages for each requested tee box and the PAR row from this scorecard image.
 Do NOT extract handicap rows — those are extracted separately.
 
-Requested tee rows: ${teeRows}
+Requested tee boxes — match each to the row with that exact printed name (NOT row color):
+${teeDescriptions}
 
-Use this exact columns array (21 columns for 18-hole cards):
+For each requested tee, locate the scorecard row by its printed text label only. Row background/ink color is irrelevant and misleading. Do not assign a row to a tee because it is blue, white, black, green, or red. Skip summary rows like "Total Yards". Return each row under the exact JSON key shown above. If no row bears that printed name, return nulls and note it in "warnings".
+
+Use this exact columns array (${holeCount === 18 ? "21 columns for 18-hole cards" : `${holeCount} columns`}):
 [${columnExample}]
 
 Return JSON:
@@ -265,7 +366,9 @@ Return JSON:
   "warnings": []
 }
 
-Read each row left-to-right, one value per column, same length as columns.`;
+Read each row left-to-right, one value per column, same length as columns.
+For split front/back layouts: read the front-nine block (holes 1–9 + OUT) and back-nine block (holes 10–18 + IN + TOT) for every tee — including Stewart, Palmer, and other lower rows — then merge into one 21-value row per tee.
+Before answering, verify every tee row and the PAR row: holes 1-9 must sum to the OUT cell, holes 10-18 must sum to the IN cell, and OUT + IN must equal TOT. Fix any misread digits before returning.`;
 }
 
 function buildMensHandicapRowPrompt(
@@ -390,12 +493,109 @@ Return JSON keyed by hole number:
 Do not read from ${mensRowLabel}. Include all holes 1–${holeCount}.`;
 }
 
+type JsonSchemaFormat = {
+  name: string;
+  strict: true;
+  schema: Record<string, unknown>;
+};
+
+function nullableIntegerArraySchema(): Record<string, unknown> {
+  return {
+    type: "array",
+    items: { type: ["integer", "null"] },
+  };
+}
+
+function buildGridResponseSchema(rowKeys: string[]): JsonSchemaFormat {
+  const rowProperties: Record<string, unknown> = {};
+  for (const rowKey of rowKeys) {
+    rowProperties[rowKey] = nullableIntegerArraySchema();
+  }
+
+  return {
+    name: "scorecard_grid",
+    strict: true,
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        columns: { type: "array", items: { type: "string" } },
+        rows: {
+          type: "object",
+          additionalProperties: false,
+          properties: rowProperties,
+          required: rowKeys,
+        },
+        warnings: { type: "array", items: { type: "string" } },
+      },
+      required: ["columns", "rows", "warnings"],
+    },
+  };
+}
+
+const HANDICAP_ROW_RESPONSE_SCHEMA: JsonSchemaFormat = {
+  name: "scorecard_handicap_row",
+  strict: true,
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      values: nullableIntegerArraySchema(),
+    },
+    required: ["values"],
+  },
+};
+
+const TEE_SECTION_RESPONSE_SCHEMA: JsonSchemaFormat = {
+  name: "scorecard_tee_section",
+  strict: true,
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      values: nullableIntegerArraySchema(),
+    },
+    required: ["values"],
+  },
+};
+
+function buildLadiesByHoleResponseSchema(holeCount: number): JsonSchemaFormat {
+  const holeProperties: Record<string, unknown> = {};
+  const holeKeys: string[] = [];
+  for (let hole = 1; hole <= holeCount; hole += 1) {
+    const key = String(hole);
+    holeKeys.push(key);
+    holeProperties[key] = { type: ["integer", "null"] };
+  }
+
+  return {
+    name: "scorecard_ladies_handicap_by_hole",
+    strict: true,
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        ladiesHandicapByHole: {
+          type: "object",
+          additionalProperties: false,
+          properties: holeProperties,
+          required: holeKeys,
+        },
+      },
+      required: ["ladiesHandicapByHole"],
+    },
+  };
+}
+
 async function callVisionOcr(
   apiKey: string,
   imageUrl: string,
   prompt: string,
-  systemPrompt: string
+  systemPrompt: string,
+  responseSchema?: JsonSchemaFormat
 ): Promise<string> {
+  const reasoning = isReasoningModel(OCR_MODEL);
+
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -404,9 +604,14 @@ async function callVisionOcr(
     },
     body: JSON.stringify({
       model: OCR_MODEL,
-      temperature: 0,
-      max_tokens: 4096,
-      response_format: { type: "json_object" },
+      // Reasoning tokens count against the completion budget on GPT-5 models.
+      max_completion_tokens: reasoning ? 16384 : 4096,
+      ...(reasoning
+        ? { reasoning_effort: OCR_REASONING_EFFORT }
+        : { temperature: 0 }),
+      response_format: responseSchema
+        ? { type: "json_schema", json_schema: responseSchema }
+        : { type: "json_object" },
       messages: [
         { role: "system", content: systemPrompt },
         {
@@ -415,7 +620,9 @@ async function callVisionOcr(
             { type: "text", text: prompt },
             {
               type: "image_url",
-              image_url: { url: imageUrl, detail: "high" },
+              // "auto" resolves to original resolution on GPT-5.6 models,
+              // which preserves dense scorecard digits; older models get "high".
+              image_url: { url: imageUrl, detail: reasoning ? "auto" : "high" },
             },
           ],
         },
@@ -519,6 +726,184 @@ function expandCompressedHandicapRow(
   return expanded;
 }
 
+function expandCompressedYardageRow(
+  values: (number | null)[],
+  columns: string[]
+): (number | null)[] {
+  const holeIndexes = holeColumnIndexes(columns);
+  if (values.length !== holeIndexes.length) return values;
+
+  const expanded: (number | null)[] = columns.map(() => null);
+  for (let index = 0; index < holeIndexes.length; index += 1) {
+    expanded[holeIndexes[index]!] = values[index] ?? null;
+  }
+  return expanded;
+}
+
+function sectionFillCount(
+  columns: string[],
+  values: (number | null)[],
+  section: "front" | "back"
+): number {
+  const sectionColumns =
+    section === "front" ? FRONT_NINE_COLUMNS : BACK_NINE_COLUMNS;
+  return sectionColumns.filter((label) => {
+    const index = columns.findIndex(
+      (column) => normalizeColumnLabel(column) === label
+    );
+    return index >= 0 && values[index] != null;
+  }).length;
+}
+
+function isFrontNineMissing(
+  columns: string[],
+  values: (number | null)[]
+): boolean {
+  if (holeCountFromColumns(columns) !== 18) return false;
+  const frontFilled = sectionFillCount(columns, values, "front");
+  const backFilled = sectionFillCount(columns, values, "back");
+  return frontFilled < 5 && backFilled >= 5;
+}
+
+function isBackNineMissing(
+  columns: string[],
+  values: (number | null)[]
+): boolean {
+  if (holeCountFromColumns(columns) !== 18) return false;
+  const frontFilled = sectionFillCount(columns, values, "front");
+  const backFilled = sectionFillCount(columns, values, "back");
+  return backFilled < 5 && frontFilled >= 5;
+}
+
+function holeCountFromColumns(columns: string[]): number {
+  return columns.filter((column) => isHoleColumn(column)).length;
+}
+
+function buildTeeSectionPrompt(
+  tee: CourseTeeInput,
+  section: "front" | "back"
+): string {
+  const teeName = tee.teeName.trim();
+  if (section === "front") {
+    return `Read the FRONT NINE yardage block for the tee labeled "${teeName}".
+
+This block has columns: 1, 2, 3, 4, 5, 6, 7, 8, 9, OUT — usually in the upper or left panel of the scorecard.
+Find the row whose printed text label is "${teeName}" (ignore row color). Every tee, including lower rows like Stewart and Palmer, has front-nine yardages here.
+
+Return JSON with exactly 10 values — holes 1 through 9, then OUT:
+{
+  "values": [/* hole 1 */, /* hole 2 */, ..., /* hole 9 */, /* OUT total */]
+}`;
+  }
+
+  return `Read the BACK NINE yardage block for the tee labeled "${teeName}".
+
+This block has columns: 10, 11, 12, 13, 14, 15, 16, 17, 18, IN, TOT — usually in the lower or right panel of the scorecard.
+Find the row whose printed text label is "${teeName}" (ignore row color).
+
+Return JSON with exactly 11 values — holes 10 through 18, then IN, then TOT:
+{
+  "values": [/* hole 10 */, ..., /* hole 18 */, /* IN total */, /* TOT total */]
+}`;
+}
+
+function normalizeSectionValues(
+  values: (number | null)[],
+  expectedLength: number
+): (number | null)[] {
+  return values.slice(0, expectedLength).map((value) =>
+    value == null || !Number.isFinite(value) ? null : Math.round(value)
+  );
+}
+
+function mergeSectionIntoRow(
+  columns: string[],
+  existing: (number | null)[],
+  sectionValues: (number | null)[],
+  section: "front" | "back"
+): (number | null)[] {
+  const sectionColumns =
+    section === "front" ? FRONT_NINE_COLUMNS : BACK_NINE_COLUMNS;
+  const merged = [...existing];
+
+  for (let index = 0; index < sectionColumns.length; index += 1) {
+    const label = sectionColumns[index]!;
+    const value = sectionValues[index] ?? null;
+    if (value == null) continue;
+
+    const targetIndex = columns.findIndex(
+      (column) => normalizeColumnLabel(column) === label
+    );
+    if (targetIndex >= 0) {
+      merged[targetIndex] = value;
+    }
+  }
+
+  return merged;
+}
+
+async function extractTeeSectionYardages(
+  apiKey: string,
+  imageUrl: string,
+  tee: CourseTeeInput,
+  section: "front" | "back"
+): Promise<(number | null)[]> {
+  const expectedLength = section === "front" ? 10 : 11;
+  const content = await callVisionOcr(
+    apiKey,
+    imageUrl,
+    buildTeeSectionPrompt(tee, section),
+    TEE_SECTION_SYSTEM_PROMPT,
+    TEE_SECTION_RESPONSE_SCHEMA
+  );
+  const payload = parseHandicapRowPayload(content);
+  return normalizeSectionValues(payload.values ?? [], expectedLength);
+}
+
+async function fillMissingTeeSections(
+  apiKey: string,
+  imageUrl: string,
+  tees: CourseTeeInput[],
+  columns: string[],
+  rows: Record<string, (number | null)[]>
+): Promise<void> {
+  if (holeCountFromColumns(columns) !== 18) return;
+
+  await Promise.all(
+    tees.map(async (tee) => {
+      const rowKey = teeToRowKeys(tee)[0];
+      if (!rowKey) return;
+
+      let row = rows[rowKey];
+      if (!row) return;
+
+      row = expandCompressedYardageRow(row, columns);
+
+      if (isFrontNineMissing(columns, row)) {
+        const frontValues = await extractTeeSectionYardages(
+          apiKey,
+          imageUrl,
+          tee,
+          "front"
+        );
+        row = mergeSectionIntoRow(columns, row, frontValues, "front");
+      }
+
+      if (isBackNineMissing(columns, row)) {
+        const backValues = await extractTeeSectionYardages(
+          apiKey,
+          imageUrl,
+          tee,
+          "back"
+        );
+        row = mergeSectionIntoRow(columns, row, backValues, "back");
+      }
+
+      rows[rowKey] = row;
+    })
+  );
+}
+
 function repairHandicapOutShift(
   values: (number | null)[],
   columns: string[],
@@ -596,7 +981,8 @@ async function extractMensHandicapRow(
     apiKey,
     imageUrl,
     buildMensHandicapRowPrompt(holeCount, rowLabel),
-    MENS_HANDICAP_ROW_SYSTEM_PROMPT
+    MENS_HANDICAP_ROW_SYSTEM_PROMPT,
+    HANDICAP_ROW_RESPONSE_SCHEMA
   );
   const payload = parseHandicapRowPayload(content);
   const values = (payload.values ?? []).map((value) =>
@@ -626,7 +1012,8 @@ async function extractLadiesHandicapRow(
       ladiesLabel,
       mensLabel
     ),
-    LADIES_HANDICAP_ROW_SYSTEM_PROMPT
+    LADIES_HANDICAP_ROW_SYSTEM_PROMPT,
+    HANDICAP_ROW_RESPONSE_SCHEMA
   );
   const payload = parseHandicapRowPayload(content);
   const values = (payload.values ?? []).map((value) =>
@@ -660,7 +1047,8 @@ async function extractLadiesHandicapByHole(
       apiKey,
       imageUrl,
       buildLadiesHandicapByHolePrompt(holeCount, ladiesLabel, mensLabel),
-      LADIES_HANDICAP_ROW_SYSTEM_PROMPT
+      LADIES_HANDICAP_ROW_SYSTEM_PROMPT,
+      buildLadiesByHoleResponseSchema(holeCount)
     );
     const payload = JSON.parse(content) as LadiesHandicapByHolePayload;
     const values = ladiesHandicapValuesFromPayload(payload, holeCount);
@@ -904,9 +1292,8 @@ function sanitizeTeeRow(
     const hasFrontValues = frontIndexes.some((index) => sanitized[index] != null);
     if (hasFrontValues && Math.abs(frontSum - outTotal) > TOTAL_TOLERANCE) {
       warnings.push(
-        `${teeName} front nine sum (${frontSum}) doesn't match OUT (${outTotal}) — front nine left blank.`
+        `${teeName} front nine sum (${frontSum}) doesn't match OUT (${outTotal}) — verify front-nine yardages.`
       );
-      sanitized = clearColumns(sanitized, frontIndexes);
     }
   }
 
@@ -919,9 +1306,8 @@ function sanitizeTeeRow(
     const hasBackValues = backIndexes.some((index) => sanitized[index] != null);
     if (hasBackValues && Math.abs(backSum - inTotal) > TOTAL_TOLERANCE) {
       warnings.push(
-        `${teeName} back nine sum (${backSum}) doesn't match IN (${inTotal}) — back nine left blank.`
+        `${teeName} back nine sum (${backSum}) doesn't match IN (${inTotal}) — verify back-nine yardages.`
       );
-      sanitized = clearColumns(sanitized, backIndexes);
     }
   }
 
@@ -1307,11 +1693,15 @@ export async function extractScorecardFromImage(
   const extractMens = mensRow != null;
   const extractLadies = ladiesRow != null;
 
+  const gridRowKeys = [
+    ...new Set([...tees.map((tee) => teeToRowKeys(tee)[0]!), "PAR"]),
+  ];
   const gridPromise = callVisionOcr(
     apiKey,
     imageUrl,
     buildSpreadsheetPrompt(holeCount, tees),
-    GRID_SYSTEM_PROMPT
+    GRID_SYSTEM_PROMPT,
+    buildGridResponseSchema(gridRowKeys)
   );
 
   const mensHandicap = extractMens
@@ -1364,8 +1754,13 @@ export async function extractScorecardFromImage(
 
   const rows: Record<string, (number | null)[]> = {};
   for (const [key, values] of Object.entries(ocrRows)) {
-    rows[key] = realignRowToColumns(ocrColumns, values, columns);
+    rows[key] = expandCompressedYardageRow(
+      realignRowToColumns(ocrColumns, values, columns),
+      columns
+    );
   }
+
+  await fillMissingTeeSections(apiKey, imageUrl, tees, columns, rows);
 
   const { holes, parValidation, yardageValidation, handicapValidation } =
     buildHolesFromGrid(

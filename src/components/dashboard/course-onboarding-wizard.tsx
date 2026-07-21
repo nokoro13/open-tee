@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, ChevronLeft, ChevronRight, MapPin, ScanLine, Sparkles, Upload } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, MapPin, Maximize2, ScanLine, Sparkles, Upload } from "lucide-react";
 
 import {
   extractCourseOnboardingScorecard,
@@ -24,6 +24,14 @@ import { CourseRegionSelect, clearRegionIfInvalid } from "@/components/dashboard
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
   Field,
   FieldDescription,
   FieldLabel,
@@ -36,6 +44,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   countCourseMappingProgress,
   extractHolePinsFromFeatures,
@@ -98,12 +112,101 @@ type CourseOnboardingWizardProps = {
   canEditVerifiedCourse?: boolean;
 };
 
-const STEPS: { id: CourseOnboardingStep; label: string }[] = [
-  { id: "details", label: "Course details" },
+const STEPS: {
+  id: CourseOnboardingStep;
+  label: string;
+  shortLabel?: string;
+}[] = [
+  { id: "details", label: "Course details", shortLabel: "Details" },
   { id: "scorecard", label: "Scorecard" },
-  { id: "mapping", label: "Hole mapping" },
+  { id: "mapping", label: "Hole mapping", shortLabel: "Mapping" },
   { id: "review", label: "Review" },
 ];
+
+function CourseOnboardingStepTabs({
+  activeStep,
+  onStepChange,
+}: {
+  activeStep: CourseOnboardingStep;
+  onStepChange: (step: CourseOnboardingStep) => void;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const tabRefs = useRef(new Map<CourseOnboardingStep, HTMLButtonElement>());
+
+  useEffect(() => {
+    const activeButton = tabRefs.current.get(activeStep);
+    if (!activeButton || !scrollRef.current) return;
+
+    const container = scrollRef.current;
+    const containerRect = container.getBoundingClientRect();
+    const buttonRect = activeButton.getBoundingClientRect();
+    const offset =
+      buttonRect.left -
+      containerRect.left -
+      (containerRect.width - buttonRect.width) / 2;
+
+    container.scrollTo({
+      left: container.scrollLeft + offset,
+      behavior: "smooth",
+    });
+  }, [activeStep]);
+
+  return (
+    <nav aria-label="Onboarding steps" className="relative min-w-0 flex-1">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 left-0 z-10 w-6 bg-linear-to-r from-background to-transparent sm:w-8 md:hidden"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 right-0 z-10 w-6 bg-linear-to-l from-background to-transparent sm:w-8 md:hidden"
+      />
+
+      <div
+        ref={scrollRef}
+        className={cn(
+          "flex min-w-0 border-b border-border",
+          "overflow-x-auto overscroll-x-contain scroll-smooth [-ms-overflow-style:none] scrollbar-none [&::-webkit-scrollbar]:hidden",
+          "snap-x snap-mandatory touch-pan-x",
+          "md:snap-none md:overflow-visible"
+        )}
+      >
+        {STEPS.map((entry) => {
+          const isActive = activeStep === entry.id;
+          const mobileLabel = entry.shortLabel ?? entry.label;
+
+          return (
+            <button
+              key={entry.id}
+              ref={(node) => {
+                if (node) {
+                  tabRefs.current.set(entry.id, node);
+                } else {
+                  tabRefs.current.delete(entry.id);
+                }
+              }}
+              type="button"
+              aria-current={isActive ? "step" : undefined}
+              onClick={() => onStepChange(entry.id)}
+              className={cn(
+                "relative shrink-0 snap-start border-b-2 px-3.5 py-3 text-sm font-medium transition-colors",
+                "min-h-11 touch-manipulation whitespace-nowrap",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                "md:flex-1 md:px-2 md:text-center lg:px-4",
+                isActive
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:border-border hover:text-foreground"
+              )}
+            >
+              <span className="md:hidden">{mobileLabel}</span>
+              <span className="hidden md:inline">{entry.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </nav>
+  );
+}
 
 function buildScorecardRows(
   holeCount: number,
@@ -182,13 +285,10 @@ function ScorecardTotalsPanel({
   }
 
   return (
-    <div className="mt-3 rounded-md border px-3 py-2 text-xs">
-      <p className="font-medium">Totals verification</p>
-      <p className="mt-0.5 text-muted-foreground">
-        Holes sum / scorecard total · ✓ match · ✗ review
-      </p>
+    <div className="rounded-lg border bg-muted/20 px-3 py-2 text-xs">
+      <p className="font-medium text-foreground">Totals check</p>
       <div className="mt-2 overflow-x-auto">
-        <table className="w-full min-w-[280px]">
+        <table className="w-full min-w-70">
           <thead>
             <tr className="text-muted-foreground">
               <th className="pr-3 pb-1 text-left font-medium">Row</th>
@@ -338,6 +438,7 @@ export function CourseOnboardingWizard({
     )
   );
   const scorecardHydratedRevision = useRef<string | null>(null);
+  const scorecardFileInputRef = useRef<HTMLInputElement>(null);
   const [ocrParValidation, setOcrParValidation] =
     useState<ScorecardParValidation | null>(null);
   const [ocrYardageValidation, setOcrYardageValidation] = useState<
@@ -346,6 +447,8 @@ export function CourseOnboardingWizard({
   const [ocrHandicapValidation, setOcrHandicapValidation] = useState<
     ScorecardStrokeIndexValidation[]
   >([]);
+  const [customTeeName, setCustomTeeName] = useState("");
+  const [scorecardPreviewOpen, setScorecardPreviewOpen] = useState(false);
 
   const duplicateCheck = useCourseDuplicateCheck({
     name,
@@ -497,6 +600,33 @@ export function CourseOnboardingWizard({
     syncScorecardRowsForTees(nextTees);
   }
 
+  function addCustomTee(rawName: string) {
+    const teeName = rawName.trim();
+    if (!teeName) return;
+
+    const teeKey = normalizeTeeKey(teeName);
+    if (
+      teeRows.some((tee) => normalizeTeeKey(tee.teeKey || tee.teeName) === teeKey)
+    ) {
+      setError(`"${teeName}" is already in your tee list.`);
+      return;
+    }
+
+    setError(null);
+    const nextTees = [
+      ...teeRows,
+      {
+        teeKey,
+        teeName,
+        teeColor: "#64748b",
+        sortOrder: teeRows.length,
+      },
+    ];
+    setTeeRows(nextTees);
+    syncScorecardRowsForTees(nextTees);
+    setCustomTeeName("");
+  }
+
   function removeTee(teeKey: string) {
     if (teeRows.length <= 1) return;
     const nextTees = teeRows
@@ -586,6 +716,44 @@ export function CourseOnboardingWizard({
     }
   }
 
+  function handleExtractScorecard() {
+    if (!scorecardImageUrl) return;
+
+    setError(null);
+    setMessage(null);
+    setOcrParValidation(null);
+    setOcrYardageValidation([]);
+    setOcrHandicapValidation([]);
+    startTransition(async () => {
+      const result = await extractCourseOnboardingScorecard(
+        course.id,
+        scorecardImageUrl,
+        sortedTees,
+        sortedHandicapRows
+      );
+      if (!result.success) {
+        setError(result.error ?? "Could not extract scorecard.");
+        return;
+      }
+
+      setScorecardRows(
+        result.data.holes.map((hole) => ({
+          holeNumber: hole.holeNumber,
+          par: hole.par,
+          strokeIndex: hole.strokeIndex,
+          ladiesStrokeIndex: hole.ladiesStrokeIndex,
+          teeYardages: hole.teeYardages,
+        }))
+      );
+      setOcrParValidation(result.data.parValidation);
+      setOcrYardageValidation(result.data.yardageValidation);
+      setOcrHandicapValidation(result.data.handicapValidation);
+      setMessage(
+        `Extracted ${result.data.holes.length} holes — compare against the scorecard image.`
+      );
+    });
+  }
+
   function isHoleMappingComplete(holeNumber: number) {
     const pins = holePins[holeNumber];
     const teeCount = course.courseTees.length;
@@ -605,48 +773,17 @@ export function CourseOnboardingWizard({
         )
       : 0;
 
-  const holeSections = useMemo(() => {
-    const holes = holeNumbersForCount(course.holeCount);
-    if (course.holeCount === 18) {
-      return [
-        { label: "Front nine", holes: holes.slice(0, 9) },
-        { label: "Back nine", holes: holes.slice(9, 18) },
-      ];
-    }
-    return [{ label: "Holes", holes }];
-  }, [course.holeCount]);
-
   return (
     <div className={cn("space-y-6", step === "mapping" && "space-y-4")}>
-      <div className="flex items-center gap-3">
-        <nav
-          aria-label="Onboarding steps"
-          className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto rounded-full bg-muted p-1 [-ms-overflow-style:none] scrollbar-none [&::-webkit-scrollbar]:hidden"
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
+        <CourseOnboardingStepTabs
+          activeStep={step}
+          onStepChange={setStep}
+        />
+        <Badge
+          variant="outline"
+          className="hidden shrink-0 capitalize sm:inline-flex"
         >
-          {STEPS.map((entry, index) => {
-            const isActive = step === entry.id;
-            return (
-              <button
-                key={entry.id}
-                type="button"
-                onClick={() => setStep(entry.id)}
-                aria-current={isActive ? "step" : undefined}
-                className={cn(
-                  "shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium transition-all duration-200",
-                  isActive
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <span className="mr-1 hidden text-muted-foreground sm:inline">
-                  {index + 1}.
-                </span>
-                {entry.label}
-              </button>
-            );
-          })}
-        </nav>
-        <Badge variant="outline" className="hidden shrink-0 capitalize sm:inline-flex">
           {course.onboardingStatus}
         </Badge>
       </div>
@@ -796,370 +933,456 @@ export function CourseOnboardingWizard({
       )}
 
       {step === "scorecard" && (
-        <div className="space-y-4 rounded-lg border p-4">
-          <Field>
-            <FieldLabel>Tee sets</FieldLabel>
-            <FieldDescription>
-              Select every tee color printed on this scorecard before uploading
-              or extracting. OCR will only read yardages for these tees.
-            </FieldDescription>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {sortedTees.map((tee) => (
-                <Badge key={tee.teeKey} variant="outline" className="gap-2 px-3 py-1">
-                  <span
-                    className="inline-block size-2.5 rounded-full border"
-                    style={{ backgroundColor: tee.teeColor ?? "#2563eb" }}
-                  />
-                  {tee.teeName}
-                  {sortedTees.length > 1 && (
-                    <button
-                      type="button"
-                      className="text-muted-foreground hover:text-foreground"
-                      onClick={() => removeTee(tee.teeKey)}
+        <div className="space-y-4">
+          <div className="grid gap-3 md:grid-cols-2">
+            <Card size="sm">
+              <CardHeader className="border-b">
+                <CardTitle>Tee rows</CardTitle>
+                <CardDescription>
+                  Add each name printed on the scorecard — not the row color.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex flex-wrap gap-1.5">
+                  {sortedTees.map((tee) => (
+                    <Badge
+                      key={tee.teeKey}
+                      variant="outline"
+                      className="gap-1.5 px-2 py-0.5"
                     >
-                      ×
-                    </button>
-                  )}
-                </Badge>
-              ))}
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {PRESET_COURSE_TEES.filter(
-                (preset) =>
-                  !sortedTees.some(
-                    (tee) => tee.teeKey === normalizeTeeKey(preset.teeKey)
-                  )
-              ).map((preset) => (
-                <Button
-                  key={preset.teeKey}
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => addTeeFromPreset(preset)}
-                >
-                  + {preset.teeName}
-                </Button>
-              ))}
-            </div>
-          </Field>
-
-          <Field>
-            <FieldLabel>Handicap rows</FieldLabel>
-            <FieldDescription>
-              Select every handicap row printed on this scorecard before
-              extracting. OCR reads each row separately, like tee yardages.
-            </FieldDescription>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {sortedHandicapRows.map((row) => (
-                <Badge key={row.rowKey} variant="outline" className="gap-2 px-3 py-1">
-                  {row.rowName}
-                  <button
-                    type="button"
-                    className="text-muted-foreground hover:text-foreground"
-                    onClick={() => removeHandicapRow(row.rowKey)}
-                  >
-                    ×
-                  </button>
-                </Badge>
-              ))}
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {PRESET_SCORECARD_HANDICAP_ROWS.filter(
-                (preset) =>
-                  !sortedHandicapRows.some((row) => row.rowKey === preset.rowKey)
-              ).map((preset) => (
-                <Button
-                  key={preset.rowKey}
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => addHandicapRowFromPreset(preset)}
-                >
-                  + {preset.rowName}
-                </Button>
-              ))}
-            </div>
-          </Field>
-
-          <Field>
-            <FieldLabel>Scorecard photo</FieldLabel>
-            <FieldDescription>
-              Upload a photo of the official scorecard, then extract par,
-              handicap, and yardages for{" "}
-              {sortedTees.length > 0
-                ? sortedTees.map((tee) => tee.teeName).join(", ")
-                : "your selected tees"}
-              {sortedHandicapRows.length > 0
-                ? ` and ${sortedHandicapRows.map((row) => row.rowName).join(", ")}`
-                : ""}
-              . Uncertain or misaligned values are left blank automatically.
-              OUT/IN/TOT totals verify yardages and par after extraction.
-            </FieldDescription>
-            <label
-              className={cn(
-                "mt-2 flex cursor-pointer items-center gap-2 rounded-md border border-dashed px-4 py-6 text-sm text-muted-foreground hover:bg-muted/40",
-                isUploadingScorecard && "pointer-events-none opacity-60"
-              )}
-            >
-              <Upload className="size-4" />
-              <span>
-                {isUploadingScorecard
-                  ? "Uploading scorecard image…"
-                  : "Upload scorecard image"}
-              </span>
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                disabled={isUploadingScorecard}
-                onChange={(event) =>
-                  handleScorecardImage(event.target.files?.[0] ?? null)
-                }
-              />
-            </label>
-            {scorecardImageUrl && (
-              <div className="relative mt-3 h-48 w-full overflow-hidden rounded-md border">
-                <Image
-                  src={scorecardImageUrl}
-                  alt="Scorecard reference"
-                  fill
-                  className="object-contain"
-                  unoptimized
-                />
-              </div>
-            )}
-            {scorecardImageUrl && (
-              <Button
-                type="button"
-                variant="outline"
-                className="mt-3"
-                disabled={
-                  isPending ||
-                  sortedTees.length === 0 ||
-                  sortedHandicapRows.length === 0
-                }
-                onClick={() => {
-                  setError(null);
-                  setMessage(null);
-                  setOcrParValidation(null);
-                  setOcrYardageValidation([]);
-                  setOcrHandicapValidation([]);
-                  startTransition(async () => {
-                    const result = await extractCourseOnboardingScorecard(
-                      course.id,
-                      scorecardImageUrl,
-                      sortedTees,
-                      sortedHandicapRows
-                    );
-                    if (!result.success) {
-                      setError(result.error ?? "Could not extract scorecard.");
-                      return;
-                    }
-
-                    setScorecardRows(
-                      result.data.holes.map((hole) => ({
-                        holeNumber: hole.holeNumber,
-                        par: hole.par,
-                        strokeIndex: hole.strokeIndex,
-                        ladiesStrokeIndex: hole.ladiesStrokeIndex,
-                        teeYardages: hole.teeYardages,
-                      }))
-                    );
-                    setOcrParValidation(result.data.parValidation);
-                    setOcrYardageValidation(result.data.yardageValidation);
-                    setOcrHandicapValidation(result.data.handicapValidation);
-                    setMessage(
-                      `Extracted ${result.data.holes.length} holes for ${sortedTees.map((tee) => tee.teeName).join(", ")}. Check the totals below.`
-                    );
-                  });
-                }}
-              >
-                <ScanLine />
-                {isPending ? "Reading scorecard grid…" : "Extract scorecard with AI"}
-              </Button>
-            )}
-            {sortedTees.length === 0 && (
-              <p className="mt-2 text-xs text-muted-foreground">
-                Add at least one tee color before extracting.
-              </p>
-            )}
-            {sortedTees.length > 0 && sortedHandicapRows.length === 0 && (
-              <p className="mt-2 text-xs text-muted-foreground">
-                Add at least one handicap row before extracting.
-              </p>
-            )}
-            {(ocrParValidation ||
-              ocrYardageValidation.length > 0 ||
-              ocrHandicapValidation.length > 0) && (
-              <ScorecardTotalsPanel
-                parValidation={ocrParValidation}
-                yardageValidation={ocrYardageValidation}
-                handicapValidation={ocrHandicapValidation}
-              />
-            )}
-          </Field>
-
-          <div className="overflow-hidden rounded-lg border">
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                    <th className="sticky left-0 z-10 whitespace-nowrap bg-card px-3 py-2 font-medium after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-border">
-                      Hole
-                    </th>
-                    <th className="whitespace-nowrap px-2 py-2 font-medium">Par</th>
-                    {sortedTees.map((tee) => (
-                      <th
-                        key={tee.teeKey}
-                        className="whitespace-nowrap px-2 py-2 font-medium"
-                      >
-                        {tee.teeName} yds
-                      </th>
-                    ))}
-                    {extractMensHandicap && (
-                      <th className="whitespace-nowrap px-2 py-2 font-medium">
-                        Men HCP
-                      </th>
-                    )}
-                    {extractLadiesHandicap && (
-                      <th className="whitespace-nowrap px-2 py-2 font-medium">
-                        Ladies HCP
-                      </th>
-                    )}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/60">
-                  {scorecardRows.map((row, index) => (
-                    <tr key={row.holeNumber}>
-                      <td className="sticky left-0 z-10 bg-card px-3 py-1.5 font-medium tabular-nums after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-border">
-                        {row.holeNumber}
-                      </td>
-                      <td className="px-2 py-1.5">
-                        <Input
-                          type="number"
-                          inputMode="numeric"
-                          min={3}
-                          max={5}
-                          className="h-10 w-16 text-center sm:h-9"
-                          value={row.par}
-                          onChange={(event) => {
-                            const next = [...scorecardRows];
-                            next[index] = {
-                              ...row,
-                              par: Number(event.target.value),
-                            };
-                            setScorecardRows(next);
-                          }}
-                        />
-                      </td>
-                      {sortedTees.map((tee) => (
-                        <td key={tee.teeKey} className="px-2 py-1.5">
-                          <Input
-                            type="number"
-                            inputMode="numeric"
-                            min={0}
-                            className="h-10 w-20 text-center sm:h-9"
-                            value={row.teeYardages[tee.teeKey] ?? ""}
-                            onChange={(event) => {
-                              const next = [...scorecardRows];
-                              next[index] = {
-                                ...row,
-                                teeYardages: {
-                                  ...row.teeYardages,
-                                  [tee.teeKey]: event.target.value,
-                                },
-                              };
-                              setScorecardRows(next);
-                            }}
-                          />
-                        </td>
-                      ))}
-                      {extractMensHandicap && (
-                        <td className="px-2 py-1.5">
-                          <Input
-                            type="number"
-                            inputMode="numeric"
-                            min={1}
-                            max={18}
-                            className="h-10 w-16 text-center sm:h-9"
-                            value={row.strokeIndex}
-                            onChange={(event) => {
-                              const next = [...scorecardRows];
-                              next[index] = {
-                                ...row,
-                                strokeIndex: event.target.value,
-                              };
-                              setScorecardRows(next);
-                            }}
-                          />
-                        </td>
+                      <span
+                        className="inline-block size-2 rounded-full border"
+                        style={{ backgroundColor: tee.teeColor ?? "#64748b" }}
+                      />
+                      {tee.teeName}
+                      {sortedTees.length > 1 && (
+                        <button
+                          type="button"
+                          className="text-muted-foreground hover:text-foreground"
+                          onClick={() => removeTee(tee.teeKey)}
+                        >
+                          ×
+                        </button>
                       )}
-                      {extractLadiesHandicap && (
-                        <td className="px-2 py-1.5">
-                          <Input
-                            type="number"
-                            inputMode="numeric"
-                            min={1}
-                            max={18}
-                            className="h-10 w-16 text-center sm:h-9"
-                            value={row.ladiesStrokeIndex}
-                            onChange={(event) => {
-                              const next = [...scorecardRows];
-                              next[index] = {
-                                ...row,
-                                ladiesStrokeIndex: event.target.value,
-                              };
-                              setScorecardRows(next);
-                            }}
-                          />
-                        </td>
-                      )}
-                    </tr>
+                    </Badge>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {PRESET_COURSE_TEES.filter(
+                    (preset) =>
+                      !sortedTees.some(
+                        (tee) => tee.teeKey === normalizeTeeKey(preset.teeKey)
+                      )
+                  ).map((preset) => (
+                    <Button
+                      key={preset.teeKey}
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => addTeeFromPreset(preset)}
+                    >
+                      + {preset.teeName}
+                    </Button>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    value={customTeeName}
+                    placeholder="Custom name (e.g. Palmer)"
+                    className="h-8 text-xs"
+                    onChange={(event) => setCustomTeeName(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter") return;
+                      event.preventDefault();
+                      addCustomTee(customTeeName);
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 shrink-0 px-2 text-xs"
+                    disabled={!customTeeName.trim()}
+                    onClick={() => addCustomTee(customTeeName)}
+                  >
+                    Add
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card size="sm">
+              <CardHeader className="border-b">
+                <CardTitle>Handicap rows</CardTitle>
+                <CardDescription>
+                  Include every handicap row shown on the card.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex flex-wrap gap-1.5">
+                  {sortedHandicapRows.map((row) => (
+                    <Badge
+                      key={row.rowKey}
+                      variant="outline"
+                      className="gap-1.5 px-2 py-0.5"
+                    >
+                      {row.rowName}
+                      <button
+                        type="button"
+                        className="text-muted-foreground hover:text-foreground"
+                        onClick={() => removeHandicapRow(row.rowKey)}
+                      >
+                        ×
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {PRESET_SCORECARD_HANDICAP_ROWS.filter(
+                    (preset) =>
+                      !sortedHandicapRows.some(
+                        (row) => row.rowKey === preset.rowKey
+                      )
+                  ).map((preset) => (
+                    <Button
+                      key={preset.rowKey}
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => addHandicapRowFromPreset(preset)}
+                    >
+                      + {preset.rowName}
+                    </Button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
-          <Button
-            type="button"
-            className="h-11 w-full sm:h-9 sm:w-auto"
-            disabled={isPending}
-            onClick={() =>
-              runAction(async () => {
-                const result = await saveCourseOnboardingScorecard(course.id, {
-                  tees: sortedTees.map((tee, index) => ({
-                    teeKey: tee.teeKey || normalizeTeeKey(tee.teeName),
-                    teeName: tee.teeName,
-                    teeColor: tee.teeColor,
-                    sortOrder: index,
-                  })),
-                  holes: scorecardRows.map((row) => ({
-                    holeNumber: row.holeNumber,
-                    par: row.par,
-                    strokeIndex: row.strokeIndex.trim()
-                      ? Number(row.strokeIndex)
-                      : null,
-                    ladiesStrokeIndex: row.ladiesStrokeIndex.trim()
-                      ? Number(row.ladiesStrokeIndex)
-                      : null,
-                    teeYardages: Object.fromEntries(
-                      sortedTees.map((tee) => [
-                        tee.teeKey,
-                        row.teeYardages[tee.teeKey]?.trim()
-                          ? Number(row.teeYardages[tee.teeKey])
-                          : null,
-                      ])
-                    ),
-                  })),
-                });
-                if (result.success) setStep("mapping");
-                return result;
-              })
-            }
-          >
-            Save scorecard and map holes
-          </Button>
+          <div className="grid gap-4 xl:grid-cols-[minmax(300px,2fr)_minmax(0,3fr)]">
+            <Card size="sm" className="xl:sticky xl:top-4 xl:self-start">
+              <CardHeader className="border-b">
+                <CardTitle>Scorecard reference</CardTitle>
+                <CardDescription>
+                  Verify extracted values against the original photo.
+                </CardDescription>
+                {scorecardImageUrl && (
+                  <CardAction className="flex gap-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => setScorecardPreviewOpen(true)}
+                    >
+                      <Maximize2 className="size-3.5" />
+                      Expand
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-xs"
+                      disabled={isUploadingScorecard}
+                      onClick={() => scorecardFileInputRef.current?.click()}
+                    >
+                      <Upload className="size-3.5" />
+                      Replace
+                    </Button>
+                  </CardAction>
+                )}
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <input
+                  ref={scorecardFileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  disabled={isUploadingScorecard}
+                  onChange={(event) =>
+                    handleScorecardImage(event.target.files?.[0] ?? null)
+                  }
+                />
+                {scorecardImageUrl ? (
+                  <>
+                    <button
+                      type="button"
+                      className="group relative block w-full overflow-hidden rounded-lg border bg-muted/30"
+                      onClick={() => setScorecardPreviewOpen(true)}
+                    >
+                      <div className="relative min-h-[min(52vh,560px)] w-full">
+                        <Image
+                          src={scorecardImageUrl}
+                          alt="Scorecard reference"
+                          fill
+                          className="object-contain p-2 transition-opacity group-hover:opacity-90"
+                          unoptimized
+                        />
+                      </div>
+                      <span className="absolute inset-x-0 bottom-0 bg-linear-to-t from-background/90 to-transparent px-3 py-2 text-left text-[11px] text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
+                        Click to expand
+                      </span>
+                    </button>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <Button
+                        type="button"
+                        className="h-11 w-full sm:h-9"
+                        disabled={
+                          isPending ||
+                          sortedTees.length === 0 ||
+                          sortedHandicapRows.length === 0
+                        }
+                        onClick={handleExtractScorecard}
+                      >
+                        <ScanLine />
+                        {isPending ? "Extracting…" : "Extract with AI"}
+                      </Button>
+                    </div>
+                    {(sortedTees.length === 0 ||
+                      sortedHandicapRows.length === 0) && (
+                      <p className="text-xs text-muted-foreground">
+                        Add at least one tee row and one handicap row before
+                        extracting.
+                      </p>
+                    )}
+                    {(ocrParValidation ||
+                      ocrYardageValidation.length > 0 ||
+                      ocrHandicapValidation.length > 0) && (
+                      <ScorecardTotalsPanel
+                        parValidation={ocrParValidation}
+                        yardageValidation={ocrYardageValidation}
+                        handicapValidation={ocrHandicapValidation}
+                      />
+                    )}
+                  </>
+                ) : (
+                  <label
+                    className={cn(
+                      "flex min-h-[min(40vh,360px)] cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground transition-colors hover:bg-muted/40",
+                      isUploadingScorecard && "pointer-events-none opacity-60"
+                    )}
+                  >
+                    <Upload className="size-5" />
+                    <span className="font-medium text-foreground">
+                      {isUploadingScorecard
+                        ? "Uploading…"
+                        : "Upload scorecard photo"}
+                    </span>
+                    <span className="text-xs">
+                      JPG or PNG · clear, flat, full card visible
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={isUploadingScorecard}
+                      onChange={(event) =>
+                        handleScorecardImage(event.target.files?.[0] ?? null)
+                      }
+                    />
+                  </label>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card size="sm" className="min-w-0">
+              <CardHeader className="border-b">
+                <CardTitle>Extracted data</CardTitle>
+                <CardDescription>
+                  Edit any cell that doesn&apos;t match the scorecard image.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="px-0 pb-0">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-xs">
+                    <thead>
+                      <tr className="border-b bg-muted/30 text-left text-[10px] uppercase tracking-wide text-muted-foreground">
+                        <th className="sticky left-0 z-10 bg-muted/30 px-2 py-1.5 font-medium after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-border">
+                          #
+                        </th>
+                        <th className="px-1.5 py-1.5 font-medium">Par</th>
+                        {sortedTees.map((tee) => (
+                          <th
+                            key={tee.teeKey}
+                            className="whitespace-nowrap px-1.5 py-1.5 font-medium"
+                            title={tee.teeName}
+                          >
+                            {tee.teeName}
+                          </th>
+                        ))}
+                        {extractMensHandicap && (
+                          <th className="px-1.5 py-1.5 font-medium">M HCP</th>
+                        )}
+                        {extractLadiesHandicap && (
+                          <th className="px-1.5 py-1.5 font-medium">L HCP</th>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/50">
+                      {scorecardRows.map((row, index) => (
+                        <tr
+                          key={row.holeNumber}
+                          className={cn(
+                            row.holeNumber === 10 &&
+                              "border-t-2 border-border bg-muted/10"
+                          )}
+                        >
+                          <td className="sticky left-0 z-10 bg-card px-2 py-1 font-medium tabular-nums after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-border">
+                            {row.holeNumber}
+                          </td>
+                          <td className="px-1 py-1">
+                            <Input
+                              type="number"
+                              inputMode="numeric"
+                              min={3}
+                              max={5}
+                              className="h-8 w-12 px-1 text-center text-xs tabular-nums"
+                              value={row.par}
+                              onChange={(event) => {
+                                const next = [...scorecardRows];
+                                next[index] = {
+                                  ...row,
+                                  par: Number(event.target.value),
+                                };
+                                setScorecardRows(next);
+                              }}
+                            />
+                          </td>
+                          {sortedTees.map((tee) => (
+                            <td key={tee.teeKey} className="px-1 py-1">
+                              <Input
+                                type="number"
+                                inputMode="numeric"
+                                min={0}
+                                className="h-8 w-14 px-1 text-center text-xs tabular-nums"
+                                value={row.teeYardages[tee.teeKey] ?? ""}
+                                onChange={(event) => {
+                                  const next = [...scorecardRows];
+                                  next[index] = {
+                                    ...row,
+                                    teeYardages: {
+                                      ...row.teeYardages,
+                                      [tee.teeKey]: event.target.value,
+                                    },
+                                  };
+                                  setScorecardRows(next);
+                                }}
+                              />
+                            </td>
+                          ))}
+                          {extractMensHandicap && (
+                            <td className="px-1 py-1">
+                              <Input
+                                type="number"
+                                inputMode="numeric"
+                                min={1}
+                                max={18}
+                                className="h-8 w-12 px-1 text-center text-xs tabular-nums"
+                                value={row.strokeIndex}
+                                onChange={(event) => {
+                                  const next = [...scorecardRows];
+                                  next[index] = {
+                                    ...row,
+                                    strokeIndex: event.target.value,
+                                  };
+                                  setScorecardRows(next);
+                                }}
+                              />
+                            </td>
+                          )}
+                          {extractLadiesHandicap && (
+                            <td className="px-1 py-1">
+                              <Input
+                                type="number"
+                                inputMode="numeric"
+                                min={1}
+                                max={18}
+                                className="h-8 w-12 px-1 text-center text-xs tabular-nums"
+                                value={row.ladiesStrokeIndex}
+                                onChange={(event) => {
+                                  const next = [...scorecardRows];
+                                  next[index] = {
+                                    ...row,
+                                    ladiesStrokeIndex: event.target.value,
+                                  };
+                                  setScorecardRows(next);
+                                }}
+                              />
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Sheet open={scorecardPreviewOpen} onOpenChange={setScorecardPreviewOpen}>
+            <SheetContent
+              side="right"
+              className="w-full! gap-0 p-0 sm:max-w-[min(96vw,1200px)]!"
+            >
+              <SheetHeader className="shrink-0 border-b px-4 py-3">
+                <SheetTitle>Scorecard reference</SheetTitle>
+              </SheetHeader>
+              {scorecardImageUrl && (
+                <div className="min-h-0 flex-1 overflow-auto bg-muted/30 p-2 sm:p-4">
+                  {/* Native img so expand view renders at full container width */}
+                  <img
+                    src={scorecardImageUrl}
+                    alt="Scorecard full view"
+                    className="mx-auto block h-auto w-full max-w-none rounded-md"
+                  />
+                </div>
+              )}
+            </SheetContent>
+          </Sheet>
+
+          <div className="flex justify-end border-t pt-4">
+            <Button
+              type="button"
+              className="h-11 w-full sm:h-9 sm:w-auto"
+              disabled={isPending}
+              onClick={() =>
+                runAction(async () => {
+                  const result = await saveCourseOnboardingScorecard(course.id, {
+                    tees: sortedTees.map((tee, index) => ({
+                      teeKey: tee.teeKey || normalizeTeeKey(tee.teeName),
+                      teeName: tee.teeName,
+                      teeColor: tee.teeColor,
+                      sortOrder: index,
+                    })),
+                    holes: scorecardRows.map((row) => ({
+                      holeNumber: row.holeNumber,
+                      par: row.par,
+                      strokeIndex: row.strokeIndex.trim()
+                        ? Number(row.strokeIndex)
+                        : null,
+                      ladiesStrokeIndex: row.ladiesStrokeIndex.trim()
+                        ? Number(row.ladiesStrokeIndex)
+                        : null,
+                      teeYardages: Object.fromEntries(
+                        sortedTees.map((tee) => [
+                          tee.teeKey,
+                          row.teeYardages[tee.teeKey]?.trim()
+                            ? Number(row.teeYardages[tee.teeKey])
+                            : null,
+                        ])
+                      ),
+                    })),
+                  });
+                  if (result.success) setStep("mapping");
+                  return result;
+                })
+              }
+            >
+              Save scorecard and map holes
+            </Button>
+          </div>
         </div>
       )}
 
@@ -1201,192 +1424,106 @@ export function CourseOnboardingWizard({
           </div>
 
           <div className="mx-auto w-full overflow-hidden rounded-xl border bg-card shadow-sm">
-            {/* Mobile: progress + hole strip */}
-            <div className="border-b bg-muted/20 lg:hidden">
-              <div className="flex items-center justify-between gap-3 px-4 pt-3">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Hole {activeHole} · {mappingProgress.mappedHoleCount}/
-                  {course.holeCount} greens
-                </p>
-                <span className="text-xs font-medium tabular-nums text-primary">
-                  {mappingPercent}%
-                </span>
-              </div>
-              <div className="mx-4 mt-2 h-1 overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full rounded-full bg-primary transition-all duration-300"
-                  style={{ width: `${mappingPercent}%` }}
-                />
-              </div>
-              <HoleStrip
-                holes={holeNumbersForCount(course.holeCount)}
-                activeHole={activeHole}
-                onSelect={setActiveHole}
-                isHoleComplete={isHoleMappingComplete}
-              />
-            </div>
-
-            <div className="grid lg:min-h-[min(78vh,820px)] lg:grid-cols-[14rem_1fr]">
-              <aside className="hidden flex-col bg-muted/20 lg:flex lg:border-r">
-                <div className="space-y-3 border-b px-4 py-4">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                      Course progress
-                    </p>
-                    <span className="text-xs font-medium text-primary">
+            <div className="border-b bg-muted/20 px-4 py-3">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-2">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Hole {activeHole}
+                  </p>
+                  <span className="hidden h-4 w-px bg-border sm:inline-block" />
+                  <p className="text-xs text-muted-foreground">
+                    {mappingProgress.mappedHoleCount}/{course.holeCount} greens
+                    · {mappingProgress.mappedTeeCount}/
+                    {mappingProgress.requiredTeeCount} tees
+                  </p>
+                  <div className="flex min-w-28 flex-1 items-center gap-2 sm:max-w-xs">
+                    <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full bg-primary transition-all duration-300"
+                        style={{ width: `${mappingPercent}%` }}
+                      />
+                    </div>
+                    <span className="text-xs font-medium tabular-nums text-primary">
                       {mappingPercent}%
                     </span>
                   </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                    <div
-                      className="h-full rounded-full bg-primary transition-all duration-300"
-                      style={{ width: `${mappingPercent}%` }}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
-                    <div className="rounded-md bg-background/80 px-2.5 py-2 ring-1 ring-foreground/5">
-                      <p className="font-medium text-foreground">
-                        {mappingProgress.mappedHoleCount}/{course.holeCount}
-                      </p>
-                      <p>Greens</p>
-                    </div>
-                    <div className="rounded-md bg-background/80 px-2.5 py-2 ring-1 ring-foreground/5">
-                      <p className="font-medium text-foreground">
-                        {mappingProgress.mappedTeeCount}/
-                        {mappingProgress.requiredTeeCount}
-                      </p>
-                      <p>Tee boxes</p>
-                    </div>
-                  </div>
                 </div>
-
-                <div className="flex-1 space-y-4 overflow-y-auto px-3 py-3">
-                  {holeSections.map((section) => (
-                    <div key={section.label}>
-                      <p className="mb-2 px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                        {section.label}
-                      </p>
-                      <div className="grid grid-cols-3 gap-1.5">
-                        {section.holes.map((holeNumber) => {
-                          const complete = isHoleMappingComplete(holeNumber);
-                          const isActive = activeHole === holeNumber;
-
-                          return (
-                            <button
-                              key={holeNumber}
-                              type="button"
-                              onClick={() => setActiveHole(holeNumber)}
-                              className={cn(
-                                "relative flex h-9 items-center justify-center rounded-md text-sm font-medium transition-colors",
-                                isActive
-                                  ? "bg-primary text-primary-foreground shadow-sm"
-                                  : "bg-background/80 text-foreground ring-1 ring-foreground/10 hover:bg-background",
-                                complete && !isActive && "ring-primary/30"
-                              )}
-                            >
-                              {holeNumber}
-                              {complete && (
-                                <CheckCircle2
-                                  className={cn(
-                                    "absolute -right-1 -top-1 size-3.5",
-                                    isActive
-                                      ? "text-primary-foreground"
-                                      : "text-primary"
-                                  )}
-                                />
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="space-y-2 border-t p-3">
-                  <div className="grid grid-cols-[auto_1fr_auto] gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon-sm"
-                      disabled={activeHole <= 1}
-                      onClick={() => setActiveHole((current) => current - 1)}
-                    >
-                      <ChevronLeft />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="w-full"
-                      disabled={activeHole >= course.holeCount}
-                      onClick={() => setActiveHole((current) => current + 1)}
-                    >
-                      Next hole
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon-sm"
-                      disabled={activeHole >= course.holeCount}
-                      onClick={() => setActiveHole((current) => current + 1)}
-                    >
-                      <ChevronRight />
-                    </Button>
-                  </div>
+                <div className="hidden shrink-0 items-center gap-2 lg:flex">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon-sm"
+                    disabled={activeHole <= 1}
+                    onClick={() => setActiveHole((current) => current - 1)}
+                  >
+                    <ChevronLeft />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={activeHole >= course.holeCount}
+                    onClick={() => setActiveHole((current) => current + 1)}
+                  >
+                    Next hole
+                    <ChevronRight />
+                  </Button>
                   {mappingProgress.isComplete && (
-                    <Button
-                      type="button"
-                      className="w-full"
-                      onClick={() => setStep("review")}
-                    >
+                    <Button type="button" size="sm" onClick={() => setStep("review")}>
                       Continue to review
                     </Button>
                   )}
                 </div>
-              </aside>
-
-              <div className="min-h-[min(52vh,560px)] min-w-0 lg:min-h-0">
-                <CourseHolePinMap
-                  className="h-full min-h-[min(52vh,560px)] lg:min-h-full"
-                  courseCenter={courseCenter}
-                  holeNumber={activeHole}
-                  courseTees={course.courseTees}
-                  initialGreen={holePins[activeHole]?.green ?? null}
-                  initialTees={holePins[activeHole]?.tees ?? {}}
-                  initialLineBreak={holePins[activeHole]?.lineBreak ?? null}
-                  scorecardYardages={activeHoleScorecardYardages}
-                  isSaving={isPending}
-                  onSavePin={async (pin) => {
-                    setError(null);
-                    const result = await saveCourseOnboardingHolePin(
-                      course.id,
-                      activeHole,
-                      pin
-                    );
-                    if (!result.success) {
-                      setError(result.error ?? "Could not save pin.");
-                      return;
-                    }
-                    setMessage(
-                      pin.kind === "green"
-                        ? `Saved green for hole ${activeHole}.`
-                        : pin.kind === "tee"
-                          ? `Saved tee for hole ${activeHole}.`
-                          : pin.kind === "line_break"
-                            ? `Updated fairway line for hole ${activeHole}.`
-                            : pin.enabled
-                              ? `Enabled dogleg for hole ${activeHole}.`
-                              : `Set hole ${activeHole} to a straight path.`
-                    );
-                    startTransition(() => {
-                      router.refresh();
-                    });
-                  }}
-                />
               </div>
             </div>
 
-            {/* Mobile: prev / next bar */}
+            <HoleStrip
+              holes={holeNumbersForCount(course.holeCount)}
+              activeHole={activeHole}
+              onSelect={setActiveHole}
+              isHoleComplete={isHoleMappingComplete}
+            />
+
+            <div className="min-h-[min(52vh,560px)] min-w-0 lg:min-h-[min(78vh,820px)]">
+              <CourseHolePinMap
+                className="h-full min-h-[min(52vh,560px)] lg:min-h-[min(78vh,820px)]"
+                courseCenter={courseCenter}
+                holeNumber={activeHole}
+                courseTees={course.courseTees}
+                initialGreen={holePins[activeHole]?.green ?? null}
+                initialTees={holePins[activeHole]?.tees ?? {}}
+                initialLineBreak={holePins[activeHole]?.lineBreak ?? null}
+                scorecardYardages={activeHoleScorecardYardages}
+                isSaving={isPending}
+                onSavePin={async (pin) => {
+                  setError(null);
+                  const result = await saveCourseOnboardingHolePin(
+                    course.id,
+                    activeHole,
+                    pin
+                  );
+                  if (!result.success) {
+                    setError(result.error ?? "Could not save pin.");
+                    return;
+                  }
+                  setMessage(
+                    pin.kind === "green"
+                      ? `Saved green for hole ${activeHole}.`
+                      : pin.kind === "tee"
+                        ? `Saved tee for hole ${activeHole}.`
+                        : pin.kind === "line_break"
+                          ? `Updated fairway line for hole ${activeHole}.`
+                          : pin.enabled
+                            ? `Enabled dogleg for hole ${activeHole}.`
+                            : `Set hole ${activeHole} to a straight path.`
+                  );
+                  startTransition(() => {
+                    router.refresh();
+                  });
+                }}
+              />
+            </div>
+
             <div className="space-y-2 border-t px-4 py-3 lg:hidden">
               <div className="flex items-center justify-between gap-3">
                 <Button
