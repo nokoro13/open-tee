@@ -1,8 +1,9 @@
 "use client";
 
-import { Map, Waves } from "lucide-react";
+import { LocateFixed, LocateOff, Map, Waves } from "lucide-react";
 import { ChevronUp } from "lucide-react";
 
+import type { LiveDistanceStatus } from "@/hooks/use-live-distances";
 import type { MatchRunningScore, RunningScore } from "@/lib/score-entry-utils";
 import type { ScoreEntryGroup } from "@/lib/scoring";
 import {
@@ -147,7 +148,68 @@ type MobileHoleHeroProps = {
   onOpenGreenHeatmap?: () => void;
   hasHeatmap?: boolean;
   isAtGreen?: boolean;
+  liveDistanceStatus?: LiveDistanceStatus;
+  onRequestLocation?: () => void;
 };
+
+export function LiveLocationButton({
+  status,
+  onRequestLocation,
+}: {
+  status: LiveDistanceStatus;
+  onRequestLocation: () => void;
+}) {
+  if (status === "hidden") return null;
+
+  const isActive = status === "live" || status === "at-green";
+  const Icon = status === "denied" || status === "unavailable" ? LocateOff : LocateFixed;
+
+  const ariaLabel =
+    status === "prompt"
+      ? "Enable location for live yardage"
+      : status === "locating"
+        ? "Getting location"
+        : status === "denied"
+          ? "Location blocked. Tap to try again"
+          : status === "unavailable"
+            ? "Location unavailable. Tap to retry"
+            : "Live yardage enabled";
+
+  const className = cn(
+    "inline-flex size-8 shrink-0 items-center justify-center rounded-full border shadow-sm transition-colors",
+    isActive && "border-primary/50 bg-primary/15 text-primary",
+    status === "locating" &&
+      "border-border/70 bg-background/80 text-muted-foreground animate-pulse",
+    status === "prompt" &&
+      "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15",
+    (status === "denied" || status === "unavailable") &&
+      "border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/15"
+  );
+
+  if (isActive) {
+    return (
+      <span
+        className={className}
+        aria-label={ariaLabel}
+        title={ariaLabel}
+      >
+        <LocateFixed className="size-3.5" />
+      </span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onRequestLocation}
+      className={className}
+      aria-label={ariaLabel}
+      title={ariaLabel}
+    >
+      <Icon className="size-3.5" />
+    </button>
+  );
+}
 
 export function MobileHoleHero({
   activeHole,
@@ -158,6 +220,8 @@ export function MobileHoleHero({
   onOpenGreenHeatmap,
   hasHeatmap = false,
   isAtGreen = false,
+  liveDistanceStatus = "hidden",
+  onRequestLocation,
 }: MobileHoleHeroProps) {
   return (
     <div className="relative shrink-0 overflow-hidden rounded-t-2xl bg-linear-to-br from-primary/8 via-primary/4 to-transparent px-5 py-4">
@@ -175,8 +239,10 @@ export function MobileHoleHero({
               of {totalHoles}
             </span>
           </div>
-          {(onOpenHoleMap || (onOpenGreenHeatmap && hasHeatmap)) && (
-            <div className="mt-3 flex flex-wrap gap-2">
+          {(onOpenHoleMap ||
+            (onOpenGreenHeatmap && hasHeatmap) ||
+            (onRequestLocation && liveDistanceStatus !== "hidden")) && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               {onOpenHoleMap && (
                 <button
                   type="button"
@@ -201,6 +267,12 @@ export function MobileHoleHero({
                   <Waves className="size-3.5" />
                   {isAtGreen ? "Read putt" : "Putting read"}
                 </button>
+              )}
+              {onRequestLocation && liveDistanceStatus !== "hidden" && (
+                <LiveLocationButton
+                  status={liveDistanceStatus}
+                  onRequestLocation={onRequestLocation}
+                />
               )}
             </div>
           )}

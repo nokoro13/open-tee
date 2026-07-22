@@ -364,7 +364,7 @@ export function ScoreEntryForm({
   const activePar = parByHole[activeHole];
   const activeYardage = yardageByHole[activeHole];
   const caddieEnabled = Boolean(greenTargetsByHole);
-  const { position, distances, status: liveDistanceStatus, targets } =
+  const { position, distances, status: liveDistanceStatus, targets, requestLocation } =
     useLiveDistances(activeHole, greenTargetsByHole, caddieEnabled);
   const isAtGreen = liveDistanceStatus === "at-green";
   const hasPuttingRead = Boolean(hasHeatmapByHole[activeHole]);
@@ -459,6 +459,11 @@ export function ScoreEntryForm({
     setActiveHoleIndex(index);
     setError(null);
     setJustSaved(false);
+  }
+
+  function handleOpenHoleMap() {
+    requestLocation();
+    setShowHoleMap(true);
   }
 
   function goToRequiredHole() {
@@ -1017,9 +1022,11 @@ export function ScoreEntryForm({
                       par={activePar ?? getDefaultScoreForHole(parByHole, activeHole)}
                       yardage={activeYardage}
                       isAtGreen={isAtGreen}
+                      liveDistanceStatus={caddieEnabled ? liveDistanceStatus : "hidden"}
+                      onRequestLocation={caddieEnabled ? requestLocation : undefined}
                       onOpenHoleMap={
                         holeFeaturesGeoJson?.[activeHole]
-                          ? () => setShowHoleMap(true)
+                          ? handleOpenHoleMap
                           : undefined
                       }
                       onOpenGreenHeatmap={
@@ -1155,6 +1162,7 @@ export function ScoreEntryForm({
         yardage={activeYardage}
         liveDistances={distances}
         liveDistanceStatus={liveDistanceStatus}
+        onRequestLocation={requestLocation}
         selectedTeeKey={selectedTeeKey}
         selectedTeeColor={selectedTeeColor}
         usePlayerAsAnchor={activeHole === requiredHole}

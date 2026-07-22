@@ -11,6 +11,7 @@ import { useGeolocation } from "@/hooks/use-geolocation";
 
 export type LiveDistanceStatus =
   | "hidden"
+  | "prompt"
   | "locating"
   | "live"
   | "at-green"
@@ -22,7 +23,8 @@ export function useLiveDistances(
   targetsByHole: GreenTargetsByEventHole | undefined,
   enabled = true
 ) {
-  const { position, status: geoStatus } = useGeolocation(enabled);
+  const { position, status: geoStatus, requestLocation } =
+    useGeolocation(enabled);
 
   const targets: GreenTargets | null = targetsByHole?.[activeHole] ?? null;
   const distances: LiveDistances = liveDistancesFromPosition(position, targets);
@@ -30,6 +32,8 @@ export function useLiveDistances(
   let status: LiveDistanceStatus = "hidden";
   if (!enabled || !targetsByHole) {
     status = "hidden";
+  } else if (geoStatus === "idle") {
+    status = "prompt";
   } else if (geoStatus === "denied") {
     status = "denied";
   } else if (geoStatus === "unavailable") {
@@ -50,5 +54,6 @@ export function useLiveDistances(
     distances,
     status,
     targets,
+    requestLocation,
   };
 }

@@ -32,6 +32,7 @@ type HoleMapModalProps = {
   yardage?: number | null;
   liveDistances?: LiveDistances;
   liveDistanceStatus?: LiveDistanceStatus;
+  onRequestLocation?: () => void;
   selectedTeeKey?: string | null;
   selectedTeeColor?: string | null;
   usePlayerAsAnchor?: boolean;
@@ -96,31 +97,76 @@ function ToPinOverlay({
   distance,
   heading,
   status,
+  onRequestLocation,
 }: {
   distance: number | null;
   heading: number;
   status: LiveDistanceStatus;
+  onRequestLocation?: () => void;
 }) {
+  const needsLocationAction =
+    status === "prompt" || status === "denied" || status === "unavailable";
+
   const label =
     status === "locating"
       ? "…"
-      : status === "denied" || status === "unavailable"
-        ? "—"
-        : distance != null
-          ? String(distance)
-          : "—";
+      : status === "prompt"
+        ? "Tap"
+        : status === "denied" || status === "unavailable"
+          ? "—"
+          : distance != null
+            ? String(distance)
+            : "—";
+
+  const helperText =
+    status === "prompt"
+      ? "Enable location"
+      : status === "denied"
+        ? "Location blocked"
+        : status === "unavailable"
+          ? "Tap to retry"
+          : null;
+
+  const content = (
+    <div
+      className={cn(
+        "min-w-[5.5rem] rounded-2xl border border-white/10 bg-black/78 px-4 py-3 shadow-xl backdrop-blur-md",
+        needsLocationAction &&
+          "pointer-events-auto cursor-pointer transition-colors hover:bg-black/88"
+      )}
+    >
+      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/55">
+        To pin
+      </p>
+      <p className="mt-0.5 font-heading text-4xl font-semibold tabular-nums leading-none text-white">
+        {label}
+      </p>
+      {helperText ? (
+        <p className="mt-1 text-[10px] font-medium text-white/55">{helperText}</p>
+      ) : (
+        <CompassRose heading={heading} />
+      )}
+    </div>
+  );
 
   return (
     <div className="pointer-events-none absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-3 z-10">
-      <div className="min-w-[5.5rem] rounded-2xl border border-white/10 bg-black/78 px-4 py-3 shadow-xl backdrop-blur-md">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/55">
-          To pin
-        </p>
-        <p className="mt-0.5 font-heading text-4xl font-semibold tabular-nums leading-none text-white">
-          {label}
-        </p>
-        <CompassRose heading={heading} />
-      </div>
+      {needsLocationAction && onRequestLocation ? (
+        <button
+          type="button"
+          className="block text-left"
+          onClick={onRequestLocation}
+          aria-label={
+            status === "prompt"
+              ? "Enable location for live yardage"
+              : "Retry location for live yardage"
+          }
+        >
+          {content}
+        </button>
+      ) : (
+        content
+      )}
     </div>
   );
 }
@@ -138,6 +184,7 @@ export function HoleMapModal({
   yardage,
   liveDistances,
   liveDistanceStatus = "hidden",
+  onRequestLocation,
   selectedTeeKey = null,
   selectedTeeColor = null,
   usePlayerAsAnchor = false,
@@ -322,6 +369,7 @@ export function HoleMapModal({
         distance={distanceToPin}
         heading={mapHeading}
         status={distanceStatus}
+        onRequestLocation={onRequestLocation}
       />
 
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/35 to-transparent" />
