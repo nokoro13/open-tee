@@ -119,13 +119,11 @@ function ToPinOverlay({
             : "—";
 
   const helperText =
-    status === "prompt"
-      ? "Enable location"
-      : status === "denied"
-        ? "Location blocked"
-        : status === "unavailable"
-          ? "Tap to retry"
-          : null;
+    status === "prompt" || status === "denied"
+      ? "Tap to allow"
+      : status === "unavailable"
+        ? "Tap to retry"
+        : null;
 
   const content = (
     <div
