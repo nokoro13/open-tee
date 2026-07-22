@@ -4,10 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   APIProvider,
   Map,
-  Marker,
-  Polyline,
   RenderingType,
-  useMap,
   type MapMouseEvent,
 } from "@vis.gl/react-google-maps";
 import {
@@ -25,9 +22,22 @@ import {
 import type { CourseTee } from "@/db/schema";
 import type { LatLng } from "@/lib/green-distance";
 import { yardsBetween } from "@/lib/green-distance";
+import { HoleLinePolylines } from "@/components/maps/hole-line-polylines";
+import { HoleMapCameraController } from "@/components/maps/hole-map-camera-controller";
 import {
-  createBreakAnchorIcon,
-  createYardageBadgeIcon,
+  BreakAnchorMarker,
+  LabeledCircleMarker,
+  YardageBadgeMarker,
+} from "@/components/maps/hole-map-markers";
+import {
+  bearingDegrees,
+  type HoleMapView,
+} from "@/lib/hole-map-view";
+import { sortCourseTees, teeMarkerColor } from "@/lib/course-tees";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+import {
   measureHolePathYardage,
   midpoint,
   segmentYards,
@@ -35,21 +45,9 @@ import {
   yardageMatchTone,
 } from "@/lib/hole-distance-guide";
 import {
-  bearingDegrees,
-  computeHoleMapCamera,
-  type HoleMapView,
-} from "@/lib/hole-map-view";
-import { sortCourseTees, teeMarkerColor } from "@/lib/course-tees";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-
-const MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
-const MAP_PADDING = { top: 40, bottom: 48, left: 32, right: 32 };
-
-const GOLF_MAP_STYLES: google.maps.MapTypeStyle[] = [
-  { featureType: "poi", stylers: [{ visibility: "off" }] },
-  { featureType: "transit", stylers: [{ visibility: "off" }] },
-];
+  GOOGLE_MAPS_API_KEY,
+  GOLF_SATELLITE_MAP_PROPS,
+} from "@/lib/google-maps-config";
 
 type PinMode =
   | { kind: "green" }
@@ -84,16 +82,7 @@ type CourseHolePinMapProps = {
   canGoNext?: boolean;
 };
 
-function markerIcon(color: string) {
-  return {
-    path: 0,
-    scale: 9,
-    fillColor: color,
-    fillOpacity: 1,
-    strokeColor: "#ffffff",
-    strokeWeight: 2,
-  };
-}
+const MAP_PADDING = { top: 40, bottom: 48, left: 32, right: 32 };
 
 function isHoleMapped(
   green: LatLng | null,
@@ -165,6 +154,7 @@ function buildPinHoleMapView(
       center: courseCenter,
       bearing: 0,
       tee: null,
+      orientationTee: null,
       green: null,
       back: null,
       extentPoints: [courseCenter],
@@ -206,6 +196,7 @@ function buildPinHoleMapView(
     center,
     bearing,
     tee,
+    orientationTee: tee,
     green,
     back: null,
     extentPoints,
@@ -221,81 +212,21 @@ function MapCameraController({
   resetKey: number;
   enabled: boolean;
 }) {
-  const map = useMap();
-  const viewRef = useRef(view);
-  const enabledRef = useRef(enabled);
-
-  viewRef.current = view;
-  enabledRef.current = enabled;
-
-  const fitHole = useCallback(() => {
-    if (!map) return;
-
-    const div = map.getDiv();
-    const rect = div.getBoundingClientRect();
-    if (rect.width < 50 || rect.height < 50) return;
-
-    const currentView = viewRef.current;
-    const currentEnabled = enabledRef.current;
-
-    if (!currentEnabled) {
-      map.moveCamera({
-        center: currentView.center,
-        zoom: 17,
-        heading: 0,
-        tilt: 0,
-      });
-      return;
-    }
-
-    const camera = computeHoleMapCamera({
-      view: currentView,
-      mapWidth: Math.max(rect.width, 1),
-      mapHeight: Math.max(rect.height, 1),
-      padding: MAP_PADDING,
-    });
-
-    map.moveCamera({
-      center: camera.center,
-      zoom: camera.zoom,
-      heading: camera.heading,
-      tilt: 0,
-    });
-  }, [map]);
-
-  // Refit only when switching holes — not when saved pin positions refresh.
-  useEffect(() => {
-    fitHole();
-  }, [fitHole, resetKey]);
-
-  useEffect(() => {
-    if (!map) return;
-
-    const div = map.getDiv();
-    const observer = new ResizeObserver(() => {
-      fitHole();
-    });
-    observer.observe(div);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [map, fitHole]);
-
-  return null;
+  return (
+    <HoleMapCameraController
+      view={view}
+      resetKey={resetKey}
+      padding={MAP_PADDING}
+      enabled={enabled}
+    />
+  );
 }
 
 function YardageLineLabel({ from, to }: { from: LatLng; to: LatLng }) {
   const yards = segmentYards(from, to);
-  const icon = useMemo(() => createYardageBadgeIcon(yards), [yards]);
 
   return (
-    <Marker
-      position={midpoint(from, to)}
-      clickable={false}
-      zIndex={24}
-      icon={icon}
-    />
+    <YardageBadgeMarker position={midpoint(from, to)} yards={yards} />
   );
 }
 
@@ -310,18 +241,8 @@ function TeeLineSegments({
 }) {
   return (
     <>
-      <Polyline
-        path={[from, breakPoint]}
-        strokeColor="#f8fafc"
-        strokeOpacity={0.9}
-        strokeWeight={2}
-      />
-      <Polyline
-        path={[breakPoint, to]}
-        strokeColor="#f8fafc"
-        strokeOpacity={0.9}
-        strokeWeight={2}
-      />
+      <HoleLinePolylines path={[from, breakPoint]} />
+      <HoleLinePolylines path={[breakPoint, to]} />
       <YardageLineLabel from={from} to={breakPoint} />
       <YardageLineLabel from={breakPoint} to={to} />
     </>
@@ -331,12 +252,7 @@ function TeeLineSegments({
 function StraightTeeLine({ from, to }: { from: LatLng; to: LatLng }) {
   return (
     <>
-      <Polyline
-        path={[from, to]}
-        strokeColor="#f8fafc"
-        strokeOpacity={0.9}
-        strokeWeight={2}
-      />
+      <HoleLinePolylines path={[from, to]} />
       <YardageLineLabel from={from} to={to} />
     </>
   );
@@ -353,25 +269,14 @@ function SharedDoglegMarker({
   onDrag: (point: LatLng) => void;
   onDragEnd: (point: LatLng) => void;
 }) {
-  const breakIcon = useMemo(() => createBreakAnchorIcon(), []);
-
   return (
-    <Marker
+    <BreakAnchorMarker
       position={position}
       draggable={!disabled}
       zIndex={42}
       title="Drag to set the shared fairway dogleg"
-      icon={breakIcon}
-      onDrag={(event) => {
-        const latLng = event.latLng;
-        if (!latLng) return;
-        onDrag({ lat: latLng.lat(), lng: latLng.lng() });
-      }}
-      onDragEnd={(event) => {
-        const latLng = event.latLng;
-        if (!latLng) return;
-        onDragEnd({ lat: latLng.lat(), lng: latLng.lng() });
-      }}
+      onDrag={onDrag}
+      onDragEnd={onDragEnd}
     />
   );
 }
@@ -824,7 +729,7 @@ export function CourseHolePinMap({
       ? "green"
       : sortedTees.find((tee) => tee.teeKey === mode.teeKey)?.teeName ?? "tee";
 
-  if (!MAPS_API_KEY) {
+  if (!GOOGLE_MAPS_API_KEY) {
     return (
       <p className="p-4 text-sm text-destructive">
         Google Maps API key is missing. Add NEXT_PUBLIC_GOOGLE_MAPS_API_KEY to pin
@@ -1039,13 +944,13 @@ export function CourseHolePinMap({
             focusedTeeKey={focusedTeeKey}
           />
         )}
-        <APIProvider apiKey={MAPS_API_KEY}>
+        <APIProvider apiKey={GOOGLE_MAPS_API_KEY}>
           <Map
             defaultCenter={pinMapView.center}
             defaultZoom={17}
-            mapTypeId="satellite"
+            defaultHeading={pinMapView.bearing}
+            {...GOLF_SATELLITE_MAP_PROPS}
             renderingType={RenderingType.VECTOR}
-            styles={GOLF_MAP_STYLES}
             gestureHandling="greedy"
             disableDefaultUI
             zoomControl
@@ -1097,10 +1002,11 @@ export function CourseHolePinMap({
               const canDrag = !isLocked && !isSaving;
               const isFocused = tee.teeKey === focusedTeeKey;
               return (
-                <Marker
+                <LabeledCircleMarker
                   key={tee.teeKey}
                   position={position}
                   draggable={canDrag}
+                  clickable={canDrag}
                   opacity={isFocused ? 1 : 0.45}
                   zIndex={isFocused ? 42 : canDrag ? 40 : undefined}
                   title={
@@ -1108,28 +1014,22 @@ export function CourseHolePinMap({
                       ? `Drag to move ${tee.teeName} tee`
                       : tee.teeName
                   }
-                  label={{
-                    text: tee.teeName.slice(0, 1).toUpperCase(),
-                    color: "#ffffff",
-                    fontWeight: "700",
-                  }}
-                  icon={markerIcon(teeMarkerColor(tee))}
+                  label={tee.teeName.slice(0, 1).toUpperCase()}
+                  fill={teeMarkerColor(tee)}
+                  stroke="#ffffff"
+                  radius={9}
                   onClick={() => selectTeeFocus(tee.teeKey)}
-                  onDrag={(event) => {
-                    const latLng = event.latLng;
-                    if (!latLng || isLocked) return;
+                  onDrag={(point) => {
+                    if (isLocked) return;
                     setFocusedTeeKey(tee.teeKey);
                     setDragPreview({
                       kind: "tee",
                       teeKey: tee.teeKey,
-                      lat: latLng.lat(),
-                      lng: latLng.lng(),
+                      ...point,
                     });
                   }}
-                  onDragEnd={(event) => {
-                    const latLng = event.latLng;
-                    if (!latLng || isLocked || !onSavePin) return;
-                    const point = { lat: latLng.lat(), lng: latLng.lng() };
+                  onDragEnd={(point) => {
+                    if (isLocked || !onSavePin) return;
                     setDragPreview(null);
                     setTees((current) => ({
                       ...current,
@@ -1145,28 +1045,26 @@ export function CourseHolePinMap({
               );
             })}
             {liveGreen && (
-              <Marker
+              <LabeledCircleMarker
                 position={liveGreen}
                 draggable={!isLocked && !isSaving}
                 zIndex={!isLocked && !isSaving ? 41 : undefined}
                 title={
                   !isLocked && !isSaving ? "Drag to move green" : undefined
                 }
-                label={{ text: "G", color: "#ffffff", fontWeight: "700" }}
-                icon={markerIcon("#16a34a")}
-                onDrag={(event) => {
-                  const latLng = event.latLng;
-                  if (!latLng || isLocked) return;
+                label="G"
+                fill="#16a34a"
+                stroke="#ffffff"
+                radius={9}
+                onDrag={(point) => {
+                  if (isLocked) return;
                   setDragPreview({
                     kind: "green",
-                    lat: latLng.lat(),
-                    lng: latLng.lng(),
+                    ...point,
                   });
                 }}
-                onDragEnd={(event) => {
-                  const latLng = event.latLng;
-                  if (!latLng || isLocked || !onSavePin) return;
-                  const point = { lat: latLng.lat(), lng: latLng.lng() };
+                onDragEnd={(point) => {
+                  if (isLocked || !onSavePin) return;
                   setDragPreview(null);
                   setGreen(point);
                   void onSavePin({ kind: "green", ...point });

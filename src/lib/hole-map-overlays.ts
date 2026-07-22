@@ -394,8 +394,8 @@ export const HOLE_FEATURE_STYLES: Record<
   },
   fairway_corridor: {
     strokeColor: "#60a86c",
-    strokeOpacity: 0.55,
-    strokeWeight: 18,
+    strokeOpacity: 0.45,
+    strokeWeight: 8,
     zIndex: 4,
   },
   green: {

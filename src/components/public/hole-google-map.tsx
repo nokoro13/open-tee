@@ -11,17 +11,25 @@ import {
 import {
   APIProvider,
   Map,
-  Marker,
   Polygon,
-  Polyline,
   RenderingType,
-  useMap,
 } from "@vis.gl/react-google-maps";
 
+import { HoleMapCameraController } from "@/components/maps/hole-map-camera-controller";
+import type { FitHoleOptions } from "@/components/maps/hole-map-camera-controller";
+import {
+  FeaturePointMarker,
+  LabeledCircleMarker,
+  PulseRingMarker,
+} from "@/components/maps/hole-map-markers";
 import type { GeolocationPosition } from "@/hooks/use-geolocation";
 import type { GreenTargets } from "@/lib/green-distance";
 import type { GeoJsonFeatureCollection } from "@/lib/geojson";
 import { teeMarkerLabelColor } from "@/lib/course-tees";
+import {
+  GOOGLE_MAPS_API_KEY,
+  GOLF_SATELLITE_MAP_PROPS,
+} from "@/lib/google-maps-config";
 import {
   buildHoleMapScene,
   HOLE_FEATURE_STYLES,
@@ -29,45 +37,12 @@ import {
   type HoleMapMarker,
   type HoleMapScene,
 } from "@/lib/hole-map-overlays";
-import { computeHoleMapCamera } from "@/lib/hole-map-view";
 import { HoleDistanceGuideLayer } from "@/components/public/hole-distance-guide";
 
-const MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
 const MAP_PADDING = { top: 120, bottom: 96, left: 32, right: 32 };
-const CIRCLE_SYMBOL_PATH = 0;
-
-// Satellite is the base layer; these styles suppress any remaining POI labels.
-const GOLF_MAP_STYLES: google.maps.MapTypeStyle[] = [
-  { featureType: "poi", stylers: [{ visibility: "off" }] },
-  { featureType: "poi.business", stylers: [{ visibility: "off" }] },
-  { featureType: "poi.attraction", stylers: [{ visibility: "off" }] },
-  { featureType: "poi.government", stylers: [{ visibility: "off" }] },
-  { featureType: "poi.medical", stylers: [{ visibility: "off" }] },
-  { featureType: "poi.place_of_worship", stylers: [{ visibility: "off" }] },
-  { featureType: "poi.school", stylers: [{ visibility: "off" }] },
-  { featureType: "poi.sports_complex", stylers: [{ visibility: "off" }] },
-  { featureType: "transit", stylers: [{ visibility: "off" }] },
-];
-
-function circleMarkerIcon(options: {
-  scale: number;
-  fillColor: string;
-  fillOpacity?: number;
-  strokeColor: string;
-  strokeWeight: number;
-}): google.maps.Symbol {
-  return {
-    path: CIRCLE_SYMBOL_PATH,
-    scale: options.scale,
-    fillColor: options.fillColor,
-    fillOpacity: options.fillOpacity ?? 1,
-    strokeColor: options.strokeColor,
-    strokeWeight: options.strokeWeight,
-  };
-}
 
 export type HoleGoogleMapHandle = {
-  fitHole: () => void;
+  fitHole: (options?: FitHoleOptions) => void;
 };
 
 type HoleGoogleMapProps = {
@@ -108,32 +83,16 @@ function HoleMapOverlayLayer({ overlay }: { overlay: HoleMapOverlay }) {
   }
 
   if (overlay.kind === "polyline") {
-    return (
-      <Polyline
-        key={overlay.key}
-        path={overlay.path}
-        strokeColor={style.strokeColor}
-        strokeOpacity={style.strokeOpacity ?? 1}
-        strokeWeight={style.strokeWeight}
-        zIndex={style.zIndex}
-        clickable={false}
-      />
-    );
+    return null;
   }
 
   return (
-    <Marker
+    <FeaturePointMarker
       key={overlay.key}
       position={overlay.position}
-      clickable={false}
+      fillColor={style.fillColor ?? "#225430"}
+      strokeColor={style.strokeColor}
       zIndex={style.zIndex}
-      icon={circleMarkerIcon({
-        scale: 4,
-        fillColor: style.fillColor ?? "#225430",
-        fillOpacity: style.fillOpacity ?? 1,
-        strokeColor: style.strokeColor,
-        strokeWeight: style.strokeWeight,
-      })}
     />
   );
 }
@@ -142,106 +101,26 @@ function HoleMapMarkerLayer({ marker }: { marker: HoleMapMarker }) {
   return (
     <>
       {marker.pulse && (
-        <Marker
+        <PulseRingMarker
           position={marker.position}
-          clickable={false}
-          zIndex={20}
-          icon={circleMarkerIcon({
-            scale: marker.radius + 5,
-            fillColor: "#60a5fa",
-            fillOpacity: 0.22,
-            strokeColor: "#60a5fa",
-            strokeWeight: 0,
-          })}
+          radius={marker.radius}
         />
       )}
-      <Marker
+      <LabeledCircleMarker
         position={marker.position}
-        clickable={false}
-        zIndex={21}
-        label={
-          marker.label
-            ? {
-                text: marker.label,
-                color:
-                  marker.label === "T"
-                    ? teeMarkerLabelColor(marker.fill)
-                    : "#111827",
-                fontWeight: "700",
-                fontSize: "10px",
-              }
-            : undefined
+        label={marker.label}
+        fill={marker.fill}
+        stroke={marker.stroke}
+        radius={marker.radius}
+        labelColor={
+          marker.label === "T"
+            ? teeMarkerLabelColor(marker.fill)
+            : "#111827"
         }
-        icon={circleMarkerIcon({
-          scale: marker.radius,
-          fillColor: marker.fill,
-          strokeColor: marker.stroke,
-          strokeWeight: 2.5,
-        })}
+        zIndex={21}
       />
     </>
   );
-}
-
-function MapCameraController({
-  scene,
-  resetKey,
-  onReady,
-}: {
-  scene: HoleMapScene;
-  resetKey: number;
-  onReady: (fitHole: () => void) => void;
-}) {
-  const map = useMap();
-  const viewRef = useRef(scene.view);
-  viewRef.current = scene.view;
-  const needsFitRef = useRef(true);
-
-  const fitHole = useCallback(() => {
-    if (!map) return;
-
-    const div = map.getDiv();
-    const rect = div.getBoundingClientRect();
-    if (rect.width < 50 || rect.height < 50) return;
-
-    const camera = computeHoleMapCamera({
-      view: viewRef.current,
-      mapWidth: Math.max(rect.width, 1),
-      mapHeight: Math.max(rect.height, 1),
-      padding: MAP_PADDING,
-    });
-
-    map.moveCamera({
-      center: camera.center,
-      zoom: camera.zoom,
-      heading: camera.heading,
-      tilt: 0,
-    });
-  }, [map]);
-
-  useEffect(() => {
-    onReady(fitHole);
-  }, [fitHole, onReady]);
-
-  // Mark for refit when the active hole changes.
-  useEffect(() => {
-    needsFitRef.current = true;
-  }, [resetKey]);
-
-  // Refit once the scene geometry for that hole is ready — not on GPS drift.
-  useEffect(() => {
-    if (!needsFitRef.current) return;
-    needsFitRef.current = false;
-    fitHole();
-  }, [
-    fitHole,
-    resetKey,
-    scene.view.center.lat,
-    scene.view.center.lng,
-    scene.view.bearing,
-  ]);
-
-  return null;
 }
 
 function HoleGoogleMapScene({
@@ -253,7 +132,7 @@ function HoleGoogleMapScene({
 }: {
   scene: HoleMapScene;
   holeNumber: number;
-  onFitHoleReady: (fitHole: () => void) => void;
+  onFitHoleReady: (fitHole: (options?: FitHoleOptions) => void) => void;
   eventSlug?: string;
   editableDogleg?: boolean;
 }) {
@@ -263,21 +142,20 @@ function HoleGoogleMapScene({
     <Map
       defaultCenter={view.center}
       defaultZoom={17}
-      mapTypeId="satellite"
+      defaultHeading={view.bearing}
+      {...GOLF_SATELLITE_MAP_PROPS}
       renderingType={RenderingType.VECTOR}
-      styles={GOLF_MAP_STYLES}
       gestureHandling="greedy"
       disableDefaultUI
       rotateControl={false}
-      headingInteractionEnabled={false}
-      tiltInteractionEnabled={false}
       clickableIcons={false}
       className="h-full w-full"
       style={{ width: "100%", height: "100%" }}
     >
-      <MapCameraController
-        scene={scene}
+      <HoleMapCameraController
+        view={view}
         resetKey={holeNumber}
+        padding={MAP_PADDING}
         onReady={onFitHoleReady}
       />
 
@@ -306,7 +184,7 @@ export const HoleGoogleMap = forwardRef<HoleGoogleMapHandle, HoleGoogleMapProps>
     { features, targets, playerPosition, holeNumber, className, onSceneChange, preferredTeeKey, preferredTeeColor, usePlayerAsAnchor = false, eventSlug, editableDogleg = false },
     ref
   ) {
-    const fitHoleRef = useRef<(() => void) | null>(null);
+    const fitHoleRef = useRef<((options?: FitHoleOptions) => void) | null>(null);
     const scene = useMemo(
       () =>
         buildHoleMapScene({
@@ -327,17 +205,17 @@ export const HoleGoogleMap = forwardRef<HoleGoogleMapHandle, HoleGoogleMapProps>
       }
     }, [onSceneChange, scene]);
 
-    const handleFitHoleReady = useCallback((fitHole: () => void) => {
+    const handleFitHoleReady = useCallback((fitHole: (options?: FitHoleOptions) => void) => {
       fitHoleRef.current = fitHole;
     }, []);
 
     useImperativeHandle(ref, () => ({
-      fitHole: () => {
-        fitHoleRef.current?.();
+      fitHole: (options?: FitHoleOptions) => {
+        fitHoleRef.current?.(options);
       },
     }));
 
-    if (!MAPS_API_KEY) {
+    if (!GOOGLE_MAPS_API_KEY) {
       return (
         <div className="flex h-full items-center justify-center px-6 text-center text-sm text-white/60">
           Google Maps API key is not configured.
@@ -355,7 +233,7 @@ export const HoleGoogleMap = forwardRef<HoleGoogleMapHandle, HoleGoogleMapProps>
 
     return (
       <div className={className}>
-        <APIProvider apiKey={MAPS_API_KEY}>
+        <APIProvider apiKey={GOOGLE_MAPS_API_KEY}>
           <HoleGoogleMapScene
             scene={scene}
             holeNumber={holeNumber}

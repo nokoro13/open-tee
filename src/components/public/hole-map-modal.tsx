@@ -227,14 +227,6 @@ export function HoleMapModal({
   }, [open, features]);
 
   useEffect(() => {
-    if (!open || !mapFeatures) return;
-    const frame = requestAnimationFrame(() => {
-      mapRef.current?.fitHole();
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [open, holeNumber, mapFeatures]);
-
-  useEffect(() => {
     if (!open || !courseId) return;
 
     let cancelled = false;
@@ -362,7 +354,7 @@ export function HoleMapModal({
             <MapChromeButton
               className="pointer-events-auto size-10"
               aria-label="Fit hole to screen"
-              onClick={() => mapRef.current?.fitHole()}
+              onClick={() => mapRef.current?.fitHole({ animate: true })}
             >
               <Maximize2 className="size-4" />
             </MapChromeButton>

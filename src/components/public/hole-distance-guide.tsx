@@ -1,34 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Marker, Polyline } from "@vis.gl/react-google-maps";
+import { useEffect, useRef, useState } from "react";
 
+import { HoleLinePolylines } from "@/components/maps/hole-line-polylines";
+import {
+  BreakAnchorMarker,
+  FlagPinMarker,
+  OriginMarker,
+  YardageBadgeMarker,
+} from "@/components/maps/hole-map-markers";
 import { useHoleDoglegPreferences } from "@/hooks/use-hole-dogleg-preferences";
 import { teeMarkerStrokeColor } from "@/lib/course-tees";
 import type { LatLng } from "@/lib/green-distance";
 import type { HoleDistanceGuide } from "@/lib/hole-distance-guide";
-import {
-  createBreakAnchorIcon,
-  createFlagPinIcon,
-  createYardageBadgeIcon,
-  midpoint,
-  segmentYards,
-  startPointIcon,
-} from "@/lib/hole-distance-guide";
-
-const DISTANCE_LINE_OPTIONS = {
-  strokeColor: "#ffffff",
-  strokeOpacity: 1,
-  strokeWeight: 3,
-  zIndex: 18,
-} as const;
-
-const LINE_HIT_OPTIONS = {
-  strokeColor: "#ffffff",
-  strokeOpacity: 0.001,
-  strokeWeight: 24,
-  zIndex: 17,
-} as const;
+import { midpoint, segmentYards } from "@/lib/hole-distance-guide";
 
 function SegmentYardageLabel({
   from,
@@ -38,15 +23,9 @@ function SegmentYardageLabel({
   to: LatLng;
 }) {
   const yards = segmentYards(from, to);
-  const icon = useMemo(() => createYardageBadgeIcon(yards), [yards]);
 
   return (
-    <Marker
-      position={midpoint(from, to)}
-      clickable={false}
-      zIndex={24}
-      icon={icon}
-    />
+    <YardageBadgeMarker position={midpoint(from, to)} yards={yards} />
   );
 }
 
@@ -82,18 +61,12 @@ export function HoleDistanceGuideLayer({
   const hasDogleg = breakPoint != null;
   const canEdit = editable && Boolean(eventSlug);
 
-  const breakIcon = useMemo(() => createBreakAnchorIcon(), []);
-  const flagIcon = useMemo(() => createFlagPinIcon(), []);
-  const originIcon = useMemo(
-    () =>
-      guide.fromKind === "player"
-        ? startPointIcon()
-        : startPointIcon({
-            fillColor: guide.teeColor,
-            strokeColor: teeMarkerStrokeColor(guide.teeColor),
-          }),
-    [guide.fromKind, guide.teeColor]
-  );
+  const originFill =
+    guide.fromKind === "player" ? "#ef4444" : guide.teeColor;
+  const originStroke =
+    guide.fromKind === "player"
+      ? "#ffffff"
+      : teeMarkerStrokeColor(guide.teeColor);
 
   useEffect(() => {
     setDragBreak(null);
@@ -114,15 +87,12 @@ export function HoleDistanceGuideLayer({
     clearBreakPoint(holeNumber);
   }
 
-  function handleBreakDrag(event: google.maps.MapMouseEvent) {
-    const point = latLngFromMapEvent(event);
-    if (!point) return;
+  function handleBreakDrag(point: LatLng) {
     setDragBreak(point);
   }
 
-  function handleBreakDragEnd(event: google.maps.MapMouseEvent) {
-    const point = latLngFromMapEvent(event);
-    if (!point || !canEdit) return;
+  function handleBreakDragEnd(point: LatLng) {
+    if (!canEdit) return;
     setDragBreak(null);
     setBreakPoint(holeNumber, point);
     window.setTimeout(() => {
@@ -133,34 +103,19 @@ export function HoleDistanceGuideLayer({
   if (!hasDogleg || !breakPoint) {
     return (
       <>
-        {canEdit && (
-          <Polyline
-            path={[guide.from, guide.to]}
-            {...LINE_HIT_OPTIONS}
-            clickable
-            onClick={handleAddBreak}
-          />
-        )}
-
-        <Polyline
+        <HoleLinePolylines
           path={[guide.from, guide.to]}
-          {...DISTANCE_LINE_OPTIONS}
-          clickable={false}
+          clickable={canEdit}
+          onClick={handleAddBreak}
         />
 
-        <Marker
+        <OriginMarker
           position={guide.from}
-          clickable={false}
-          zIndex={22}
-          icon={originIcon}
+          fillColor={originFill}
+          strokeColor={originStroke}
         />
 
-        <Marker
-          position={guide.to}
-          clickable={false}
-          zIndex={23}
-          icon={flagIcon}
-        />
+        <FlagPinMarker position={guide.to} />
 
         <SegmentYardageLabel from={guide.from} to={guide.to} />
       </>
@@ -169,27 +124,21 @@ export function HoleDistanceGuideLayer({
 
   return (
     <>
-      <Polyline path={[guide.from, breakPoint]} {...DISTANCE_LINE_OPTIONS} />
-      <Polyline path={[breakPoint, guide.to]} {...DISTANCE_LINE_OPTIONS} />
+      <HoleLinePolylines path={[guide.from, breakPoint]} />
+      <HoleLinePolylines path={[breakPoint, guide.to]} />
 
-      <Marker
+      <OriginMarker
         position={guide.from}
-        clickable={false}
-        zIndex={22}
-        icon={originIcon}
+        fillColor={originFill}
+        strokeColor={originStroke}
       />
 
-      <Marker
-        position={guide.to}
-        clickable={false}
-        zIndex={23}
-        icon={flagIcon}
-      />
+      <FlagPinMarker position={guide.to} />
 
       <SegmentYardageLabel from={guide.from} to={breakPoint} />
       <SegmentYardageLabel from={breakPoint} to={guide.to} />
 
-      <Marker
+      <BreakAnchorMarker
         position={breakPoint}
         draggable={canEdit}
         clickable={canEdit}
@@ -199,7 +148,6 @@ export function HoleDistanceGuideLayer({
             ? "Tap to remove · drag to adjust layup"
             : "Fairway layup target"
         }
-        icon={breakIcon}
         onClick={handleRemoveBreak}
         onDragStart={() => {
           draggedRef.current = true;
