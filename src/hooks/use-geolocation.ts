@@ -45,7 +45,6 @@ export function useGeolocation(enabled = true) {
   const [position, setPosition] = useState<GeolocationPosition | null>(null);
   const [status, setStatus] = useState<GeolocationStatus>("idle");
   const hasFixRef = useRef(false);
-  const hasAttemptedRef = useRef(false);
   const watchIdRef = useRef<number | null>(null);
   const pollIdRef = useRef<number | null>(null);
   const trackingRef = useRef(false);
@@ -71,19 +70,15 @@ export function useGeolocation(enabled = true) {
   }, []);
 
   const handleError = useCallback(
-    (error: GeolocationPositionError, fromUserRequest = false) => {
+    (error: GeolocationPositionError) => {
       if (error.code === error.PERMISSION_DENIED) {
-        if (fromUserRequest || hasAttemptedRef.current) {
-          setStatus("denied");
-        } else {
-          setStatus("idle");
-        }
+        setStatus("denied");
         stopTracking();
         return;
       }
 
       if (!hasFixRef.current) {
-        setStatus(fromUserRequest || hasAttemptedRef.current ? "unavailable" : "idle");
+        setStatus("unavailable");
       }
     },
     [stopTracking]
@@ -98,7 +93,11 @@ export function useGeolocation(enabled = true) {
 
     watchIdRef.current = navigator.geolocation.watchPosition(
       (result) => handleSuccess(toPosition(result.coords)),
-      (error) => handleError(error, false),
+      (error) => {
+        if (error.code === error.PERMISSION_DENIED) {
+          handleError(error);
+        }
+      },
       WATCH_OPTIONS
     );
 
@@ -124,7 +123,6 @@ export function useGeolocation(enabled = true) {
       return;
     }
 
-    hasAttemptedRef.current = true;
     setStatus("locating");
 
     navigator.geolocation.getCurrentPosition(
@@ -132,19 +130,15 @@ export function useGeolocation(enabled = true) {
         handleSuccess(toPosition(result.coords));
         startTracking();
       },
-      (error) => handleError(error, true),
+      handleError,
       INITIAL_OPTIONS
     );
   }, [handleError, handleSuccess, startTracking]);
-
-  const requestLocationRef = useRef(requestLocation);
-  requestLocationRef.current = requestLocation;
 
   useEffect(() => {
     if (!enabled) {
       stopTracking();
       hasFixRef.current = false;
-      hasAttemptedRef.current = false;
       setStatus("idle");
       setPosition(null);
       return;
@@ -155,48 +149,9 @@ export function useGeolocation(enabled = true) {
       return;
     }
 
-    let cancelled = false;
-
-    async function syncPermissionState() {
-      // Safari often reports "denied" from the Permissions API before the user
-      // has ever been prompted. Only trust an explicit "granted" state here.
-      if (!navigator.permissions?.query) {
-        if (!cancelled) setStatus("idle");
-        return;
-      }
-
-      try {
-        const result = await navigator.permissions.query({ name: "geolocation" });
-        if (cancelled) return;
-
-        if (result.state === "granted") {
-          requestLocationRef.current();
-        } else {
-          setStatus("idle");
-        }
-
-        result.onchange = () => {
-          if (cancelled) return;
-          if (result.state === "granted") {
-            requestLocationRef.current();
-          } else if (result.state !== "prompt" && hasAttemptedRef.current) {
-            setStatus("denied");
-            stopTracking();
-            hasFixRef.current = false;
-            setPosition(null);
-          } else {
-            setStatus("idle");
-          }
-        };
-      } catch {
-        if (!cancelled) setStatus("idle");
-      }
-    }
-
-    void syncPermissionState();
+    setStatus("idle");
 
     return () => {
-      cancelled = true;
       stopTracking();
     };
   }, [enabled, stopTracking]);
