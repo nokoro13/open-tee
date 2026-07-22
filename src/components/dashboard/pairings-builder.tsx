@@ -14,24 +14,25 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import {
-  forwardRef,
   useEffect,
   useMemo,
   useState,
   useTransition,
-  type CSSProperties,
-  type HTMLAttributes,
-  type ReactNode,
 } from "react";
 import {
   AlertTriangle,
   ChevronDown,
+  Clock,
+  Ellipsis,
+  Flag,
   GripVertical,
   Plus,
   Printer,
   Search,
   Trash2,
+  UserMinus,
   Users,
+  X,
 } from "lucide-react";
 
 import {
@@ -63,9 +64,23 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   DEFAULT_TEAM_A_NAME,
   DEFAULT_TEAM_B_NAME,
   RYDER_MATCH_TYPES,
+  getEventFormat,
   getGroupSizeWarning,
   getRyderMatchType,
   requiresMatchType,
@@ -94,9 +109,18 @@ type PairingPlayer = {
   scoringCode?: string | null;
 };
 
+type PairingGroup = EventPairings["groups"][number];
+
 type DragPlayerData = {
   registrationId: string;
   fromGroupId: string | null;
+};
+
+type GroupUpdateInput = {
+  label?: string;
+  teeTime?: string | null;
+  startingHole?: number | null;
+  matchType?: "singles" | "fourball" | "foursomes" | null;
 };
 
 type PairingsBuilderProps = {
@@ -114,6 +138,28 @@ type PairingsBuilderProps = {
   teamBName?: string | null;
   pairings: EventPairings;
 };
+
+function getGroupCapacity(
+  format: string,
+  matchType: string | null
+): { target: number; max: number } {
+  if (format === "ryder_cup") {
+    const type = getRyderMatchType(matchType);
+    if (type) {
+      return { target: type.maxPerSide * 2, max: type.maxPerSide * 2 };
+    }
+    return { target: 4, max: 4 };
+  }
+
+  const meta = getEventFormat(format);
+  const max = meta?.maxGroupSize ?? 4;
+  const preferred =
+    meta && "preferredGroupSize" in meta && meta.preferredGroupSize
+      ? meta.preferredGroupSize
+      : (meta?.defaultGroupSize ?? max);
+
+  return { target: Math.min(preferred, max), max };
+}
 
 export function PairingsBuilder(props: PairingsBuilderProps) {
   const {
@@ -137,6 +183,7 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
   const [search, setSearch] = useState("");
   const [localPairings, setLocalPairings] = useState(pairings);
   const [activePlayerId, setActivePlayerId] = useState<string | null>(null);
+  const [detailsGroupId, setDetailsGroupId] = useState<string | null>(null);
 
   useEffect(() => {
     setLocalPairings(pairings);
@@ -178,6 +225,15 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
     return findPlayer(localPairings, activePlayerId)?.player ?? null;
   }, [activePlayerId, localPairings]);
 
+  const detailsGroup = useMemo(
+    () =>
+      detailsGroupId
+        ? (localPairings.groups.find((group) => group.id === detailsGroupId) ??
+          null)
+        : null,
+    [detailsGroupId, localPairings.groups]
+  );
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, {
@@ -202,21 +258,32 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
     });
   }
 
-  function updateGroupLocally(
-    groupId: string,
-    input: {
-      label?: string;
-      teeTime?: string | null;
-      startingHole?: number | null;
-      matchType?: "singles" | "fourball" | "foursomes" | null;
-    }
-  ) {
+  function handleCreateGroup() {
+    runAction(
+      () => createPairingGroup(eventId),
+      (result) => {
+        if ("group" in result && result.group) {
+          setLocalPairings((current) => ({
+            ...current,
+            groups: [...current.groups, result.group],
+          }));
+        }
+      }
+    );
+  }
+
+  function updateGroupLocally(groupId: string, input: GroupUpdateInput) {
     setLocalPairings((current) => ({
       ...current,
       groups: current.groups.map((group) =>
         group.id === groupId ? { ...group, ...input } : group
       ),
     }));
+  }
+
+  function handleUpdateGroup(groupId: string, input: GroupUpdateInput) {
+    updateGroupLocally(groupId, input);
+    runAction(() => updatePairingGroup(groupId, input));
   }
 
   function deleteGroupLocally(groupId: string) {
@@ -237,10 +304,13 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
     });
   }
 
-  function updateTeamSideLocally(
-    registrationId: string,
-    teamSide: "a" | "b" | null
-  ) {
+  function handleDeleteGroup(groupId: string) {
+    setDetailsGroupId((current) => (current === groupId ? null : current));
+    deleteGroupLocally(groupId);
+    runAction(() => deletePairingGroup(groupId));
+  }
+
+  function handleTeamSide(registrationId: string, teamSide: "a" | "b" | null) {
     setLocalPairings((current) => ({
       groups: current.groups.map((group) => ({
         ...group,
@@ -252,6 +322,7 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
         player.id === registrationId ? { ...player, teamSide } : player
       ),
     }));
+    runAction(() => assignRegistrationTeamSide(registrationId, teamSide));
   }
 
   function autoAssignShotgunHolesLocally() {
@@ -268,7 +339,6 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
 
   function movePlayerLocally(
     registrationId: string,
-    fromGroupId: string | null,
     toGroupId: string | null
   ) {
     setLocalPairings((current) => {
@@ -300,13 +370,19 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
 
       const unassigned =
         toGroupId === null
-          ? [...current.unassigned.filter((p) => p.id !== registrationId), player].sort(
-              (a, b) => a.name.localeCompare(b.name)
-            )
+          ? [
+              ...current.unassigned.filter((p) => p.id !== registrationId),
+              player,
+            ].sort((a, b) => a.name.localeCompare(b.name))
           : current.unassigned.filter((p) => p.id !== registrationId);
 
       return { groups, unassigned };
     });
+  }
+
+  function handleMovePlayer(registrationId: string, toGroupId: string | null) {
+    movePlayerLocally(registrationId, toGroupId);
+    runAction(() => assignRegistrationToGroup(registrationId, toGroupId));
   }
 
   function handleDragStart(event: DragStartEvent) {
@@ -337,10 +413,7 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
 
     if (data.fromGroupId === targetGroupId) return;
 
-    movePlayerLocally(data.registrationId, data.fromGroupId, targetGroupId);
-    runAction(() =>
-      assignRegistrationToGroup(data.registrationId, targetGroupId)
-    );
+    handleMovePlayer(data.registrationId, targetGroupId);
   }
 
   function handleDragCancel() {
@@ -360,9 +433,12 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
               ? `Drag players into matches and set ${sideALabel} / ${sideBLabel} sides.`
               : "Drag registrants into groups."}{" "}
             <span className="whitespace-nowrap">
-              {totalAssigned} assigned · {localPairings.unassigned.length} unassigned
+              {totalAssigned} assigned · {localPairings.unassigned.length}{" "}
+              unassigned
             </span>
-            <span className="mt-1 block text-xs sm:text-sm">{scheduleSummary}</span>
+            <span className="mt-1 block text-xs sm:text-sm">
+              {scheduleSummary}
+            </span>
           </CardDescription>
         </div>
         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-col sm:items-stretch lg:items-end">
@@ -403,16 +479,7 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
               size="sm"
               className="h-10 w-full sm:w-auto"
               disabled={controlsDisabled}
-              onClick={() =>
-                runAction(() => createPairingGroup(eventId), (result) => {
-                  if ("group" in result && result.group) {
-                    setLocalPairings((current) => ({
-                      ...current,
-                      groups: [...current.groups, result.group],
-                    }));
-                  }
-                })
-              }
+              onClick={handleCreateGroup}
             >
               <Plus />
               {showMatchType ? "Add match" : "Add group"}
@@ -440,7 +507,7 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
             onDragEnd={handleDragEnd}
             onDragCancel={handleDragCancel}
           >
-            <div className="flex min-w-0 flex-col gap-4 overflow-x-hidden lg:min-h-[520px] lg:flex-row lg:gap-6">
+            <div className="flex min-w-0 flex-col gap-4 overflow-x-hidden lg:min-h-130 lg:flex-row lg:gap-6">
               <RegistrantsSidebar
                 players={filteredUnassigned}
                 totalCount={localPairings.unassigned.length}
@@ -449,9 +516,9 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
                 disabled={controlsDisabled}
               />
 
-              <div className="min-w-0 w-full max-w-full flex-1 space-y-3">
+              <div className="min-w-0 w-full max-w-full flex-1 space-y-0">
                 {localPairings.groups.length > 0 && (
-                  <div className="flex items-center justify-between lg:hidden">
+                  <div className="mb-3 flex items-center justify-between lg:hidden">
                     <h3 className="text-sm font-semibold">
                       {showMatchType ? "Matches" : "Groups"}
                     </h3>
@@ -460,6 +527,17 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
                     </p>
                   </div>
                 )}
+                <div className="mb-3 hidden space-y-1 lg:block">
+                  <h3 className="text-sm font-semibold">
+                    {showMatchType ? "Matches" : "Groups"}
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    {localPairings.groups.length} total · click a group for
+                    details
+                  </p>
+                </div>
+                {/* Match registrants search field height so list tops align */}
+                <div className="mb-3 hidden h-10 lg:block" aria-hidden />
                 {localPairings.groups.length === 0 ? (
                   <div className="flex h-full min-h-64 flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/20 px-6 py-12 text-center">
                     <p className="text-sm font-medium">
@@ -477,16 +555,7 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
                         size="sm"
                         className="mt-4"
                         disabled={controlsDisabled}
-                        onClick={() =>
-                          runAction(() => createPairingGroup(eventId), (result) => {
-                            if ("group" in result && result.group) {
-                              setLocalPairings((current) => ({
-                                ...current,
-                                groups: [...current.groups, result.group],
-                              }));
-                            }
-                          })
-                        }
+                        onClick={handleCreateGroup}
                       >
                         <Plus />
                         {showMatchType ? "Add match" : "Add group"}
@@ -494,7 +563,7 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
                     )}
                   </div>
                 ) : (
-                  <div className="grid min-w-0 w-full max-w-full gap-4 xl:grid-cols-2">
+                  <div className="flex min-w-0 w-full max-w-full flex-col gap-2.5">
                     {localPairings.groups.map((group) => {
                       const teamACount = group.players.filter(
                         (p) => p.teamSide === "a"
@@ -513,10 +582,10 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
                       );
 
                       return (
-                        <GroupCard
+                        <GroupRow
                           key={group.id}
-                          eventId={eventId}
                           group={group}
+                          format={format}
                           startFormat={startFormat}
                           startingHoleOptions={startingHoleOptions}
                           showMatchType={showMatchType}
@@ -525,25 +594,14 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
                           sideBLabel={sideBLabel}
                           warning={warning}
                           disabled={controlsDisabled}
-                          isPending={isPending}
-                          showScoringLinks={showScoringLinks}
-                          canEmailPlayers={canEmailPlayers}
-                          appUrl={appUrl}
-                          slug={slug}
-                          onUpdate={(input) => {
-                            updateGroupLocally(group.id, input);
-                            runAction(() => updatePairingGroup(group.id, input));
-                          }}
-                          onDelete={() => {
-                            deleteGroupLocally(group.id);
-                            runAction(() => deletePairingGroup(group.id));
-                          }}
-                          onTeamSide={(registrationId, teamSide) => {
-                            updateTeamSideLocally(registrationId, teamSide);
-                            runAction(() =>
-                              assignRegistrationTeamSide(registrationId, teamSide)
-                            );
-                          }}
+                          onUpdate={(input) =>
+                            handleUpdateGroup(group.id, input)
+                          }
+                          onOpenDetails={() => setDetailsGroupId(group.id)}
+                          onTeamSide={handleTeamSide}
+                          onRemovePlayer={(registrationId) =>
+                            handleMovePlayer(registrationId, null)
+                          }
                         />
                       );
                     })}
@@ -554,13 +612,49 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
 
             <DragOverlay dropAnimation={null}>
               {activePlayer ? (
-                <div className="w-[min(100vw-2rem,18rem)] touch-none">
-                  <PlayerChip player={activePlayer} isOverlay disabled />
+                <div className="touch-none">
+                  <PillVisual
+                    player={activePlayer}
+                    showTeamSides={showTeamSides}
+                    className="shadow-md ring-2 ring-primary/30"
+                  />
                 </div>
               ) : null}
             </DragOverlay>
           </DndContext>
         )}
+
+        <GroupDetailsSheet
+          group={detailsGroup}
+          onOpenChange={(open) => {
+            if (!open) setDetailsGroupId(null);
+          }}
+          eventId={eventId}
+          format={format}
+          startFormat={startFormat}
+          startingHoleOptions={startingHoleOptions}
+          showMatchType={showMatchType}
+          showTeamSides={showTeamSides}
+          sideALabel={sideALabel}
+          sideBLabel={sideBLabel}
+          disabled={controlsDisabled}
+          isPending={isPending}
+          setupLocked={setupLocked}
+          showScoringLinks={showScoringLinks}
+          canEmailPlayers={canEmailPlayers}
+          appUrl={appUrl}
+          slug={slug}
+          onUpdate={(input) => {
+            if (detailsGroup) handleUpdateGroup(detailsGroup.id, input);
+          }}
+          onDelete={() => {
+            if (detailsGroup) handleDeleteGroup(detailsGroup.id);
+          }}
+          onTeamSide={handleTeamSide}
+          onRemovePlayer={(registrationId) =>
+            handleMovePlayer(registrationId, null)
+          }
+        />
       </CardContent>
     </Card>
   );
@@ -595,7 +689,7 @@ function RegistrantsSidebar({
   });
 
   return (
-    <aside className="flex w-full min-w-0 shrink-0 flex-col overflow-x-hidden lg:w-72 xl:w-80">
+    <aside className="flex w-full min-w-0 shrink-0 flex-col overflow-x-hidden lg:w-64 xl:w-72">
       <div
         ref={setNodeRef}
         className={cn(
@@ -607,9 +701,7 @@ function RegistrantsSidebar({
           type="button"
           className={cn(
             "mb-3 flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left lg:hidden",
-            isOver
-              ? "border-primary bg-primary/5"
-              : "border-border bg-muted/20"
+            isOver ? "border-primary bg-primary/5" : "border-border bg-muted/20"
           )}
           aria-expanded={mobileExpanded}
           onClick={() => setMobileExpanded((open) => !open)}
@@ -638,10 +730,7 @@ function RegistrantsSidebar({
         </div>
 
         <div
-          className={cn(
-            "flex flex-col",
-            !mobileExpanded && "hidden lg:flex"
-          )}
+          className={cn("flex flex-col", !mobileExpanded && "hidden lg:flex")}
         >
           <div className="relative mb-3">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -656,7 +745,7 @@ function RegistrantsSidebar({
 
           <div
             className={cn(
-              "flex min-h-40 flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto rounded-xl border bg-muted/10 p-2.5 sm:p-3 lg:max-h-[calc(100vh-18rem)]",
+              "flex min-h-40 flex-1 flex-col gap-1.5 overflow-x-hidden overflow-y-auto rounded-xl border bg-muted/10 p-2 lg:max-h-[calc(100vh-18rem)]",
               isOver && "border-primary bg-primary/5",
               !isOver && "border-border"
             )}
@@ -701,19 +790,61 @@ function SidebarPlayerCard({ player, disabled }: SidebarPlayerCardProps) {
   });
 
   return (
-    <PlayerChip
+    <div
       ref={setNodeRef}
-      player={player}
-      disabled={disabled}
-      isDragging={isDragging}
-      dragHandleProps={{ ...attributes, ...listeners }}
-    />
+      {...attributes}
+      {...listeners}
+      className={cn(
+        "flex touch-none select-none items-center gap-2 rounded-lg border border-border bg-background px-2.5 py-2 shadow-xs",
+        disabled
+          ? "cursor-not-allowed opacity-70"
+          : "cursor-grab active:cursor-grabbing",
+        isDragging && "opacity-40"
+      )}
+      aria-label={`Drag ${player.name}`}
+    >
+      <GripVertical className="size-3.5 shrink-0 text-muted-foreground/70" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">{player.name}</p>
+        <p className="truncate text-xs text-muted-foreground">
+          {player.email}
+        </p>
+      </div>
+      {player.handicap && (
+        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+          {player.handicap}
+        </span>
+      )}
+      <PaymentDot status={player.paymentStatus} />
+    </div>
   );
 }
 
-type GroupCardProps = {
-  eventId: string;
-  group: EventPairings["groups"][number];
+function PaymentDot({ status }: { status: string }) {
+  if (status === "pending") {
+    return (
+      <span
+        className="size-2 shrink-0 rounded-full bg-amber-500"
+        title="Payment pending"
+      />
+    );
+  }
+
+  if (status === "refunded") {
+    return (
+      <span
+        className="size-2 shrink-0 rounded-full bg-destructive"
+        title="Refunded"
+      />
+    );
+  }
+
+  return null;
+}
+
+type GroupRowProps = {
+  group: PairingGroup;
+  format: string;
   startFormat: StartFormat;
   startingHoleOptions: number[];
   showMatchType: boolean;
@@ -722,24 +853,15 @@ type GroupCardProps = {
   sideBLabel: string;
   warning: string | null;
   disabled: boolean;
-  isPending: boolean;
-  showScoringLinks: boolean;
-  canEmailPlayers: boolean;
-  appUrl: string;
-  slug: string;
-  onUpdate: (input: {
-    label?: string;
-    teeTime?: string | null;
-    startingHole?: number | null;
-    matchType?: "singles" | "fourball" | "foursomes" | null;
-  }) => void;
-  onDelete: () => void;
+  onUpdate: (input: GroupUpdateInput) => void;
+  onOpenDetails: () => void;
   onTeamSide: (registrationId: string, teamSide: "a" | "b" | null) => void;
+  onRemovePlayer: (registrationId: string) => void;
 };
 
-function GroupCard({
-  eventId,
+function GroupRow({
   group,
+  format,
   startFormat,
   startingHoleOptions,
   showMatchType,
@@ -748,318 +870,198 @@ function GroupCard({
   sideBLabel,
   warning,
   disabled,
-  isPending,
-  showScoringLinks,
-  canEmailPlayers,
-  appUrl,
-  slug,
   onUpdate,
-  onDelete,
+  onOpenDetails,
   onTeamSide,
-}: GroupCardProps) {
+  onRemovePlayer,
+}: GroupRowProps) {
   const dropId = `group:${group.id}`;
   const { isOver, setNodeRef } = useDroppable({
     id: dropId,
     disabled,
   });
 
-  const scheduleBadge =
-    startFormat === "shotgun"
-      ? group.startingHole != null
-        ? `Hole ${group.startingHole}`
-        : "No hole"
-      : formatTimeDisplay(group.teeTime);
+  const capacity = getGroupCapacity(format, group.matchType);
+  const openSlots = Math.max(capacity.target - group.players.length, 0);
+  const overCapacity = group.players.length > capacity.max;
+  const isFull = group.players.length >= capacity.target && openSlots === 0;
 
   return (
-    <div className="min-w-0 max-w-full overflow-hidden rounded-xl border border-border bg-muted/20">
-      <GroupHeader
-        eventId={eventId}
-        groupId={group.id}
-        label={group.label}
-        teeTime={group.teeTime}
-        startingHole={group.startingHole}
-        startFormat={startFormat}
-        startingHoleOptions={startingHoleOptions}
-        matchType={group.matchType}
-        showMatchType={showMatchType}
-        scheduleBadge={scheduleBadge}
-        disabled={disabled}
-        scoringCode={group.scoringCode}
-        scoringUrl={
-          group.scoringCode
-            ? getGroupScorePageUrl(appUrl, slug, group.scoringCode)
-            : null
-        }
-        showScoringLink={
-          showScoringLinks && group.players.length > 0 && group.scoringCode != null
-        }
-        onUpdate={onUpdate}
-        onDelete={onDelete}
-      />
-
-      {warning && (
-        <div className="mx-3 mb-3 flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 sm:text-sm dark:text-amber-100 lg:mx-4">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-          <span>{warning}</span>
-        </div>
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 rounded-xl border bg-card px-3 py-2.5 transition-colors sm:gap-3 sm:px-3.5 sm:py-3",
+        isOver
+          ? "border-primary bg-primary/5 ring-2 ring-inset ring-primary/20"
+          : "border-border",
+        isFull && "bg-muted/15"
       )}
-
-      <div
-        ref={setNodeRef}
-        className={cn(
-          "mx-3 mb-3 min-h-24 flex-1 rounded-lg border border-dashed p-2.5 transition-colors sm:min-h-28 sm:p-3 lg:mx-4 lg:mb-4",
-          group.players.length === 0 && "flex items-center justify-center",
-          isOver
-            ? "border-primary bg-primary/5 ring-2 ring-inset ring-primary/20"
-            : "border-border/80 bg-background/60"
-        )}
-      >
-        {group.players.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Drop players here
-          </p>
-        ) : (
-          <ul className="space-y-2">
-            {group.players.map((player) => (
-              <li key={player.id}>
-                <GroupPlayerRow
-                  player={player}
-                  groupId={group.id}
-                  showTeamSides={showTeamSides}
-                  sideALabel={sideALabel}
-                  sideBLabel={sideBLabel}
-                  disabled={disabled}
-                  isPending={isPending}
-                  canEmailPlayers={canEmailPlayers}
-                  eventId={eventId}
-                  onTeamSide={onTeamSide}
-                />
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
-  );
-}
-
-type GroupHeaderProps = {
-  eventId: string;
-  groupId: string;
-  label: string;
-  teeTime: string | null;
-  startingHole: number | null;
-  startFormat: StartFormat;
-  startingHoleOptions: number[];
-  matchType: string | null;
-  showMatchType: boolean;
-  scheduleBadge: string;
-  disabled: boolean;
-  scoringCode?: string | null;
-  scoringUrl?: string | null;
-  showScoringLink?: boolean;
-  onUpdate: (input: {
-    label?: string;
-    teeTime?: string | null;
-    startingHole?: number | null;
-    matchType?: "singles" | "fourball" | "foursomes" | null;
-  }) => void;
-  onDelete: () => void;
-};
-
-function GroupHeader({
-  eventId,
-  groupId,
-  label,
-  teeTime,
-  startingHole,
-  startFormat,
-  startingHoleOptions,
-  matchType,
-  showMatchType,
-  scheduleBadge,
-  disabled,
-  scoringCode,
-  scoringUrl,
-  showScoringLink,
-  onUpdate,
-  onDelete,
-}: GroupHeaderProps) {
-  const [localLabel, setLocalLabel] = useState(label);
-
-  useEffect(() => {
-    setLocalLabel(label);
-  }, [label]);
-
-  return (
-    <div className="min-w-0 space-y-3 overflow-hidden p-3 pb-2 sm:p-4 sm:pb-3">
-      <div className="flex items-start justify-between gap-2">
-        <Badge
-          variant="secondary"
-          className="max-w-[calc(100%-2.5rem)] shrink font-medium text-[11px] sm:text-xs"
-        >
-          <span className="truncate">
-            {startFormat === "shotgun" ? "Starting hole" : "Tee time"} ·{" "}
-            {scheduleBadge}
-          </span>
-        </Badge>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="shrink-0"
-          disabled={disabled}
-          aria-label="Delete group"
-          onClick={onDelete}
-        >
-          <Trash2 />
-        </Button>
-      </div>
-
-      <div className="grid min-w-0 gap-3">
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-muted-foreground">
-            {showMatchType ? "Match label" : "Group label"}
-          </label>
-          <Input
-            value={localLabel}
-            disabled={disabled}
-            onChange={(e) => setLocalLabel(e.target.value)}
-            onBlur={() => {
-              if (localLabel.trim() && localLabel.trim() !== label) {
-                onUpdate({ label: localLabel.trim() });
-              } else {
-                setLocalLabel(label);
-              }
-            }}
-          />
-        </div>
-
+    >
+      <div className="flex min-w-0 max-w-40 shrink-0 items-center gap-2 sm:max-w-48">
         {startFormat === "shotgun" ? (
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">
-              Starting hole
-            </label>
-            <Select
-              value={startingHole != null ? String(startingHole) : ""}
-              disabled={disabled}
-              onValueChange={(value) => {
-                if (!value) return;
-                onUpdate({ startingHole: Number(value) });
-              }}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select hole">
-                  {startingHole != null ? `Hole ${startingHole}` : undefined}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {startingHoleOptions.map((hole) => (
-                  <SelectItem key={hole} value={String(hole)}>
-                    Hole {hole}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        ) : (
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">
-              Tee time
-            </label>
-            <div className="flex h-9 w-full min-w-0 items-center rounded-lg border border-border bg-muted/30 px-3 text-sm font-medium">
-              {formatTimeDisplay(teeTime)}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {showMatchType && (
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-muted-foreground">
-            Match type
-          </label>
           <Select
-            value={matchType ?? ""}
+            value={group.startingHole != null ? String(group.startingHole) : ""}
             disabled={disabled}
             onValueChange={(value) => {
               if (!value) return;
-              onUpdate({
-                matchType: value as "singles" | "fourball" | "foursomes",
-              });
+              onUpdate({ startingHole: Number(value) });
             }}
           >
-            <SelectTrigger className="w-full sm:max-w-xs">
-              <SelectValue placeholder="Select match type">
-                {getRyderMatchType(matchType)?.label}
+            <SelectTrigger
+              className="h-8 w-22 shrink-0 px-2.5 text-xs sm:w-24"
+              aria-label={`Starting hole for ${group.label}`}
+            >
+              <Flag className="size-3.5 shrink-0 text-muted-foreground" />
+              <SelectValue placeholder="Hole">
+                {group.startingHole != null
+                  ? `H${group.startingHole}`
+                  : undefined}
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              {RYDER_MATCH_TYPES.map((type) => (
-                <SelectItem key={type.value} value={type.value}>
-                  {type.label}
+              {startingHoleOptions.map((hole) => (
+                <SelectItem key={hole} value={String(hole)}>
+                  Hole {hole}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-        </div>
-      )}
+        ) : (
+          <span className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 text-xs font-medium tabular-nums">
+            <Clock className="size-3.5 text-muted-foreground" />
+            {formatTimeDisplay(group.teeTime)}
+          </span>
+        )}
 
-      {showScoringLink && scoringUrl && (
-        <div className="min-w-0 space-y-2 border-t border-border pt-3">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="text-xs font-medium text-muted-foreground">
-              Scoring link
-            </span>
-            {scoringCode ? (
-              <span className="font-mono text-[10px] tracking-wider text-foreground sm:text-[11px]">
-                {scoringCode}
-              </span>
-            ) : null}
-          </div>
-          <ButtonLink
+        <button
+          type="button"
+          className="min-w-0 truncate text-left text-sm font-semibold hover:underline"
+          onClick={onOpenDetails}
+          title={group.label}
+        >
+          {group.label}
+        </button>
+
+        {showMatchType && (
+          <Badge
             variant="outline"
-            size="sm"
-            className="h-9 w-full max-w-full"
-            href={`/print/events/${eventId}/scorecards/${groupId}`}
-            target="_blank"
-            rel="noopener noreferrer"
+            className={cn(
+              "hidden shrink-0 text-[10px] sm:inline-flex",
+              !group.matchType && "border-amber-500/50 text-amber-600"
+            )}
           >
-            <Printer />
-            <span className="truncate">Print scorecard</span>
-          </ButtonLink>
-          <CopyRegistrationLink url={scoringUrl} />
-        </div>
-      )}
+            {getRyderMatchType(group.matchType)?.label ?? "No type"}
+          </Badge>
+        )}
+      </div>
+
+      <div
+        className={cn(
+          "flex min-w-0 items-center gap-1.5",
+          group.players.length === 0 && "justify-start"
+        )}
+      >
+        {group.players.length === 0 ? (
+          <span className="truncate text-xs text-muted-foreground/70">
+            Drop players here
+          </span>
+        ) : (
+          group.players.map((player) => (
+            <GroupPlayerPill
+              key={player.id}
+              player={player}
+              groupId={group.id}
+              disabled={disabled}
+              showTeamSides={showTeamSides}
+              sideALabel={sideALabel}
+              sideBLabel={sideBLabel}
+              onTeamSide={onTeamSide}
+              onRemove={() => onRemovePlayer(player.id)}
+            />
+          ))
+        )}
+        {openSlots > 0 &&
+          Array.from({ length: openSlots }).map((_, index) => (
+            <span
+              key={index}
+              className="hidden h-8 min-w-14 flex-1 items-center justify-center rounded-md border border-dashed border-border/60 text-xs text-muted-foreground/45 sm:inline-flex"
+            >
+              Open
+            </span>
+          ))}
+      </div>
+
+      <div className="flex shrink-0 items-center gap-0.5">
+        {warning && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  className="rounded-md p-1 text-amber-600 hover:bg-amber-500/10"
+                  aria-label={`Warning: ${warning}`}
+                  onClick={onOpenDetails}
+                />
+              }
+            >
+              <AlertTriangle className="size-3.5" />
+            </TooltipTrigger>
+            <TooltipContent>{warning}</TooltipContent>
+          </Tooltip>
+        )}
+        <span
+          className={cn(
+            "px-1 text-xs tabular-nums text-muted-foreground",
+            isFull && "font-medium text-foreground/70",
+            overCapacity && "font-semibold text-amber-600"
+          )}
+        >
+          {group.players.length}/{capacity.max}
+        </span>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="size-8"
+          aria-label={`Open details for ${group.label}`}
+          onClick={onOpenDetails}
+        >
+          <Ellipsis className="size-4" />
+        </Button>
+      </div>
     </div>
   );
 }
 
-type GroupPlayerRowProps = {
+type GroupPlayerPillProps = {
   player: PairingPlayer;
   groupId: string;
+  disabled: boolean;
   showTeamSides: boolean;
   sideALabel: string;
   sideBLabel: string;
-  disabled: boolean;
-  isPending: boolean;
-  canEmailPlayers: boolean;
-  eventId: string;
   onTeamSide: (registrationId: string, teamSide: "a" | "b" | null) => void;
+  onRemove: () => void;
 };
 
-function GroupPlayerRow({
+function shortPlayerName(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 2) return name.trim();
+  const first = parts[0] ?? "";
+  const last = parts[parts.length - 1] ?? "";
+  return `${first} ${last}`;
+}
+
+function GroupPlayerPill({
   player,
   groupId,
+  disabled,
   showTeamSides,
   sideALabel,
   sideBLabel,
-  disabled,
-  isPending,
-  canEmailPlayers,
-  eventId,
   onTeamSide,
-}: GroupPlayerRowProps) {
+  onRemove,
+}: GroupPlayerPillProps) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: player.id,
     disabled,
@@ -1069,128 +1071,476 @@ function GroupPlayerRow({
     } satisfies DragPlayerData,
   });
 
-  const teamValue = player.teamSide ?? "none";
+  function cycleTeamSide() {
+    const next =
+      player.teamSide === "a" ? "b" : player.teamSide === "b" ? null : "a";
+    onTeamSide(player.id, next);
+  }
+
+  const displayName = shortPlayerName(player.name);
 
   return (
-    <div className="space-y-2">
-      <PlayerChip
-        ref={setNodeRef}
-        player={player}
-        disabled={disabled}
-        isDragging={isDragging}
-        dragHandleProps={{ ...attributes, ...listeners }}
-        trailing={
-          <div className="flex w-full min-w-0 max-w-full flex-col gap-1.5 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
-            {canEmailPlayers && player.paymentStatus !== "refunded" && (
-              <SendScoringLinkButton
-                eventId={eventId}
-                registrationId={player.id}
-                disabled={isPending}
-                className="w-full sm:w-auto"
-              />
-            )}
-            {showTeamSides && (
-              <Select
-                value={teamValue}
-                disabled={disabled}
-                onValueChange={(value) => {
-                  if (value === "none") onTeamSide(player.id, null);
-                  else if (value === "a" || value === "b")
-                    onTeamSide(player.id, value);
-                }}
-              >
-                <SelectTrigger className="h-9 w-full min-w-0 text-xs sm:h-8 sm:w-28">
-                  <SelectValue placeholder="Team">
-                    {teamValue === "a"
-                      ? sideALabel
-                      : teamValue === "b"
-                        ? sideBLabel
-                        : undefined}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No team</SelectItem>
-                  <SelectItem value="a">{sideALabel}</SelectItem>
-                  <SelectItem value="b">{sideBLabel}</SelectItem>
-                </SelectContent>
-              </Select>
-            )}
-          </div>
-        }
-      />
+    <div
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      title={`${player.name}${player.handicap ? ` · HCP ${player.handicap}` : ""} · ${player.email}`}
+      className={cn(
+        "inline-flex h-8 min-w-0 flex-1 touch-none select-none items-center gap-1.5 rounded-md border border-border/80 bg-background px-2 text-xs shadow-xs sm:gap-2 sm:px-2.5 sm:text-sm",
+        disabled
+          ? "cursor-default opacity-70"
+          : "cursor-grab active:cursor-grabbing",
+        isDragging && "opacity-40"
+      )}
+      aria-label={`Drag ${player.name}`}
+    >
+      {showTeamSides && (
+        <button
+          type="button"
+          disabled={disabled}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={cycleTeamSide}
+          title={
+            player.teamSide === "a"
+              ? `${sideALabel} · click to switch`
+              : player.teamSide === "b"
+                ? `${sideBLabel} · click to switch`
+                : "No team · click to assign"
+          }
+          className={cn(
+            "inline-flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold",
+            player.teamSide === "a" && "bg-blue-500/15 text-blue-600",
+            player.teamSide === "b" && "bg-red-500/15 text-red-600",
+            !player.teamSide && "bg-muted text-muted-foreground"
+          )}
+        >
+          {player.teamSide === "a"
+            ? sideALabel.charAt(0).toUpperCase()
+            : player.teamSide === "b"
+              ? sideBLabel.charAt(0).toUpperCase()
+              : "–"}
+        </button>
+      )}
+      <span className="min-w-0 flex-1 truncate font-medium">{displayName}</span>
+      {player.handicap && (
+        <span className="hidden shrink-0 tabular-nums text-xs text-muted-foreground sm:inline">
+          {player.handicap}
+        </span>
+      )}
+      <PaymentDot status={player.paymentStatus} />
+      {!disabled && (
+        <button
+          type="button"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={onRemove}
+          className="shrink-0 rounded p-0.5 text-muted-foreground/60 hover:bg-muted hover:text-foreground"
+          aria-label={`Remove ${player.name} from group`}
+        >
+          <X className="size-3.5" />
+        </button>
+      )}
     </div>
   );
 }
 
-type PlayerChipProps = {
+type PillVisualProps = {
   player: PairingPlayer;
-  disabled?: boolean;
-  isDragging?: boolean;
-  isOverlay?: boolean;
-  style?: CSSProperties;
-  dragHandleProps?: HTMLAttributes<HTMLButtonElement>;
-  trailing?: ReactNode;
+  showTeamSides: boolean;
+  className?: string;
 };
 
-const PlayerChip = forwardRef<HTMLDivElement, PlayerChipProps>(
-  function PlayerChip(
-    {
-      player,
-      disabled,
-      isDragging,
-      isOverlay,
-      style,
-      dragHandleProps,
-      trailing,
-    },
-    ref
-  ) {
-    return (
-      <div
-        ref={ref}
-        style={style}
-        className={cn(
-          "flex w-full max-w-full flex-col gap-2 rounded-lg border border-border bg-background px-2.5 py-2.5 shadow-sm sm:flex-row sm:items-start sm:py-2",
-          isDragging && "opacity-40",
-          isOverlay && "opacity-100 shadow-md ring-2 ring-primary/30",
-          disabled && "opacity-70"
+function PillVisual({ player, showTeamSides, className }: PillVisualProps) {
+  return (
+    <div
+      className={cn(
+        "inline-flex h-8 max-w-52 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-xs shadow-xs sm:text-sm",
+        className
+      )}
+    >
+      {showTeamSides && player.teamSide && (
+        <span
+          className={cn(
+            "inline-flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold",
+            player.teamSide === "a"
+              ? "bg-blue-500/15 text-blue-600"
+              : "bg-red-500/15 text-red-600"
+          )}
+        >
+          {player.teamSide.toUpperCase()}
+        </span>
+      )}
+      <span className="truncate font-medium">{shortPlayerName(player.name)}</span>
+      {player.handicap && (
+        <span className="shrink-0 tabular-nums text-muted-foreground">
+          {player.handicap}
+        </span>
+      )}
+    </div>
+  );
+}
+
+type GroupDetailsSheetProps = {
+  group: PairingGroup | null;
+  onOpenChange: (open: boolean) => void;
+  eventId: string;
+  format: string;
+  startFormat: StartFormat;
+  startingHoleOptions: number[];
+  showMatchType: boolean;
+  showTeamSides: boolean;
+  sideALabel: string;
+  sideBLabel: string;
+  disabled: boolean;
+  isPending: boolean;
+  setupLocked: boolean;
+  showScoringLinks: boolean;
+  canEmailPlayers: boolean;
+  appUrl: string;
+  slug: string;
+  onUpdate: (input: GroupUpdateInput) => void;
+  onDelete: () => void;
+  onTeamSide: (registrationId: string, teamSide: "a" | "b" | null) => void;
+  onRemovePlayer: (registrationId: string) => void;
+};
+
+function GroupDetailsSheet({
+  group,
+  onOpenChange,
+  eventId,
+  format,
+  startFormat,
+  startingHoleOptions,
+  showMatchType,
+  showTeamSides,
+  sideALabel,
+  sideBLabel,
+  disabled,
+  isPending,
+  setupLocked,
+  showScoringLinks,
+  canEmailPlayers,
+  appUrl,
+  slug,
+  onUpdate,
+  onDelete,
+  onTeamSide,
+  onRemovePlayer,
+}: GroupDetailsSheetProps) {
+  const [localLabel, setLocalLabel] = useState(group?.label ?? "");
+
+  useEffect(() => {
+    setLocalLabel(group?.label ?? "");
+  }, [group?.id, group?.label]);
+
+  const warning = group
+    ? getGroupSizeWarning(format, group.players.length, {
+        matchType: group.matchType,
+        teamACount: group.players.filter((p) => p.teamSide === "a").length,
+        teamBCount: group.players.filter((p) => p.teamSide === "b").length,
+      })
+    : null;
+
+  const scoringUrl =
+    group?.scoringCode != null
+      ? getGroupScorePageUrl(appUrl, slug, group.scoringCode)
+      : null;
+
+  return (
+    <Sheet open={group != null} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full gap-0 sm:max-w-md">
+        {group && (
+          <>
+            <SheetHeader className="border-b border-border pr-12">
+              <SheetTitle>{group.label}</SheetTitle>
+              <SheetDescription>
+                {startFormat === "shotgun"
+                  ? group.startingHole != null
+                    ? `Shotgun · starting hole ${group.startingHole}`
+                    : "Shotgun · no starting hole yet"
+                  : `Tee time · ${formatTimeDisplay(group.teeTime)}`}
+                {" · "}
+                {group.players.length} player
+                {group.players.length === 1 ? "" : "s"}
+              </SheetDescription>
+            </SheetHeader>
+
+            <div className="flex-1 space-y-6 overflow-y-auto p-4">
+              {warning && (
+                <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 sm:text-sm dark:text-amber-100">
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                  <span>{warning}</span>
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <label
+                    className="text-xs font-medium text-muted-foreground"
+                    htmlFor="group-details-label"
+                  >
+                    {showMatchType ? "Match label" : "Group label"}
+                  </label>
+                  <Input
+                    id="group-details-label"
+                    value={localLabel}
+                    disabled={disabled}
+                    onChange={(e) => setLocalLabel(e.target.value)}
+                    onBlur={() => {
+                      if (
+                        localLabel.trim() &&
+                        localLabel.trim() !== group.label
+                      ) {
+                        onUpdate({ label: localLabel.trim() });
+                      } else {
+                        setLocalLabel(group.label);
+                      }
+                    }}
+                  />
+                </div>
+
+                {startFormat === "shotgun" ? (
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">
+                      Starting hole
+                    </label>
+                    <Select
+                      value={
+                        group.startingHole != null
+                          ? String(group.startingHole)
+                          : ""
+                      }
+                      disabled={disabled}
+                      onValueChange={(value) => {
+                        if (!value) return;
+                        onUpdate({ startingHole: Number(value) });
+                      }}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select hole">
+                          {group.startingHole != null
+                            ? `Hole ${group.startingHole}`
+                            : undefined}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {startingHoleOptions.map((hole) => (
+                          <SelectItem key={hole} value={String(hole)}>
+                            Hole {hole}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">
+                      Tee time
+                    </label>
+                    <div className="flex h-9 w-full min-w-0 items-center rounded-lg border border-border bg-muted/30 px-3 text-sm font-medium">
+                      {formatTimeDisplay(group.teeTime)}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Tee times follow the event schedule and group order.
+                    </p>
+                  </div>
+                )}
+
+                {showMatchType && (
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">
+                      Match type
+                    </label>
+                    <Select
+                      value={group.matchType ?? ""}
+                      disabled={disabled}
+                      onValueChange={(value) => {
+                        if (!value) return;
+                        onUpdate({
+                          matchType: value as
+                            | "singles"
+                            | "fourball"
+                            | "foursomes",
+                        });
+                      }}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select match type">
+                          {getRyderMatchType(group.matchType)?.label}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {RYDER_MATCH_TYPES.map((type) => (
+                          <SelectItem key={type.value} value={type.value}>
+                            {type.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {group.matchType && (
+                      <p className="text-xs text-muted-foreground">
+                        {getRyderMatchType(group.matchType)?.description}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="text-xs font-medium text-muted-foreground">
+                  Players ({group.players.length})
+                </h4>
+                {group.players.length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-sm text-muted-foreground">
+                    No players yet. Drag registrants into this{" "}
+                    {showMatchType ? "match" : "group"}.
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {group.players.map((player) => (
+                      <li
+                        key={player.id}
+                        className="space-y-2 rounded-lg border border-border bg-background p-3"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium">
+                              {player.name}
+                            </p>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {player.email}
+                            </p>
+                            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                              <Badge
+                                variant="outline"
+                                className="capitalize text-[10px]"
+                              >
+                                {player.paymentStatus}
+                              </Badge>
+                              {player.handicap && (
+                                <span className="text-xs text-muted-foreground">
+                                  HCP {player.handicap}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {!setupLocked && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              className="shrink-0"
+                              disabled={disabled}
+                              aria-label={`Remove ${player.name} from group`}
+                              onClick={() => onRemovePlayer(player.id)}
+                            >
+                              <UserMinus />
+                            </Button>
+                          )}
+                        </div>
+                        {(showTeamSides ||
+                          (canEmailPlayers &&
+                            player.paymentStatus !== "refunded")) && (
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {showTeamSides && (
+                              <Select
+                                value={player.teamSide ?? "none"}
+                                disabled={disabled}
+                                onValueChange={(value) => {
+                                  if (value === "none")
+                                    onTeamSide(player.id, null);
+                                  else if (value === "a" || value === "b")
+                                    onTeamSide(player.id, value);
+                                }}
+                              >
+                                <SelectTrigger className="h-8 w-32 text-xs">
+                                  <SelectValue placeholder="Team">
+                                    {player.teamSide === "a"
+                                      ? sideALabel
+                                      : player.teamSide === "b"
+                                        ? sideBLabel
+                                        : undefined}
+                                  </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="none">No team</SelectItem>
+                                  <SelectItem value="a">
+                                    {sideALabel}
+                                  </SelectItem>
+                                  <SelectItem value="b">
+                                    {sideBLabel}
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                            )}
+                            {canEmailPlayers &&
+                              player.paymentStatus !== "refunded" && (
+                                <SendScoringLinkButton
+                                  eventId={eventId}
+                                  registrationId={player.id}
+                                  disabled={isPending}
+                                />
+                              )}
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              {showScoringLinks &&
+                group.players.length > 0 &&
+                group.scoringCode != null &&
+                scoringUrl && (
+                  <div className="space-y-2 border-t border-border pt-4">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <h4 className="text-xs font-medium text-muted-foreground">
+                        Scoring link
+                      </h4>
+                      <span className="font-mono text-[11px] tracking-wider">
+                        {group.scoringCode}
+                      </span>
+                    </div>
+                    <ButtonLink
+                      variant="outline"
+                      size="sm"
+                      className="h-9 w-full"
+                      href={`/print/events/${eventId}/scorecards/${group.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <Printer />
+                      <span className="truncate">Print scorecard</span>
+                    </ButtonLink>
+                    <CopyRegistrationLink url={scoringUrl} />
+                  </div>
+                )}
+            </div>
+
+            {!setupLocked && (
+              <SheetFooter className="border-t border-border">
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  className="w-full"
+                  disabled={disabled}
+                  onClick={onDelete}
+                >
+                  <Trash2 />
+                  Delete {showMatchType ? "match" : "group"}
+                </Button>
+                <p className="text-center text-xs text-muted-foreground">
+                  Players return to the registrants list.
+                </p>
+              </SheetFooter>
+            )}
+          </>
         )}
-      >
-        <div className="flex min-w-0 flex-1 items-start gap-2">
-          <button
-            type="button"
-            className={cn(
-              "mt-0.5 shrink-0 touch-none rounded-md p-0.5 text-muted-foreground",
-              disabled
-                ? "cursor-not-allowed"
-                : "cursor-grab active:cursor-grabbing active:bg-muted"
-            )}
-            aria-label={`Drag ${player.name}`}
-            disabled={disabled}
-            {...dragHandleProps}
-          >
-            <GripVertical className="size-4" />
-          </button>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{player.name}</p>
-            <p className="truncate text-xs text-muted-foreground">{player.email}</p>
-            {player.handicap && (
-              <p className="text-xs text-muted-foreground">
-                HCP {player.handicap}
-              </p>
-            )}
-          </div>
-        </div>
-        <div className="flex w-full min-w-0 max-w-full flex-col gap-1.5 pl-7 sm:w-auto sm:max-w-full sm:shrink-0 sm:pl-0">
-          <Badge variant="outline" className="w-fit capitalize text-[10px]">
-            {player.paymentStatus}
-          </Badge>
-          {trailing}
-        </div>
-      </div>
-    );
-  }
-);
+      </SheetContent>
+    </Sheet>
+  );
+}
 
 function findPlayer(
   pairings: EventPairings,
