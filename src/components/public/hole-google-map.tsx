@@ -79,6 +79,9 @@ type HoleGoogleMapProps = {
   onSceneChange?: (scene: HoleMapScene) => void;
   preferredTeeKey?: string | null;
   preferredTeeColor?: string | null;
+  usePlayerAsAnchor?: boolean;
+  eventSlug?: string;
+  editableDogleg?: boolean;
 };
 
 function getOverlayStyle(featureType: string) {
@@ -245,10 +248,14 @@ function HoleGoogleMapScene({
   scene,
   holeNumber,
   onFitHoleReady,
+  eventSlug,
+  editableDogleg,
 }: {
   scene: HoleMapScene;
   holeNumber: number;
   onFitHoleReady: (fitHole: () => void) => void;
+  eventSlug?: string;
+  editableDogleg?: boolean;
 }) {
   const { view, overlays, markers, distanceGuide } = scene;
 
@@ -282,6 +289,8 @@ function HoleGoogleMapScene({
         <HoleDistanceGuideLayer
           guide={distanceGuide}
           holeNumber={holeNumber}
+          eventSlug={eventSlug}
+          editable={editableDogleg}
         />
       )}
 
@@ -294,7 +303,7 @@ function HoleGoogleMapScene({
 
 export const HoleGoogleMap = forwardRef<HoleGoogleMapHandle, HoleGoogleMapProps>(
   function HoleGoogleMap(
-    { features, targets, playerPosition, holeNumber, className, onSceneChange, preferredTeeKey, preferredTeeColor },
+    { features, targets, playerPosition, holeNumber, className, onSceneChange, preferredTeeKey, preferredTeeColor, usePlayerAsAnchor = false, eventSlug, editableDogleg = false },
     ref
   ) {
     const fitHoleRef = useRef<(() => void) | null>(null);
@@ -307,8 +316,9 @@ export const HoleGoogleMap = forwardRef<HoleGoogleMapHandle, HoleGoogleMapProps>
           includeFeatureOverlays: false,
           preferredTeeKey,
           preferredTeeColor,
+          usePlayerAsAnchor,
         }),
-      [features, targets, playerPosition, preferredTeeKey, preferredTeeColor]
+      [features, targets, playerPosition, preferredTeeKey, preferredTeeColor, usePlayerAsAnchor]
     );
 
     useEffect(() => {
@@ -350,6 +360,8 @@ export const HoleGoogleMap = forwardRef<HoleGoogleMapHandle, HoleGoogleMapProps>
             scene={scene}
             holeNumber={holeNumber}
             onFitHoleReady={handleFitHoleReady}
+            eventSlug={eventSlug}
+            editableDogleg={editableDogleg}
           />
         </APIProvider>
       </div>

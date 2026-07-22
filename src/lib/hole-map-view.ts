@@ -394,8 +394,16 @@ export function computeHoleMapView(options: {
   targets: GreenTargets | null;
   playerPosition: GeolocationPosition | null;
   preferredTeeKey?: string | null;
+  /** When true, expand bounds to include the player even if far from the mapped tee. */
+  usePlayerAsAnchor?: boolean;
 }): HoleMapView | null {
-  const { features, targets, playerPosition, preferredTeeKey = null } = options;
+  const {
+    features,
+    targets,
+    playerPosition,
+    preferredTeeKey = null,
+    usePlayerAsAnchor = false,
+  } = options;
 
   const tee = resolveTeePoint(features, targets, preferredTeeKey);
   const back = resolveBackPoint(features, targets, tee);
@@ -417,13 +425,16 @@ export function computeHoleMapView(options: {
 
   let bounds = expandBounds(rawBounds, EDGE_PADDING_YARDS);
 
-  if (playerPosition && tee) {
-    const playerDistance = yardsBetween(
-      { lat: playerPosition.lat, lng: playerPosition.lng },
-      tee
-    );
+  if (playerPosition && (usePlayerAsAnchor || tee)) {
+    const includePlayer =
+      usePlayerAsAnchor ||
+      (tee != null &&
+        yardsBetween(
+          { lat: playerPosition.lat, lng: playerPosition.lng },
+          tee
+        ) <= MAX_PLAYER_INCLUDE_YARDS);
 
-    if (playerDistance <= MAX_PLAYER_INCLUDE_YARDS) {
+    if (includePlayer) {
       const withPlayer = boundsFromPoints([
         ...extentPoints,
         { lat: playerPosition.lat, lng: playerPosition.lng },

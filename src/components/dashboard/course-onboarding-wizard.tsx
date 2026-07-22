@@ -1495,6 +1495,16 @@ export function CourseOnboardingWizard({
                 initialLineBreak={holePins[activeHole]?.lineBreak ?? null}
                 scorecardYardages={activeHoleScorecardYardages}
                 isSaving={isPending}
+                canGoPrevious={activeHole > 1}
+                canGoNext={activeHole < course.holeCount}
+                onPreviousHole={() =>
+                  setActiveHole((current) => Math.max(1, current - 1))
+                }
+                onNextHole={() =>
+                  setActiveHole((current) =>
+                    Math.min(course.holeCount, current + 1)
+                  )
+                }
                 onSavePin={async (pin) => {
                   setError(null);
                   const result = await saveCourseOnboardingHolePin(

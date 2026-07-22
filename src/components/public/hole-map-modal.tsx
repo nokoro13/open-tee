@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 type HoleMapModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  eventSlug: string;
   holeNumber: number;
   courseId: string | null;
   features: GeoJsonFeatureCollection | null;
@@ -33,6 +34,7 @@ type HoleMapModalProps = {
   liveDistanceStatus?: LiveDistanceStatus;
   selectedTeeKey?: string | null;
   selectedTeeColor?: string | null;
+  usePlayerAsAnchor?: boolean;
   onPreviousHole?: () => void;
   onNextHole?: () => void;
   canGoPrevious?: boolean;
@@ -126,6 +128,7 @@ function ToPinOverlay({
 export function HoleMapModal({
   open,
   onOpenChange,
+  eventSlug,
   holeNumber,
   courseId,
   features,
@@ -137,6 +140,7 @@ export function HoleMapModal({
   liveDistanceStatus = "hidden",
   selectedTeeKey = null,
   selectedTeeColor = null,
+  usePlayerAsAnchor = false,
   onPreviousHole,
   onNextHole,
   canGoPrevious = false,
@@ -154,8 +158,10 @@ export function HoleMapModal({
     back: null,
   };
 
-  const distanceToPin =
-    distances.middle ?? mapScene?.distanceToPin ?? null;
+  const distanceToPin = usePlayerAsAnchor
+    ? (distances.middle ?? mapScene?.distanceToPin ?? null)
+    : (mapScene?.distanceToPin ?? null);
+  const distanceStatus = usePlayerAsAnchor ? liveDistanceStatus : "hidden";
   const mapHeading = mapScene?.view.bearing ?? 0;
   const mapFeatures = features ?? displayFeatures;
 
@@ -247,6 +253,9 @@ export function HoleMapModal({
           onSceneChange={handleSceneChange}
           preferredTeeKey={selectedTeeKey}
           preferredTeeColor={selectedTeeColor}
+          usePlayerAsAnchor={usePlayerAsAnchor}
+          eventSlug={eventSlug}
+          editableDogleg
         />
       )}
 
@@ -312,7 +321,7 @@ export function HoleMapModal({
       <ToPinOverlay
         distance={distanceToPin}
         heading={mapHeading}
-        status={liveDistanceStatus}
+        status={distanceStatus}
       />
 
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/35 to-transparent" />

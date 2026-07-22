@@ -162,6 +162,8 @@ export function buildHoleMapScene(options: {
   includeFeatureOverlays?: boolean;
   preferredTeeKey?: string | null;
   preferredTeeColor?: string | null;
+  /** When true, measure yardage from the player's GPS instead of the mapped tee. */
+  usePlayerAsAnchor?: boolean;
 }): HoleMapScene | null {
   const {
     features,
@@ -170,12 +172,14 @@ export function buildHoleMapScene(options: {
     includeFeatureOverlays = true,
     preferredTeeKey = null,
     preferredTeeColor = null,
+    usePlayerAsAnchor = false,
   } = options;
   const view = computeHoleMapView({
     features,
     targets,
     playerPosition,
     preferredTeeKey,
+    usePlayerAsAnchor,
   });
   if (!view) return null;
 
@@ -231,12 +235,14 @@ export function buildHoleMapScene(options: {
   let distanceGuide: HoleDistanceGuide | null = null;
   let distanceToPin: number | null = null;
 
-  if (playerPosition && view.tee) {
-    const playerDistance = yardsBetween(
-      { lat: playerPosition.lat, lng: playerPosition.lng },
-      view.tee
-    );
-    includePlayer = playerDistance <= MAX_PLAYER_INCLUDE_YARDS;
+  if (playerPosition && (usePlayerAsAnchor || view.tee)) {
+    includePlayer =
+      usePlayerAsAnchor ||
+      (view.tee != null &&
+        yardsBetween(
+          { lat: playerPosition.lat, lng: playerPosition.lng },
+          view.tee
+        ) <= MAX_PLAYER_INCLUDE_YARDS);
   }
 
   const teeColor = preferredTeeColor ?? "#2563eb";

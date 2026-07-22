@@ -1145,6 +1145,7 @@ export function ScoreEntryForm({
       <HoleMapModal
         open={showHoleMap}
         onOpenChange={setShowHoleMap}
+        eventSlug={slug}
         holeNumber={activeHole}
         courseId={golfCourseId}
         features={holeFeaturesGeoJson?.[activeHole] ?? null}
@@ -1156,6 +1157,7 @@ export function ScoreEntryForm({
         liveDistanceStatus={liveDistanceStatus}
         selectedTeeKey={selectedTeeKey}
         selectedTeeColor={selectedTeeColor}
+        usePlayerAsAnchor={activeHole === requiredHole}
         canGoPrevious={activeHoleIndex > 0}
         canGoNext={activeHoleIndex < totalHoles - 1}
         onPreviousHole={() => navigateToIndex(activeHoleIndex - 1, "back")}
