@@ -17,6 +17,7 @@ import {
   HoleGoogleMap,
   type HoleGoogleMapHandle,
 } from "@/components/public/hole-google-map";
+import { requestGeolocationFromUserGesture } from "@/lib/geolocation-controller";
 import { cn } from "@/lib/utils";
 
 type HoleMapModalProps = {
@@ -32,7 +33,6 @@ type HoleMapModalProps = {
   yardage?: number | null;
   liveDistances?: LiveDistances;
   liveDistanceStatus?: LiveDistanceStatus;
-  onRequestLocation?: () => void;
   selectedTeeKey?: string | null;
   selectedTeeColor?: string | null;
   usePlayerAsAnchor?: boolean;
@@ -97,15 +97,22 @@ function ToPinOverlay({
   distance,
   heading,
   status,
-  onRequestLocation,
 }: {
   distance: number | null;
   heading: number;
   status: LiveDistanceStatus;
-  onRequestLocation?: () => void;
 }) {
   const needsLocationAction =
     status === "prompt" || status === "denied" || status === "unavailable";
+
+  const helperText =
+    status === "prompt"
+      ? "Tap to allow"
+      : status === "denied"
+        ? "Check Safari location settings"
+        : status === "unavailable"
+          ? "Tap to retry"
+          : null;
 
   const label =
     status === "locating"
@@ -118,12 +125,9 @@ function ToPinOverlay({
             ? String(distance)
             : "—";
 
-  const helperText =
-    status === "prompt" || status === "denied"
-      ? "Tap to allow"
-      : status === "unavailable"
-        ? "Tap to retry"
-        : null;
+  const handleLocationGesture = () => {
+    requestGeolocationFromUserGesture();
+  };
 
   const content = (
     <div
@@ -148,12 +152,16 @@ function ToPinOverlay({
   );
 
   return (
-    <div className="pointer-events-none absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-3 z-10">
-      {needsLocationAction && onRequestLocation ? (
+    <div className="pointer-events-none absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-3 z-30">
+      {needsLocationAction ? (
         <button
           type="button"
           className="block text-left"
-          onClick={onRequestLocation}
+          onPointerDown={(event) => {
+            if (event.pointerType === "mouse" && event.button !== 0) return;
+            handleLocationGesture();
+          }}
+          onClick={handleLocationGesture}
           aria-label={
             status === "prompt"
               ? "Enable location for live yardage"
@@ -182,7 +190,6 @@ export function HoleMapModal({
   yardage,
   liveDistances,
   liveDistanceStatus = "hidden",
-  onRequestLocation,
   selectedTeeKey = null,
   selectedTeeColor = null,
   usePlayerAsAnchor = false,
@@ -367,7 +374,6 @@ export function HoleMapModal({
         distance={distanceToPin}
         heading={mapHeading}
         status={distanceStatus}
-        onRequestLocation={onRequestLocation}
       />
 
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/35 to-transparent" />

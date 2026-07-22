@@ -4,6 +4,7 @@ import { LocateFixed, LocateOff, Map, Waves } from "lucide-react";
 import { ChevronUp } from "lucide-react";
 
 import type { LiveDistanceStatus } from "@/hooks/use-live-distances";
+import { requestGeolocationFromUserGesture, runWithGeolocationUserGesture } from "@/lib/geolocation-controller";
 import type { MatchRunningScore, RunningScore } from "@/lib/score-entry-utils";
 import type { ScoreEntryGroup } from "@/lib/scoring";
 import {
@@ -149,15 +150,12 @@ type MobileHoleHeroProps = {
   hasHeatmap?: boolean;
   isAtGreen?: boolean;
   liveDistanceStatus?: LiveDistanceStatus;
-  onRequestLocation?: () => void;
 };
 
 export function LiveLocationButton({
   status,
-  onRequestLocation,
 }: {
   status: LiveDistanceStatus;
-  onRequestLocation: () => void;
 }) {
   if (status === "hidden") return null;
 
@@ -201,7 +199,11 @@ export function LiveLocationButton({
   return (
     <button
       type="button"
-      onClick={onRequestLocation}
+      onPointerDown={(event) => {
+        if (event.pointerType === "mouse" && event.button !== 0) return;
+        requestGeolocationFromUserGesture();
+      }}
+      onClick={() => requestGeolocationFromUserGesture()}
       className={className}
       aria-label={ariaLabel}
       title={ariaLabel}
@@ -221,7 +223,6 @@ export function MobileHoleHero({
   hasHeatmap = false,
   isAtGreen = false,
   liveDistanceStatus = "hidden",
-  onRequestLocation,
 }: MobileHoleHeroProps) {
   return (
     <div className="relative shrink-0 overflow-hidden rounded-t-2xl bg-linear-to-br from-primary/8 via-primary/4 to-transparent px-5 py-4">
@@ -241,12 +242,16 @@ export function MobileHoleHero({
           </div>
           {(onOpenHoleMap ||
             (onOpenGreenHeatmap && hasHeatmap) ||
-            (onRequestLocation && liveDistanceStatus !== "hidden")) && (
+            liveDistanceStatus !== "hidden") && (
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {onOpenHoleMap && (
                 <button
                   type="button"
-                  onClick={onOpenHoleMap}
+                  onPointerDown={(event) => {
+                    if (event.pointerType === "mouse" && event.button !== 0) return;
+                    runWithGeolocationUserGesture(onOpenHoleMap);
+                  }}
+                  onClick={() => runWithGeolocationUserGesture(onOpenHoleMap)}
                   className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/80 px-3 py-1.5 text-xs font-medium text-foreground shadow-sm"
                 >
                   <Map className="size-3.5" />
@@ -268,11 +273,8 @@ export function MobileHoleHero({
                   {isAtGreen ? "Read putt" : "Putting read"}
                 </button>
               )}
-              {onRequestLocation && liveDistanceStatus !== "hidden" && (
-                <LiveLocationButton
-                  status={liveDistanceStatus}
-                  onRequestLocation={onRequestLocation}
-                />
+              {liveDistanceStatus !== "hidden" && (
+                <LiveLocationButton status={liveDistanceStatus} />
               )}
             </div>
           )}

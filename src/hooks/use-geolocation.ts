@@ -2,6 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import {
+  GEOLOCATION_INITIAL_OPTIONS,
+  requestGeolocationFromUserGesture,
+  setGeolocationControllerHandlers,
+} from "@/lib/geolocation-controller";
+
 export type GeolocationPosition = {
   lat: number;
   lng: number;
@@ -15,11 +21,7 @@ export type GeolocationStatus =
   | "denied"
   | "unavailable";
 
-const INITIAL_OPTIONS: PositionOptions = {
-  enableHighAccuracy: false,
-  maximumAge: 30_000,
-  timeout: 20_000,
-};
+export { requestGeolocationFromUserGesture };
 
 const WATCH_OPTIONS: PositionOptions = {
   enableHighAccuracy: true,
@@ -32,14 +34,6 @@ const POLL_OPTIONS: PositionOptions = {
   maximumAge: 5_000,
   timeout: 10_000,
 };
-
-function toPosition(coords: GeolocationCoordinates): GeolocationPosition {
-  return {
-    lat: coords.latitude,
-    lng: coords.longitude,
-    accuracy: coords.accuracy,
-  };
-}
 
 export function useGeolocation(enabled = true) {
   const [position, setPosition] = useState<GeolocationPosition | null>(null);
@@ -92,7 +86,12 @@ export function useGeolocation(enabled = true) {
     trackingRef.current = true;
 
     watchIdRef.current = navigator.geolocation.watchPosition(
-      (result) => handleSuccess(toPosition(result.coords)),
+      (result) =>
+        handleSuccess({
+          lat: result.coords.latitude,
+          lng: result.coords.longitude,
+          accuracy: result.coords.accuracy,
+        }),
       (error) => {
         if (error.code === error.PERMISSION_DENIED) {
           handleError(error);
@@ -103,7 +102,12 @@ export function useGeolocation(enabled = true) {
 
     pollIdRef.current = window.setInterval(() => {
       navigator.geolocation.getCurrentPosition(
-        (result) => handleSuccess(toPosition(result.coords)),
+        (result) =>
+          handleSuccess({
+            lat: result.coords.latitude,
+            lng: result.coords.longitude,
+            accuracy: result.coords.accuracy,
+          }),
         () => {
           // Keep the last known position if a poll fails.
         },
@@ -112,31 +116,12 @@ export function useGeolocation(enabled = true) {
     }, 2_000);
   }, [handleError, handleSuccess]);
 
-  const requestLocation = useCallback(() => {
-    if (!enabledRef.current) return;
-    if (!navigator.geolocation) {
-      setStatus("unavailable");
-      return;
-    }
-
-    if (hasFixRef.current && trackingRef.current) {
-      return;
-    }
-
-    setStatus("locating");
-
-    navigator.geolocation.getCurrentPosition(
-      (result) => {
-        handleSuccess(toPosition(result.coords));
-        startTracking();
-      },
-      handleError,
-      INITIAL_OPTIONS
-    );
-  }, [handleError, handleSuccess, startTracking]);
+  const startTrackingRef = useRef(startTracking);
+  startTrackingRef.current = startTracking;
 
   useEffect(() => {
     if (!enabled) {
+      setGeolocationControllerHandlers(null);
       stopTracking();
       hasFixRef.current = false;
       setStatus("idle");
@@ -149,12 +134,29 @@ export function useGeolocation(enabled = true) {
       return;
     }
 
-    setStatus("idle");
+    setGeolocationControllerHandlers({
+      canRequest: () =>
+        enabledRef.current &&
+        !(hasFixRef.current && trackingRef.current),
+      onStart: () => {
+        setStatus("locating");
+      },
+      onSuccess: (coords) => {
+        handleSuccess(coords);
+        startTrackingRef.current();
+      },
+      onError: handleError,
+    });
 
     return () => {
+      setGeolocationControllerHandlers(null);
       stopTracking();
     };
-  }, [enabled, stopTracking]);
+  }, [enabled, handleError, handleSuccess, stopTracking]);
 
-  return { position, status, requestLocation };
+  return {
+    position,
+    status,
+    requestLocation: requestGeolocationFromUserGesture,
+  };
 }
