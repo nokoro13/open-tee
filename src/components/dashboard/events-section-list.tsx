@@ -1,14 +1,17 @@
 import { Plus } from "lucide-react";
 
 import { EventsList } from "@/components/dashboard/events-list";
+import { Button } from "@/components/ui/button";
 import { ButtonLink } from "@/components/ui/button-link";
 
 export function EventsPageHeader({
   orgName,
   eventCount,
+  preview = false,
 }: {
   orgName: string;
   eventCount: number;
+  preview?: boolean;
 }) {
   return (
     <div className="flex flex-wrap items-end justify-between gap-4">
@@ -18,10 +21,17 @@ export function EventsPageHeader({
           Events
         </h1>
       </div>
-      <ButtonLink href="/dashboard/events/new" size="lg" className="rounded-full">
-        <Plus />
-        New event
-      </ButtonLink>
+      {preview ? (
+        <Button size="lg" className="rounded-full" type="button" tabIndex={-1}>
+          <Plus />
+          New event
+        </Button>
+      ) : (
+        <ButtonLink href="/dashboard/events/new" size="lg" className="rounded-full">
+          <Plus />
+          New event
+        </ButtonLink>
+      )}
     </div>
   );
 }

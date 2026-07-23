@@ -16,7 +16,7 @@ export function DashboardPreview() {
         nativeHeight={NATIVE_HEIGHT}
       >
         <div className="h-[720px] overflow-hidden bg-background">
-          <PreviewDashboardShell>
+          <PreviewDashboardShell title="Events" contained>
             <DashboardPreviewContent />
           </PreviewDashboardShell>
         </div>

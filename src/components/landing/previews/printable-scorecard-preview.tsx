@@ -4,15 +4,15 @@ import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 
 import { PrintableScorecardSheet } from "@/components/dashboard/printable-scorecard-sheet";
-import { PreviewBrowserFrame } from "@/components/landing/preview-browser-frame";
 import { PreviewScale } from "@/components/landing/preview-scale";
 import {
   previewPrintableScorecard,
   previewPrintableScorecardEvent,
 } from "@/lib/landing-preview-data";
 
-const NATIVE_WIDTH = 816;
-const NATIVE_HEIGHT = 520;
+/** Letter landscape ratio at preview scale (11″ × 8.5″). */
+const LANDSCAPE_WIDTH = 816;
+const LANDSCAPE_HEIGHT = 632;
 
 export function PrintableScorecardPreview() {
   const [qrDataUrl, setQrDataUrl] = useState("");
@@ -26,11 +26,11 @@ export function PrintableScorecardPreview() {
   }, []);
 
   return (
-    <PreviewBrowserFrame url="openround.app/print/events/spring-charity-scramble/scorecards">
-      <PreviewScale nativeWidth={NATIVE_WIDTH} nativeHeight={NATIVE_HEIGHT}>
+    <div className="w-full">
+      <PreviewScale nativeWidth={LANDSCAPE_WIDTH} nativeHeight={LANDSCAPE_HEIGHT}>
         <div
-          className="overflow-hidden bg-neutral-100 p-3 sm:p-4"
-          style={{ width: NATIVE_WIDTH, height: NATIVE_HEIGHT }}
+          className="overflow-hidden bg-white"
+          style={{ width: LANDSCAPE_WIDTH, height: LANDSCAPE_HEIGHT }}
         >
           {qrDataUrl ? (
             <PrintableScorecardSheet
@@ -39,10 +39,10 @@ export function PrintableScorecardPreview() {
               qrDataUrl={qrDataUrl}
             />
           ) : (
-            <div className="h-full animate-pulse rounded-xl border border-border bg-white" />
+            <div className="h-full w-full animate-pulse rounded-xl border border-border bg-white" />
           )}
         </div>
       </PreviewScale>
-    </PreviewBrowserFrame>
+    </div>
   );
 }

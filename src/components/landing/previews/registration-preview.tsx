@@ -1,21 +1,30 @@
 import { PublicEventView } from "@/components/public/public-event-view";
-import { PreviewBrowserFrame } from "@/components/landing/preview-browser-frame";
+import { PreviewPhoneFrame } from "@/components/landing/preview-phone-frame";
 import { PreviewScale } from "@/components/landing/preview-scale";
 import { previewRegistrationEvent } from "@/lib/landing-preview-data";
-
-const NATIVE_WIDTH = 480;
-const NATIVE_HEIGHT = 720;
+import {
+  PHONE_NATIVE_WIDTH,
+  SHOWCASE_SCORE_NATIVE_HEIGHT,
+} from "@/lib/showcase-stroke-data";
 
 export function RegistrationPreview() {
   const { event, organization, registrationCount, spotsLeft, soldOut, registrationClosed } =
     previewRegistrationEvent;
 
   return (
-    <PreviewBrowserFrame url="openround.app/e/spring-charity-scramble">
-      <PreviewScale nativeWidth={NATIVE_WIDTH} nativeHeight={NATIVE_HEIGHT}>
+    <PreviewPhoneFrame className="mx-auto w-[15rem] sm:w-[16.5rem] lg:mr-auto lg:w-[18rem]">
+      <PreviewScale
+        nativeWidth={PHONE_NATIVE_WIDTH}
+        nativeHeight={SHOWCASE_SCORE_NATIVE_HEIGHT}
+        fit="contain"
+        className="h-full w-full"
+      >
         <div
-          className="h-[720px] overflow-hidden bg-background"
-          style={{ width: NATIVE_WIDTH }}
+          className="overflow-hidden bg-background text-foreground"
+          style={{
+            width: PHONE_NATIVE_WIDTH,
+            height: SHOWCASE_SCORE_NATIVE_HEIGHT,
+          }}
         >
           <PublicEventView
             event={{ ...event, organization }}
@@ -27,6 +36,6 @@ export function RegistrationPreview() {
           />
         </div>
       </PreviewScale>
-    </PreviewBrowserFrame>
+    </PreviewPhoneFrame>
   );
 }

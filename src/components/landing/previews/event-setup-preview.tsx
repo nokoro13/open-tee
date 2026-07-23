@@ -5,10 +5,14 @@ import {
   DESKTOP_NATIVE_WIDTH,
   PreviewScale,
 } from "@/components/landing/preview-scale";
-import { getEventFormatLabel } from "@/lib/event-formats";
-import { previewDraftEvent } from "@/lib/landing-preview-data";
+import { getEventFormat, getEventFormatLabel } from "@/lib/event-formats";
+import {
+  previewDraftEvent,
+  previewEventWizardInitialValues,
+} from "@/lib/landing-preview-data";
 
 const NATIVE_HEIGHT = 720;
+const formatMeta = getEventFormat(previewDraftEvent.format);
 
 export function EventSetupPreview() {
   return (
@@ -21,19 +25,29 @@ export function EventSetupPreview() {
           <PreviewDashboardShell
             title={`New ${getEventFormatLabel(previewDraftEvent.format)} event`}
             activePath="/dashboard/events/new"
+            contained
           >
-            <div className="mx-auto max-w-2xl space-y-6">
-              <div>
-                <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+            <div className="mx-auto w-full max-w-5xl min-w-0 space-y-5 pb-2 sm:space-y-6">
+              <div className="min-w-0">
+                <h1 className="text-xl font-semibold tracking-tight sm:text-3xl">
                   New {getEventFormatLabel(previewDraftEvent.format)} event
                 </h1>
-                <p className="mt-1 text-sm text-muted-foreground sm:text-base">
-                  Set up your event step by step. You can change anything while
-                  it&apos;s in draft.
+                <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+                  {formatMeta?.description ??
+                    "Set up your event step by step. You can change anything while it's in draft."}
+                </p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Starting with {getEventFormatLabel(previewDraftEvent.format)} — change
+                  it on the format step if needed.
                 </p>
               </div>
 
-              <EventCreationWizard defaultFormat={previewDraftEvent.format} />
+              <EventCreationWizard
+                defaultFormat={previewDraftEvent.format}
+                preview
+                initialStepIndex={4}
+                initialValues={previewEventWizardInitialValues}
+              />
             </div>
           </PreviewDashboardShell>
         </div>

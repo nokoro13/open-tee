@@ -104,28 +104,50 @@ const STEP_COPY: Record<
   },
 };
 
-type EventCreationWizardProps = {
-  defaultFormat?: EventFormat;
+type EventCreationWizardInitialValues = {
+  name?: string;
+  date?: string;
+  format?: EventFormat;
+  holes?: EventFormInput["holes"];
+  maxPlayers?: number;
+  entryFeeDollars?: number;
+  description?: string;
+  courseSelection?: CourseSelection;
+  startFormatValues?: StartFormatFieldValues;
 };
 
-export function EventCreationWizard({ defaultFormat }: EventCreationWizardProps) {
+type EventCreationWizardProps = {
+  defaultFormat?: EventFormat;
+  preview?: boolean;
+  initialStepIndex?: number;
+  initialValues?: EventCreationWizardInitialValues;
+};
+
+export function EventCreationWizard({
+  defaultFormat,
+  preview = false,
+  initialStepIndex = 0,
+  initialValues,
+}: EventCreationWizardProps) {
   const [isPending, startTransition] = useTransition();
-  const [stepIndex, setStepIndex] = useState(0);
+  const [stepIndex, setStepIndex] = useState(initialStepIndex);
   const [error, setError] = useState<string | null>(null);
 
-  const [courseSelection, setCourseSelection] =
-    useState<CourseSelection>(emptyCourseSelection);
+  const [courseSelection, setCourseSelection] = useState<CourseSelection>(
+    () => initialValues?.courseSelection ?? emptyCourseSelection()
+  );
   const [startFormatValues, setStartFormatValues] = useState<StartFormatFieldValues>(
-    () => defaultStartFormatFieldValues()
+    () =>
+      initialValues?.startFormatValues ?? defaultStartFormatFieldValues()
   );
   const [form, setForm] = useState({
-    name: "",
-    date: "",
-    format: defaultFormat ?? ("scramble" as EventFormat),
-    holes: "18" as EventFormInput["holes"],
-    maxPlayers: 72,
-    entryFeeDollars: 0,
-    description: "",
+    name: initialValues?.name ?? "",
+    date: initialValues?.date ?? "",
+    format: initialValues?.format ?? defaultFormat ?? ("scramble" as EventFormat),
+    holes: initialValues?.holes ?? ("18" as EventFormInput["holes"]),
+    maxPlayers: initialValues?.maxPlayers ?? 72,
+    entryFeeDollars: initialValues?.entryFeeDollars ?? 0,
+    description: initialValues?.description ?? "",
     teamAName: DEFAULT_TEAM_A_NAME,
     teamBName: DEFAULT_TEAM_B_NAME,
   });
@@ -135,8 +157,9 @@ export function EventCreationWizard({ defaultFormat }: EventCreationWizardProps)
   const isLastStep = stepIndex === STEPS.length - 1;
 
   useEffect(() => {
+    if (preview) return;
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [stepIndex]);
+  }, [preview, stepIndex]);
 
   function updateField<K extends keyof typeof form>(
     key: K,
@@ -227,6 +250,8 @@ export function EventCreationWizard({ defaultFormat }: EventCreationWizardProps)
   }
 
   function handleCreate() {
+    if (preview) return;
+
     setError(null);
     const payload = buildPayload();
 

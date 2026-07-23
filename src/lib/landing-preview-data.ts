@@ -75,26 +75,83 @@ function baseEvent(overrides: Partial<Event> = {}): Event {
 }
 
 export const previewDashboardEvents: Event[] = [
-  baseEvent(),
+  baseEvent({
+    id: "preview-event-1",
+    name: "Spring Charity Scramble",
+    date: "2026-07-22",
+    courseName: "Pine Valley Golf Club",
+    format: "scramble",
+    maxPlayers: 144,
+    entryFeeCents: 12500,
+    status: "published",
+    scoringStatus: "open",
+    startFormat: "shotgun",
+    shotgunStartTime: "8:00 AM",
+  }),
   baseEvent({
     id: "preview-event-2",
-    name: "Member-Guest Stroke Play",
-    date: "2026-06-21",
+    name: "Member-Guest Best Ball",
+    date: "2026-08-09",
     courseName: "Riverside Golf Club",
-    format: "stroke",
+    format: "best_ball",
+    maxPlayers: 72,
     entryFeeCents: 8500,
     status: "published",
+    scoringStatus: "disabled",
+    startFormat: "tee_times",
+    firstTeeTime: "7:30 AM",
+    teeTimeIntervalMinutes: 8,
   }),
   baseEvent({
     id: "preview-event-3",
     name: "Club Championship Qualifier",
-    date: "2026-07-12",
+    date: "2026-09-14",
     courseName: "Oakmont Country Club",
-    format: "match_play",
+    format: "stroke",
+    maxPlayers: 36,
     entryFeeCents: 0,
     status: "draft",
+    scoringStatus: "disabled",
+  }),
+  baseEvent({
+    id: "preview-event-4",
+    name: "Fall Classic Stableford",
+    date: "2025-10-18",
+    courseName: "Pebble Beach Golf Links",
+    format: "stableford",
+    maxPlayers: 120,
+    entryFeeCents: 25000,
+    status: "published",
+    scoringStatus: "finalized",
+    startFormat: "shotgun",
+    shotgunStartTime: "9:00 AM",
   }),
 ];
+
+export const previewDashboardRegistrationCounts: Record<string, number> = {
+  "preview-event-1": 98,
+  "preview-event-2": 54,
+  "preview-event-4": 120,
+};
+
+const previewScorecardHoles: ScorecardHoleSnapshot[] = Array.from(
+  { length: 18 },
+  (_, index) => {
+    const white = 350 + index * 12;
+    return {
+      holeNumber: index + 1,
+      par: index % 5 === 0 ? 5 : index % 3 === 0 ? 3 : 4,
+      yardage: white,
+      strokeIndex: index + 1,
+      yardagesByTee: {
+        black: white + 55,
+        blue: white + 30,
+        white,
+        red: Math.max(white - 45, 90),
+      },
+    };
+  }
+);
 
 export const previewRegistrationEvent = {
   organization: { name: PREVIEW_ORG_NAME },
@@ -116,8 +173,43 @@ export const previewDraftEvent: Event = baseEvent({
   entryFeeCents: 15000,
   status: "draft",
   scoringStatus: "disabled",
-  description: "Two-person best ball format with gross and net divisions.",
+  description:
+    "Two-person best ball with gross and net flights. Dinner and awards follow on the patio.",
+  startFormat: "shotgun",
+  shotgunStartTime: "8:30 AM",
 });
+
+export const previewEventWizardInitialValues = {
+  name: previewDraftEvent.name,
+  date: previewDraftEvent.date,
+  format: previewDraftEvent.format,
+  holes: previewDraftEvent.holes,
+  maxPlayers: previewDraftEvent.maxPlayers,
+  entryFeeDollars: previewDraftEvent.entryFeeCents / 100,
+  description: previewDraftEvent.description ?? "",
+  courseSelection: {
+    courseName: previewDraftEvent.courseName ?? "Riverside Golf Club",
+    externalCourseId: null,
+    nineSide: null,
+    scorecardHoles: previewScorecardHoles,
+    courseAddress: "1200 Riverside Dr",
+    courseCity: "Augusta",
+    courseState: "GA",
+    coursePhone: "(706) 555-0142",
+    courseWebsite: null,
+    selectedTeeKey: "white",
+    teeName: "White",
+    courseRating: "72.4",
+    courseSlope: 131,
+    courseTotalYardage: 6820,
+  },
+  startFormatValues: {
+    startFormat: "shotgun" as const,
+    shotgunStartTime: "8:30 AM",
+    firstTeeTime: "7:30 AM",
+    teeTimeIntervalMinutes: 10,
+  },
+};
 
 export const previewDraftEventHoles: EventHole[] = Array.from(
   { length: 18 },
@@ -291,25 +383,6 @@ export const PARTNER_CLUBS = [
   "Augusta National",
   "St Andrews Links",
 ] as const;
-
-const previewScorecardHoles: ScorecardHoleSnapshot[] = Array.from(
-  { length: 18 },
-  (_, index) => {
-    const white = 350 + index * 12;
-    return {
-      holeNumber: index + 1,
-      par: index % 5 === 0 ? 5 : index % 3 === 0 ? 3 : 4,
-      yardage: white,
-      strokeIndex: index + 1,
-      yardagesByTee: {
-        black: white + 55,
-        blue: white + 30,
-        white,
-        red: Math.max(white - 45, 90),
-      },
-    };
-  }
-);
 
 export const previewPrintableScorecardEvent: PrintableScorecardEvent = {
   id: "preview-event-1",

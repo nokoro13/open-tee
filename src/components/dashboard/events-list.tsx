@@ -121,15 +121,24 @@ function CapacityMeter({
 type EventsListProps = {
   events: Event[];
   registrationCounts: Record<string, number>;
+  preview?: boolean;
+  activeFilter?: EventListFilter;
 };
 
-export function EventsList({ events, registrationCounts }: EventsListProps) {
+export function EventsList({
+  events,
+  registrationCounts,
+  preview = false,
+  activeFilter: activeFilterProp = "all",
+}: EventsListProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const requestedFilter = searchParams.get("filter") as EventListFilter | null;
-  const activeFilter = FILTERS.some((filter) => filter.id === requestedFilter)
-    ? (requestedFilter as EventListFilter)
-    : "all";
+  const activeFilter = preview
+    ? activeFilterProp
+    : FILTERS.some((filter) => filter.id === requestedFilter)
+      ? (requestedFilter as EventListFilter)
+      : "all";
 
   const counts = countEventsByListFilter(events);
   const visibleEvents = filterEventsByListFilter(events, activeFilter);
@@ -139,6 +148,30 @@ export function EventsList({ events, registrationCounts }: EventsListProps) {
       <div className="inline-flex items-center gap-1 rounded-full bg-muted p-1">
         {FILTERS.map((filter) => {
           const isActive = activeFilter === filter.id;
+          const pillClassName = cn(
+            "rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200",
+            isActive
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          );
+
+          if (preview) {
+            return (
+              <span key={filter.id} className={pillClassName}>
+                {filter.label}
+                {counts[filter.id] > 0 && (
+                  <span
+                    className={cn(
+                      "ml-1.5 text-xs tabular-nums",
+                      isActive ? "text-muted-foreground" : "text-muted-foreground/70"
+                    )}
+                  >
+                    {counts[filter.id]}
+                  </span>
+                )}
+              </span>
+            );
+          }
 
           return (
             <Link
@@ -146,12 +179,7 @@ export function EventsList({ events, registrationCounts }: EventsListProps) {
               href={
                 filter.id === "all" ? pathname : `${pathname}?filter=${filter.id}`
               }
-              className={cn(
-                "rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200",
-                isActive
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
+              className={pillClassName}
             >
               {filter.label}
               {counts[filter.id] > 0 && (
@@ -184,50 +212,61 @@ export function EventsList({ events, registrationCounts }: EventsListProps) {
         <ul className="overflow-hidden rounded-2xl border bg-card">
           {visibleEvents.map((event, index) => {
             const registrationCount = registrationCounts[event.id] ?? 0;
+            const rowContent = (
+              <>
+                <DateTile dateStr={event.date} />
+
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium leading-snug">
+                    {event.name}
+                  </p>
+                  <p className="mt-0.5 truncate text-sm text-muted-foreground">
+                    {event.courseName}
+                  </p>
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground/80">
+                    {getEventFormatLabel(event.format)} · {event.holes} holes ·{" "}
+                    {formatFee(event.entryFeeCents)}
+                  </p>
+                </div>
+
+                <div className="hidden sm:block">
+                  {event.status === "published" ? (
+                    <CapacityMeter
+                      count={registrationCount}
+                      max={event.maxPlayers}
+                    />
+                  ) : (
+                    <span className="text-xs text-muted-foreground">
+                      Up to {event.maxPlayers} players
+                    </span>
+                  )}
+                </div>
+
+                <div className="hidden w-24 justify-end sm:flex">
+                  <StatusIndicator event={event} />
+                </div>
+
+                <ChevronRight className="size-4 shrink-0 text-muted-foreground/50 transition-transform group-hover:translate-x-0.5" />
+              </>
+            );
 
             return (
               <li
                 key={event.id}
                 className={cn(index > 0 && "border-t border-border/70")}
               >
-                <Link
-                  href={`/dashboard/events/${event.id}`}
-                  className="group flex items-center gap-4 px-4 py-4 transition-colors hover:bg-muted/40 sm:px-6"
-                >
-                  <DateTile dateStr={event.date} />
-
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium leading-snug">
-                      {event.name}
-                    </p>
-                    <p className="mt-0.5 truncate text-sm text-muted-foreground">
-                      {event.courseName}
-                    </p>
-                    <p className="mt-0.5 truncate text-xs text-muted-foreground/80">
-                      {getEventFormatLabel(event.format)} · {event.holes} holes ·{" "}
-                      {formatFee(event.entryFeeCents)}
-                    </p>
+                {preview ? (
+                  <div className="group flex items-center gap-4 px-4 py-4 sm:px-6">
+                    {rowContent}
                   </div>
-
-                  <div className="hidden sm:block">
-                    {event.status === "published" ? (
-                      <CapacityMeter
-                        count={registrationCount}
-                        max={event.maxPlayers}
-                      />
-                    ) : (
-                      <span className="text-xs text-muted-foreground">
-                        Up to {event.maxPlayers} players
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="hidden w-24 justify-end sm:flex">
-                    <StatusIndicator event={event} />
-                  </div>
-
-                  <ChevronRight className="size-4 shrink-0 text-muted-foreground/50 transition-transform group-hover:translate-x-0.5" />
-                </Link>
+                ) : (
+                  <Link
+                    href={`/dashboard/events/${event.id}`}
+                    className="group flex items-center gap-4 px-4 py-4 transition-colors hover:bg-muted/40 sm:px-6"
+                  >
+                    {rowContent}
+                  </Link>
+                )}
               </li>
             );
           })}
