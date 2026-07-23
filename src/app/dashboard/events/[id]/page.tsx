@@ -11,6 +11,7 @@ import {
 import { syncRegistrationWorkflow } from "@/actions/event-workflow";
 import { getEventById, getEventByIdWithScorecard } from "@/actions/events";
 import { syncPublishIfPaid } from "@/actions/publish";
+import { syncCurrentOrganizationSubscription } from "@/actions/subscription";
 import { CopyRegistrationLink } from "@/components/dashboard/copy-registration-link";
 import { EventDetailNextStep } from "@/components/dashboard/event-detail-next-step";
 import {
@@ -55,8 +56,8 @@ import {
   getRegistrationCount,
 } from "@/lib/events";
 import { buildEventAnalyticsReport } from "@/lib/event-analytics";
-import { getEventPlatformTier, isProEvent } from "@/lib/platform-tier";
 import { buildEventWorkflowSnapshot } from "@/lib/event-workflow";
+import { isOrgSubscriptionActive } from "@/lib/subscription";
 import { getAppUrl } from "@/lib/stripe";
 import { syncEventScoringCodes } from "@/actions/scoring";
 import { syncTeeTimesForEvent } from "@/actions/start-format";
@@ -70,6 +71,8 @@ type EventDetailPageProps = {
   searchParams: Promise<{
     published?: string;
     publish_canceled?: string;
+    subscribed?: string;
+    subscribe_canceled?: string;
     tab?: string;
   }>;
 };
@@ -167,8 +170,12 @@ export default async function EventDetailPage({
   searchParams,
 }: EventDetailPageProps) {
   const { id } = await params;
-  const { published, publish_canceled, tab } = await searchParams;
-  const org = await requireOrganization();
+  const { published, publish_canceled, subscribed, subscribe_canceled, tab } =
+    await searchParams;
+  let org = await requireOrganization();
+  if (subscribed === "1") {
+    org = await syncCurrentOrganizationSubscription();
+  }
   let event = await getEventById(id);
 
   if (!event) {
@@ -207,16 +214,12 @@ export default async function EventDetailPage({
           }
           return getEventPairings(event.id, org.id);
         })(),
-        isProEvent(event) ? getFlightsForEvent(event.id, org.id) : Promise.resolve([]),
-        isProEvent(event)
-          ? getSponsorPackagesForDashboard(event.id, org.id)
-          : Promise.resolve({ packages: [], purchases: [] }),
-        isProEvent(event) && event.waitlistEnabled
+        getFlightsForEvent(event.id, org.id),
+        getSponsorPackagesForDashboard(event.id, org.id),
+        event.waitlistEnabled
           ? getWaitlistForEvent(event.id, org.id)
           : Promise.resolve([]),
-        isProEvent(event)
-          ? buildEventAnalyticsReport(event.id, org.id)
-          : Promise.resolve(null),
+        buildEventAnalyticsReport(event.id, org.id),
       ])
     : [0, [], null, [], { packages: [], purchases: [] }, [], null];
 
@@ -419,8 +422,9 @@ export default async function EventDetailPage({
                     <PublishEventCard
                       eventId={event.id}
                       eventName={event.name}
-                      currentTier={getEventPlatformTier(event)}
-                      maxPlayers={event.maxPlayers}
+                      hasActiveSubscription={isOrgSubscriptionActive(org)}
+                      subscribed={subscribed === "1"}
+                      subscribeCanceled={subscribe_canceled === "1"}
                     />
                     <Card className="rounded-2xl border-dashed">
                       <CardHeader>
@@ -525,58 +529,46 @@ export default async function EventDetailPage({
                   </EventTabPanel>
                 )}
 
-                <EventTabPanel tab="pro">
-                  {isProEvent(event) ? (
-                    <div className="space-y-6">
-                      <ProFeaturesPanel event={event} />
-                      <EventBrandingPanel event={event} />
-                      <FlightsPanel eventId={event.id} flights={flights} />
-                      <SponsorPackagesPanel
-                        eventId={event.id}
-                        packages={sponsorData.packages}
-                        purchases={sponsorData.purchases}
-                      />
-                      {event.waitlistEnabled && waitlist.length > 0 && (
-                        <Card className="rounded-2xl">
-                          <CardHeader>
-                            <CardTitle>Waitlist</CardTitle>
-                            <CardDescription>
-                              {waitlist.length} player
-                              {waitlist.length === 1 ? "" : "s"} waiting for a
-                              spot.
-                            </CardDescription>
-                          </CardHeader>
-                          <CardContent>
-                            <ul className="space-y-2 text-sm">
-                              {waitlist.map((entry) => (
-                                <li
-                                  key={entry.id}
-                                  className="flex items-center justify-between rounded-lg border border-border/70 px-3 py-2"
-                                >
-                                  <span>
-                                    {entry.name} · {entry.email}
-                                  </span>
-                                  <span className="text-muted-foreground">
-                                    {entry.notifiedAt ? "Notified" : "Waiting"}
-                                  </span>
-                                </li>
-                              ))}
-                            </ul>
-                          </CardContent>
-                        </Card>
-                      )}
-                    </div>
-                  ) : (
-                    <Card className="rounded-2xl">
-                      <CardHeader>
-                        <CardTitle>Pro features</CardTitle>
-                        <CardDescription>
-                          Branding, sponsors, waitlist, group registration, SMS,
-                          flights, and analytics are available on Pro events.
-                        </CardDescription>
-                      </CardHeader>
-                    </Card>
-                  )}
+                <EventTabPanel tab="features">
+                  <div className="space-y-6">
+                    <ProFeaturesPanel event={event} />
+                    <EventBrandingPanel event={event} />
+                    <FlightsPanel eventId={event.id} flights={flights} />
+                    <SponsorPackagesPanel
+                      eventId={event.id}
+                      packages={sponsorData.packages}
+                      purchases={sponsorData.purchases}
+                    />
+                    {event.waitlistEnabled && waitlist.length > 0 && (
+                      <Card className="rounded-2xl">
+                        <CardHeader>
+                          <CardTitle>Waitlist</CardTitle>
+                          <CardDescription>
+                            {waitlist.length} player
+                            {waitlist.length === 1 ? "" : "s"} waiting for a
+                            spot.
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <ul className="space-y-2 text-sm">
+                            {waitlist.map((entry) => (
+                              <li
+                                key={entry.id}
+                                className="flex items-center justify-between rounded-lg border border-border/70 px-3 py-2"
+                              >
+                                <span>
+                                  {entry.name} · {entry.email}
+                                </span>
+                                <span className="text-muted-foreground">
+                                  {entry.notifiedAt ? "Notified" : "Waiting"}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </div>
                 </EventTabPanel>
 
                 <EventTabPanel tab="analytics">
@@ -590,8 +582,8 @@ export default async function EventDetailPage({
                       <CardHeader>
                         <CardTitle>Analytics</CardTitle>
                         <CardDescription>
-                          Post-event analytics reports are included with Pro
-                          events.
+                          Analytics will appear here once players register for
+                          your event.
                         </CardDescription>
                       </CardHeader>
                     </Card>

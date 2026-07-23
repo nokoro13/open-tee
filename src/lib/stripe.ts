@@ -18,12 +18,3 @@ export function getStripe(): Stripe {
 export function getAppUrl(): string {
   return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 }
-
-import {
-  getPlatformFeeCentsForTier,
-  type PlatformTier,
-} from "@/lib/platform-tier";
-
-export function getPlatformFeeCents(tier: PlatformTier = "starter"): number {
-  return getPlatformFeeCentsForTier(tier);
-}

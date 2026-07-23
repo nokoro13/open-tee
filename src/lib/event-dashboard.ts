@@ -7,7 +7,7 @@ export type PublishedEventTab =
   | "players"
   | "pairings"
   | "scoring"
-  | "pro"
+  | "features"
   | "analytics"
   | "settings";
 
@@ -25,7 +25,7 @@ export const PUBLISHED_EVENT_TABS: EventTabDefinition[] = [
   { id: "players", label: "Players" },
   { id: "pairings", label: "Pairings" },
   { id: "scoring", label: "Scoring" },
-  { id: "pro", label: "Pro" },
+  { id: "features", label: "Features" },
   { id: "analytics", label: "Analytics", shortLabel: "Stats" },
   { id: "settings", label: "Settings" },
 ];
@@ -218,7 +218,7 @@ export function getCurrentSetupStep(options: {
   if (isDraft) {
     return {
       label: "Publish your event",
-      description: "Pay the platform fee to open registration and share your event link.",
+      description: "Publish your event to open registration and share your event link.",
       tab: "publish",
     };
   }

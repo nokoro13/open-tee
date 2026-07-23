@@ -17,7 +17,6 @@ import {
 import { brandingStyleVars, getEventBranding } from "@/lib/event-branding";
 import { formatPricingSummary, getActiveEntryFee } from "@/lib/event-pricing";
 import { getEventFormatLabel } from "@/lib/event-formats";
-import { canUseProFeature, isProEvent } from "@/lib/platform-tier";
 import { getStartFormatSummary } from "@/lib/start-format";
 import { RegistrationForm } from "@/components/public/registration-form";
 import { ButtonLink } from "@/components/ui/button-link";
@@ -60,10 +59,7 @@ export default async function PublicEventPage({
   const pricing = getActiveEntryFee(event);
   const branding = getEventBranding(event);
   const style = brandingStyleVars(branding);
-  const sponsorPackages =
-    isProEvent(event) && canUseProFeature(event, "sponsor_packages")
-      ? await getSponsorPackagesForEvent(event.id)
-      : [];
+  const sponsorPackages = await getSponsorPackagesForEvent(event.id);
 
   return (
     <div className="min-h-full bg-muted/20" style={style}>
@@ -121,9 +117,6 @@ export default async function PublicEventPage({
             <Badge variant="secondary">{getEventFormatLabel(event.format)}</Badge>
             <Badge variant="outline">{event.holes} holes</Badge>
             <Badge variant="outline">{formatPricingSummary(pricing)}</Badge>
-            {isProEvent(event) && (
-              <Badge variant="outline">Pro event</Badge>
-            )}
           </div>
         </div>
 
@@ -184,18 +177,12 @@ export default async function PublicEventPage({
               spotsLeft={spotsLeft}
               soldOut={soldOut}
               registrationClosed={registrationClosed}
-              waitlistEnabled={
-                isProEvent(event) &&
-                event.waitlistEnabled &&
-                canUseProFeature(event, "waitlist")
-              }
+              waitlistEnabled={event.waitlistEnabled}
             />
           </CardContent>
         </Card>
 
-        {isProEvent(event) &&
-          event.groupRegistrationEnabled &&
-          canUseProFeature(event, "group_registration") &&
+        {event.groupRegistrationEnabled &&
           !soldOut &&
           !registrationClosed && (
             <Card className="mt-6">

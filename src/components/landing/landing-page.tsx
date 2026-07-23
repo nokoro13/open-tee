@@ -132,47 +132,32 @@ const testimonials = [
 
 const pricingPlans = [
   {
-    name: "Starter",
-    price: "$49",
+    name: "Event Hosting",
+    price: "CA$199",
     period: "per event",
-    description: "Perfect for single-day outings and small club events.",
+    description: "Host a single tournament with the full OpenRound platform.",
     features: [
-      "Up to 72 players",
-      "Online registration",
-      "Basic leaderboard",
-      "Email notifications",
+      "Full platform — no feature limits",
+      "Online registration & payments",
+      "Live scoring & public leaderboard",
+      "Custom branding & sponsor packages",
+      "Waitlist, group registration & SMS",
     ],
     highlighted: false,
   },
   {
-    name: "Pro",
-    price: "$149",
-    period: "per event",
-    description: "For serious tournaments that need the full toolkit.",
+    name: "Course Plan",
+    price: "CA$2,500",
+    period: "per year",
+    description: "Unlimited events for golf courses and multi-event operators.",
     features: [
-      "Unlimited players",
-      "Mobile-optimized live scoring",
-      "Payment processing",
-      "Sponsor management",
-      "Custom branding",
+      "Unlimited events per year",
+      "Everything in Event Hosting",
+      "Best value for 13+ events/year",
       "Priority support",
+      "No per-event fees at checkout",
     ],
     highlighted: true,
-  },
-  {
-    name: "Enterprise",
-    price: "Custom",
-    period: "annual",
-    description: "For clubs, associations, and multi-event operators.",
-    features: [
-      "Unlimited events",
-      "Dedicated account manager",
-      "API access",
-      "White-label options",
-      "Custom integrations",
-      "SLA & onboarding",
-    ],
-    highlighted: false,
   },
 ];
 
@@ -540,11 +525,11 @@ export function LandingPage({ stats = defaultStats }: LandingPageProps) {
           <div className="mx-auto max-w-6xl px-4 sm:px-6">
             <SectionHeader
               badge="Pricing"
-              title="Simple pricing for every event size"
-              description="Pay per event or scale with an annual plan. No hidden fees."
+              title="Simple pricing for golf courses"
+              description="Pay per event or subscribe annually. All plans include the full platform."
             />
 
-            <div className="mt-10 grid gap-4 sm:mt-16 sm:gap-6 lg:grid-cols-3 lg:items-start">
+            <div className="mt-10 grid gap-4 sm:mt-16 sm:gap-6 lg:grid-cols-2 lg:items-start lg:max-w-4xl lg:mx-auto">
               {pricingPlans.map((plan) => (
                 <Card
                   key={plan.name}
@@ -591,9 +576,7 @@ export function LandingPage({ stats = defaultStats }: LandingPageProps) {
                       className="w-full"
                       size="lg"
                     >
-                      {plan.name === "Enterprise"
-                        ? "Contact sales"
-                        : "Get started"}
+                      Get started
                     </Button>
                   </CardFooter>
                 </Card>

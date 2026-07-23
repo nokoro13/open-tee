@@ -129,11 +129,26 @@ export const courseAccessStatusEnum = pgEnum("course_access_status", [
   "revoked",
 ]);
 
+export const subscriptionStatusEnum = pgEnum("subscription_status", [
+  "active",
+  "trialing",
+  "past_due",
+  "canceled",
+  "incomplete",
+  "unpaid",
+]);
+
 export const organizations = pgTable("organizations", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull(),
   ownerClerkId: text("owner_clerk_id").notNull().unique(),
   contactEmail: text("contact_email"),
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  subscriptionStatus: subscriptionStatusEnum("subscription_status"),
+  subscriptionCurrentPeriodEnd: timestamp("subscription_current_period_end", {
+    withTimezone: true,
+  }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

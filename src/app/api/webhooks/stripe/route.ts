@@ -5,8 +5,14 @@ import Stripe from "stripe";
 import { handlePlatformFeePaid } from "@/actions/publish";
 import { handleRegistrationPaid } from "@/actions/registrations";
 import { handleSponsorPurchasePaid } from "@/actions/sponsors";
+import {
+  handleCourseSubscriptionCheckoutCompleted,
+  handleSubscriptionDeleted,
+  syncOrganizationSubscriptionFromStripe,
+} from "@/actions/subscription";
+import { getDb } from "@/db";
+import { organizations } from "@/db/schema";
 import { getStripe } from "@/lib/stripe";
-import type { PlatformTier } from "@/lib/platform-tier";
 
 export const runtime = "nodejs";
 
@@ -41,10 +47,13 @@ export async function POST(request: Request) {
     if (type === "platform_fee") {
       const eventId = session.metadata?.eventId;
       const orgId = session.metadata?.orgId;
-      const tier = session.metadata?.platformTier as PlatformTier | undefined;
       if (eventId && orgId) {
-        await handlePlatformFeePaid(eventId, orgId, session.id, tier);
+        await handlePlatformFeePaid(eventId, orgId, session.id);
       }
+    }
+
+    if (type === "course_subscription") {
+      await handleCourseSubscriptionCheckoutCompleted(session);
     }
 
     if (type === "registration" || type === "group_registration") {
@@ -79,6 +88,33 @@ export async function POST(request: Request) {
         );
       }
     }
+  }
+
+  if (
+    event.type === "customer.subscription.updated" ||
+    event.type === "customer.subscription.created"
+  ) {
+    const subscription = event.data.object as Stripe.Subscription;
+    const orgId = subscription.metadata?.orgId;
+
+    if (orgId) {
+      await syncOrganizationSubscriptionFromStripe(subscription);
+    } else {
+      const org = await getDb().query.organizations.findFirst({
+        where: eq(organizations.stripeSubscriptionId, subscription.id),
+      });
+      if (org) {
+        await syncOrganizationSubscriptionFromStripe({
+          ...subscription,
+          metadata: { ...subscription.metadata, orgId: org.id },
+        });
+      }
+    }
+  }
+
+  if (event.type === "customer.subscription.deleted") {
+    const subscription = event.data.object as Stripe.Subscription;
+    await handleSubscriptionDeleted(subscription);
   }
 
   return NextResponse.json({ received: true });

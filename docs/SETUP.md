@@ -46,7 +46,8 @@ pnpm dev
 
 1. Sign up / sign in → `/dashboard`
 2. Create a draft event — search for a verified course or enter manually
-3. Click **Publish event — $49** → pay with Stripe test card `4242 4242 4242 4242`
+3. Click **Publish event — CA$199** → pay with Stripe test card `4242 4242 4242 4242`
+   (Or subscribe to the **Course Plan** under **Organization settings** first for unlimited events.)
 4. Return to dashboard → copy registration link
 
 ### Tournament day — scoring with par

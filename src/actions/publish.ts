@@ -7,92 +7,42 @@ import { getEventById } from "@/actions/events";
 import { getDb } from "@/db";
 import { events, organizations } from "@/db/schema";
 import { requireOrganization } from "@/lib/auth";
-import { sendPublishConfirmationEmail } from "@/lib/email";
 import {
-  getPlatformFeeCentsForTier,
-  PLATFORM_TIER_LABELS,
-  type PlatformTier,
-} from "@/lib/platform-tier";
+  BILLING_CURRENCY,
+  getEventHostingFeeCents,
+  getStripeEventPriceId,
+} from "@/lib/billing";
+import { sendPublishConfirmationEmail } from "@/lib/email";
+import { canPublishWithoutEventFee } from "@/lib/subscription";
 import { getAppUrl, getStripe } from "@/lib/stripe";
 
 export type ActionResult =
   | { success: true }
   | { success: false; error: string };
 
-export async function startPublishCheckout(
-  eventId: string,
-  tier: PlatformTier = "starter"
-): Promise<ActionResult> {
-  const org = await requireOrganization();
-  const event = await getEventById(eventId);
-
-  if (!event) {
-    return { success: false, error: "Event not found." };
+function eventHostingLineItem(eventName: string) {
+  const priceId = getStripeEventPriceId();
+  if (priceId) {
+    return { price: priceId, quantity: 1 };
   }
 
-  if (event.status !== "draft") {
-    return { success: false, error: "Only draft events can be published." };
-  }
-
-  const appUrl = getAppUrl();
-  const stripe = getStripe();
-  const feeCents = getPlatformFeeCentsForTier(tier);
-  const tierLabel = PLATFORM_TIER_LABELS[tier];
-
-  await getDb()
-    .update(events)
-    .set({
-      platformTier: tier,
-      updatedAt: new Date(),
-    })
-    .where(eq(events.id, event.id));
-
-  const session = await stripe.checkout.sessions.create({
-    mode: "payment",
-    line_items: [
-      {
-        price_data: {
-          currency: "usd",
-          product_data: {
-            name: `OpenRound ${tierLabel} — Event publish`,
-            description: `Publish "${event.name}" and open registration`,
-          },
-          unit_amount: feeCents,
-        },
-        quantity: 1,
+  return {
+    price_data: {
+      currency: BILLING_CURRENCY,
+      product_data: {
+        name: "OpenRound Event Hosting",
+        description: `Publish "${eventName}" and open registration`,
       },
-    ],
-    metadata: {
-      type: "platform_fee",
-      eventId: event.id,
-      orgId: org.id,
-      platformTier: tier,
+      unit_amount: getEventHostingFeeCents(),
     },
-    customer_email: org.contactEmail ?? undefined,
-    success_url: `${appUrl}/dashboard/events/${event.id}?published=1`,
-    cancel_url: `${appUrl}/dashboard/events/${event.id}?publish_canceled=1`,
-  });
-
-  if (!session.url) {
-    return { success: false, error: "Could not create checkout session." };
-  }
-
-  await getDb()
-    .update(events)
-    .set({
-      stripePlatformSessionId: session.id,
-      updatedAt: new Date(),
-    })
-    .where(eq(events.id, event.id));
-
-  redirect(session.url);
+    quantity: 1,
+  };
 }
 
-export async function handlePlatformFeePaid(
+async function publishEventRecord(
   eventId: string,
   orgId: string,
-  sessionId: string,
-  tier?: PlatformTier
+  sessionId: string | null
 ) {
   const event = await getDb().query.events.findFirst({
     where: eq(events.id, eventId),
@@ -107,8 +57,8 @@ export async function handlePlatformFeePaid(
     .update(events)
     .set({
       status: "published",
+      platformTier: "pro",
       platformPaidAt: now,
-      platformTier: tier ?? event.platformTier,
       registrationOpens: event.registrationOpens ?? now,
       stripePlatformSessionId: sessionId,
       updatedAt: now,
@@ -134,6 +84,63 @@ export async function handlePlatformFeePaid(
   }
 }
 
+export async function startPublishCheckout(eventId: string): Promise<ActionResult> {
+  const org = await requireOrganization();
+  const event = await getEventById(eventId);
+
+  if (!event) {
+    return { success: false, error: "Event not found." };
+  }
+
+  if (event.status !== "draft") {
+    return { success: false, error: "Only draft events can be published." };
+  }
+
+  if (canPublishWithoutEventFee(org)) {
+    await publishEventRecord(event.id, org.id, null);
+    redirect(`${getAppUrl()}/dashboard/events/${event.id}?published=1`);
+  }
+
+  const appUrl = getAppUrl();
+  const stripe = getStripe();
+
+  const session = await stripe.checkout.sessions.create({
+    mode: "payment",
+    line_items: [eventHostingLineItem(event.name)],
+    metadata: {
+      type: "platform_fee",
+      eventId: event.id,
+      orgId: org.id,
+    },
+    customer_email: org.contactEmail ?? undefined,
+    ...(org.stripeCustomerId ? { customer: org.stripeCustomerId } : {}),
+    success_url: `${appUrl}/dashboard/events/${event.id}?published=1`,
+    cancel_url: `${appUrl}/dashboard/events/${event.id}?publish_canceled=1`,
+  });
+
+  if (!session.url) {
+    return { success: false, error: "Could not create checkout session." };
+  }
+
+  await getDb()
+    .update(events)
+    .set({
+      stripePlatformSessionId: session.id,
+      updatedAt: new Date(),
+    })
+    .where(eq(events.id, event.id));
+
+  redirect(session.url);
+}
+
+export async function handlePlatformFeePaid(
+  eventId: string,
+  orgId: string,
+  sessionId: string
+) {
+  await publishEventRecord(eventId, orgId, sessionId);
+}
+
 export async function syncPublishIfPaid(eventId: string) {
   const event = await getDb().query.events.findFirst({
     where: eq(events.id, eventId),
@@ -149,12 +156,10 @@ export async function syncPublishIfPaid(eventId: string) {
   );
 
   if (session.payment_status === "paid" && session.metadata?.orgId) {
-    const tier = session.metadata.platformTier as PlatformTier | undefined;
     await handlePlatformFeePaid(
       eventId,
       session.metadata.orgId,
-      session.id,
-      tier
+      session.id
     );
     return getDb().query.events.findFirst({
       where: eq(events.id, eventId),

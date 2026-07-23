@@ -502,11 +502,11 @@ export function EventCreationWizard({
                   step={1}
                   presets={MAX_PLAYERS_PRESETS}
                 />
-                <FieldDescription>Starter plan supports up to 72.</FieldDescription>
+                <FieldDescription>Set capacity for your event field.</FieldDescription>
               </Field>
 
               <Field>
-                <FieldLabel htmlFor="wizard-entry-fee">Entry fee (USD)</FieldLabel>
+                <FieldLabel htmlFor="wizard-entry-fee">Entry fee (CAD)</FieldLabel>
                 <NumericStepperInput
                   id="wizard-entry-fee"
                   value={form.entryFeeDollars}

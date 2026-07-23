@@ -322,11 +322,11 @@ export function EventForm({ event, defaultFormat }: EventFormProps) {
               presets={MAX_PLAYERS_PRESETS}
               required
             />
-            <FieldDescription>Starter plan supports up to 72.</FieldDescription>
+            <FieldDescription>Set capacity for your event field.</FieldDescription>
           </Field>
 
           <Field>
-            <FieldLabel htmlFor="entryFeeDollars">Entry fee (USD)</FieldLabel>
+            <FieldLabel htmlFor="entryFeeDollars">Entry fee (CAD)</FieldLabel>
             <NumericStepperInput
               id="entryFeeDollars"
               name="entryFeeDollars"

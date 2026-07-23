@@ -53,7 +53,7 @@ export function ProFeaturesPanel({ event }: ProFeaturesPanelProps) {
       });
 
       if (result.success) {
-        setMessage("Pro settings saved.");
+        setMessage("Settings saved.");
       } else {
         setError(result.error);
       }
@@ -63,7 +63,7 @@ export function ProFeaturesPanel({ event }: ProFeaturesPanelProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Pro registration features</CardTitle>
+        <CardTitle>Registration features</CardTitle>
         <CardDescription>
           Waitlist, early-bird pricing, group signup, and SMS reminders.
         </CardDescription>
@@ -155,7 +155,7 @@ export function ProFeaturesPanel({ event }: ProFeaturesPanelProps) {
         {error && <p className="text-sm text-destructive">{error}</p>}
 
         <Button disabled={isPending} onClick={handleSave}>
-          {isPending ? "Saving..." : "Save Pro settings"}
+          {isPending ? "Saving..." : "Save settings"}
         </Button>
       </CardContent>
     </Card>

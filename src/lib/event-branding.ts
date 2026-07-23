@@ -1,5 +1,4 @@
 import type { Event } from "@/db/schema";
-import { canUseProFeature } from "@/lib/platform-tier";
 
 export type EventBranding = {
   logoUrl: string | null;
@@ -13,14 +12,18 @@ const HEX_COLOR = /^#[0-9A-Fa-f]{6}$/;
 export function getEventBranding(
   event: Pick<
     Event,
-    | "platformTier"
     | "logoUrl"
     | "coverImageUrl"
     | "primaryColor"
     | "accentColor"
   >
 ): EventBranding | null {
-  if (!canUseProFeature(event, "custom_branding")) {
+  if (
+    !event.logoUrl &&
+    !event.coverImageUrl &&
+    !event.primaryColor &&
+    !event.accentColor
+  ) {
     return null;
   }
 

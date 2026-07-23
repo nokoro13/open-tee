@@ -19,11 +19,7 @@ import {
   parseRegistrationWindowInput,
   type RegistrationWindowInput,
 } from "@/lib/registration-window";
-import {
-  getMaxPlayersForTier,
-  validateMaxPlayersForTier,
-  type PlatformTier,
-} from "@/lib/platform-tier";
+import { validateMaxPlayersForTier } from "@/lib/platform-tier";
 import {
   DEFAULT_FIRST_TEE_TIME,
   DEFAULT_SHOTGUN_START_TIME,
@@ -52,7 +48,6 @@ export type EventFormInput = {
   holes: "9" | "18";
   maxPlayers: number;
   entryFeeDollars: number;
-  platformTier?: PlatformTier;
   description?: string;
   teamAName?: string;
   teamBName?: string;
@@ -84,8 +79,7 @@ function parseEventInput(input: EventFormInput): EventFormInput | ActionResult {
     return { success: false, error: "Max players must be at least 1." };
   }
 
-  const tier = input.platformTier ?? "starter";
-  const maxPlayersError = validateMaxPlayersForTier(input.maxPlayers, tier);
+  const maxPlayersError = validateMaxPlayersForTier(input.maxPlayers);
   if (maxPlayersError) {
     return { success: false, error: maxPlayersError };
   }

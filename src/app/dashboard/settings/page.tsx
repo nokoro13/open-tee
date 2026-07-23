@@ -1,5 +1,6 @@
 import { Building2 } from "lucide-react";
 
+import { CoursePlanCard } from "@/components/dashboard/course-plan-card";
 import { OrganizationSettingsForm } from "@/components/dashboard/organization-settings-form";
 import {
   Card,
@@ -10,8 +11,18 @@ import {
 } from "@/components/ui/card";
 import { requireOrganization } from "@/lib/auth";
 
-export default async function OrganizationSettingsPage() {
+type OrganizationSettingsPageProps = {
+  searchParams: Promise<{
+    subscribed?: string;
+    subscribe_canceled?: string;
+  }>;
+};
+
+export default async function OrganizationSettingsPage({
+  searchParams,
+}: OrganizationSettingsPageProps) {
   const org = await requireOrganization();
+  const { subscribed, subscribe_canceled } = await searchParams;
 
   return (
     <div className="space-y-6">
@@ -20,9 +31,15 @@ export default async function OrganizationSettingsPage() {
           Organization
         </h1>
         <p className="mt-1 text-sm text-muted-foreground sm:text-base">
-          Set the name players see on your public event pages.
+          Manage your organization profile and billing.
         </p>
       </div>
+
+      <CoursePlanCard
+        organization={org}
+        subscribed={subscribed === "1"}
+        subscribeCanceled={subscribe_canceled === "1"}
+      />
 
       <Card>
         <CardHeader>

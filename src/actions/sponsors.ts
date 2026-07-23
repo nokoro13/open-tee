@@ -8,6 +8,7 @@ import { getEventById } from "@/actions/events";
 import { getDb } from "@/db";
 import { events, sponsorPackages, sponsorPurchases } from "@/db/schema";
 import { requireOrganization } from "@/lib/auth";
+import { BILLING_CURRENCY } from "@/lib/billing";
 import { canUseProFeature } from "@/lib/platform-tier";
 import { getAppUrl, getStripe } from "@/lib/stripe";
 
@@ -31,10 +32,6 @@ export async function createSponsorPackage(
 
   if (!event || event.orgId !== org.id) {
     return { success: false, error: "Event not found." };
-  }
-
-  if (!canUseProFeature(event, "sponsor_packages")) {
-    return { success: false, error: "Sponsor packages require a Pro event." };
   }
 
   if (!input.name.trim()) {
@@ -196,7 +193,7 @@ export async function purchaseSponsorPackage(
     line_items: [
       {
         price_data: {
-          currency: "usd",
+          currency: BILLING_CURRENCY,
           product_data: {
             name: `${event.name} — ${pkg.name}`,
             description: pkg.description ?? "Event sponsorship",

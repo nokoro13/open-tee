@@ -10,6 +10,7 @@ import { sendRegistrationConfirmationEmail } from "@/lib/email";
 import { getActiveEntryFee } from "@/lib/event-pricing";
 import { isRegistrationFinalized } from "@/lib/event-workflow";
 import { validateHandicapInput } from "@/lib/handicap-strokes";
+import { BILLING_CURRENCY } from "@/lib/billing";
 import { canUseProFeature } from "@/lib/platform-tier";
 import { syncRegistrationScoringCode } from "@/actions/scoring";
 import { notifyWaitlistOnSpotOpen } from "@/actions/waitlist";
@@ -219,7 +220,7 @@ export async function registerForEvent(
     line_items: [
       {
         price_data: {
-          currency: "usd",
+          currency: BILLING_CURRENCY,
           product_data: {
             name: `${event.name} — Entry fee`,
             description: pricing.isEarlyBird
@@ -586,7 +587,7 @@ export async function registerGroupForEvent(
     line_items: [
       {
         price_data: {
-          currency: "usd",
+          currency: BILLING_CURRENCY,
           product_data: {
             name: `${event.name} — Group entry (${players.length} players)`,
             description: pricing.isEarlyBird

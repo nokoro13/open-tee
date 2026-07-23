@@ -6,7 +6,6 @@ import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { events } from "@/db/schema";
 import { requireOrganization } from "@/lib/auth";
-import { canUseProFeature } from "@/lib/platform-tier";
 
 const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
 
@@ -31,13 +30,6 @@ export async function uploadEventBrandingImage(
 
   if (!event) {
     return { error: "Event not found.", status: 404 };
-  }
-
-  if (!canUseProFeature(event, "custom_branding")) {
-    return {
-      error: "Custom branding requires a Pro event.",
-      status: 403,
-    };
   }
 
   if (!file.type.startsWith("image/")) {

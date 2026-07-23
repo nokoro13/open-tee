@@ -8,51 +8,10 @@ import { getDb } from "@/db";
 import { events } from "@/db/schema";
 import { requireOrganization } from "@/lib/auth";
 import { normalizeHexColor } from "@/lib/event-branding";
-import {
-  canUseProFeature,
-  isProEvent,
-  type PlatformTier,
-  validateMaxPlayersForTier,
-} from "@/lib/platform-tier";
 
 export type ActionResult =
   | { success: true }
   | { success: false; error: string };
-
-export async function setEventPlatformTier(
-  eventId: string,
-  tier: PlatformTier
-): Promise<ActionResult> {
-  const org = await requireOrganization();
-  const event = await getEventById(eventId);
-
-  if (!event || event.orgId !== org.id) {
-    return { success: false, error: "Event not found." };
-  }
-
-  if (event.status !== "draft") {
-    return {
-      success: false,
-      error: "Tier can only be changed while the event is a draft.",
-    };
-  }
-
-  const maxPlayersError = validateMaxPlayersForTier(event.maxPlayers, tier);
-  if (maxPlayersError) {
-    return { success: false, error: maxPlayersError };
-  }
-
-  await getDb()
-    .update(events)
-    .set({
-      platformTier: tier,
-      updatedAt: new Date(),
-    })
-    .where(eq(events.id, eventId));
-
-  revalidatePath(`/dashboard/events/${eventId}`);
-  return { success: true };
-}
 
 export type ProSettingsInput = {
   waitlistEnabled?: boolean;
@@ -72,10 +31,6 @@ export async function updateProSettings(
 
   if (!event || event.orgId !== org.id) {
     return { success: false, error: "Event not found." };
-  }
-
-  if (!isProEvent(event)) {
-    return { success: false, error: "Pro settings require a Pro event." };
   }
 
   const updates: Partial<typeof events.$inferInsert> = {
@@ -148,10 +103,6 @@ export async function updateEventBranding(
 
   if (!event || event.orgId !== org.id) {
     return { success: false, error: "Event not found." };
-  }
-
-  if (!canUseProFeature(event, "custom_branding")) {
-    return { success: false, error: "Custom branding requires a Pro event." };
   }
 
   await getDb()
