@@ -48,7 +48,7 @@ export function DashboardPreviewContent({
     : previewDashboardEvents;
 
   return (
-    <div className={cn("mx-auto w-full max-w-5xl space-y-8", compact && "space-y-6")}>
+    <div className={cn("mx-auto w-full space-y-8", compact && "space-y-6")}>
       <EventsPageHeader
         orgName={PREVIEW_ORG_NAME}
         eventCount={previewDashboardEvents.length}

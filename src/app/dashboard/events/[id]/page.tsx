@@ -60,6 +60,7 @@ import { buildEventWorkflowSnapshot } from "@/lib/event-workflow";
 import { isOrgSubscriptionActive } from "@/lib/subscription";
 import { getAppUrl } from "@/lib/stripe";
 import { syncEventScoringCodes } from "@/actions/scoring";
+import { getGroupScoringProgress } from "@/lib/scoring";
 import { syncTeeTimesForEvent } from "@/actions/start-format";
 import { getEventPairings } from "@/lib/pairings";
 import { requireOrganization } from "@/lib/auth";
@@ -256,9 +257,13 @@ export default async function EventDetailPage({
       : 0;
   const groupCount = pairings?.groups.length ?? 0;
   const unassignedCount = pairings?.unassigned.length ?? 0;
+  const groupScoringProgress =
+    isOperationalEvent && event.scoringStatus !== "disabled"
+      ? await getGroupScoringProgress(event.id, event.format, event.holes)
+      : null;
 
   return (
-    <div className="mx-auto w-full max-w-5xl min-w-0 space-y-6">
+    <div className="mx-auto w-full min-w-0 space-y-6">
       {/* Top bar */}
       <div className="flex items-center justify-between gap-2">
         <ButtonLink
@@ -361,13 +366,21 @@ export default async function EventDetailPage({
             />
             <StatTile
               label="Groups"
-              value={groupCount > 0 ? `${groupCount}` : "—"}
+              value={
+                groupScoringProgress && groupScoringProgress.totalGroups > 0
+                  ? `${groupScoringProgress.completedGroups}/${groupScoringProgress.totalGroups}`
+                  : groupCount > 0
+                    ? `${groupCount}`
+                    : "—"
+              }
               caption={
-                groupCount === 0
-                  ? "No pairings yet"
-                  : unassignedCount > 0
-                    ? `${unassignedCount} player${unassignedCount === 1 ? "" : "s"} unassigned`
-                    : "All players assigned"
+                groupScoringProgress && groupScoringProgress.totalGroups > 0
+                  ? "groups completed"
+                  : groupCount === 0
+                    ? "No pairings yet"
+                    : unassignedCount > 0
+                      ? `${unassignedCount} player${unassignedCount === 1 ? "" : "s"} unassigned`
+                      : "All players assigned"
               }
               icon={Users}
             />
@@ -525,6 +538,7 @@ export default async function EventDetailPage({
                       appUrl={getAppUrl()}
                       canOpenScoring={workflow.canOpenScoring}
                       workflow={workflow}
+                      groupScoringProgress={groupScoringProgress}
                     />
                   </EventTabPanel>
                 )}

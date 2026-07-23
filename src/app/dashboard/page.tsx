@@ -41,7 +41,7 @@ export default async function DashboardPage() {
   const registrationCounts = await getRegistrationCountsByEventIds(publishedIds);
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-8">
+    <div className="mx-auto w-full space-y-8">
       <EventsPageHeader orgName={org.name} eventCount={eventList.length} />
 
       {eventList.length === 0 ? (

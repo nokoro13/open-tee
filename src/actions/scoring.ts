@@ -18,6 +18,7 @@ import { validatePriorHolesComplete } from "@/lib/score-entry-utils";
 import {
   canEditScoringGroup,
   generateScoringCode,
+  getGroupScoringProgress,
   getHoleCount,
   getHoleNumbers,
   getPublishedEventForScoring,
@@ -519,6 +520,20 @@ export async function finalizeScoring(eventId: string): Promise<ActionResult> {
 
   if (event.scoringStatus !== "open") {
     return { success: false, error: "Scoring must be open before finalizing." };
+  }
+
+  const progress = await getGroupScoringProgress(
+    eventId,
+    event.format,
+    event.holes
+  );
+
+  if (!progress.allComplete) {
+    const remaining = progress.totalGroups - progress.completedGroups;
+    return {
+      success: false,
+      error: `Cannot finalize yet — ${remaining} group${remaining === 1 ? "" : "s"} still need to finish scoring (${progress.completedGroups}/${progress.totalGroups} complete).`,
+    };
   }
 
   const now = new Date();

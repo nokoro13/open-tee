@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/card";
 import { getScorePageHref } from "@/lib/scoring-code-storage";
 import type { EventWorkflowSnapshot } from "@/lib/event-workflow";
+import type { GroupScoringProgress } from "@/lib/scoring";
 
 type ScoringCardProps = {
   eventId: string;
@@ -41,6 +42,7 @@ type ScoringCardProps = {
   appUrl: string;
   canOpenScoring?: boolean;
   workflow?: EventWorkflowSnapshot;
+  groupScoringProgress?: GroupScoringProgress | null;
 };
 
 const statusLabel = {
@@ -63,7 +65,9 @@ export function ScoringCard({
   appUrl,
   canOpenScoring = true,
   workflow,
+  groupScoringProgress,
 }: ScoringCardProps) {
+  const canFinalize = groupScoringProgress?.allComplete ?? false;
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -264,15 +268,28 @@ export function ScoringCard({
             </div>
 
             {scoringStatus === "open" && (
-              <Button
-                type="button"
-                variant="destructive"
-                disabled={isPending}
-                onClick={() => runAction(() => finalizeScoring(eventId))}
-              >
-                <Lock />
-                {isPending ? "Finalizing..." : "Finalize results"}
-              </Button>
+              <div className="space-y-2">
+                {groupScoringProgress && groupScoringProgress.totalGroups > 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    {groupScoringProgress.completedGroups}/
+                    {groupScoringProgress.totalGroups} groups completed
+                  </p>
+                )}
+                <Button
+                  type="button"
+                  variant="destructive"
+                  disabled={isPending || !canFinalize}
+                  onClick={() => runAction(() => finalizeScoring(eventId))}
+                >
+                  <Lock />
+                  {isPending ? "Finalizing..." : "Finalize results"}
+                </Button>
+                {!canFinalize && groupScoringProgress && (
+                  <p className="text-xs text-muted-foreground">
+                    Finalize is available once every group has finished scoring.
+                  </p>
+                )}
+              </div>
             )}
 
             {scoringStatus === "finalized" && (

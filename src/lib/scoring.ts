@@ -27,6 +27,7 @@ import {
   isTeamHoleScoring,
   type TeamSide,
 } from "@/lib/event-formats";
+import { isRoundComplete } from "@/lib/score-entry-utils";
 import { getDb } from "@/db";
 import { events, holeScores, pairingGroups, registrations } from "@/db/schema";
 
@@ -82,6 +83,12 @@ export type ScoreEntryGroup = {
   players: { id: string; name: string; teamSide?: TeamSide | "team" | null }[];
   isTeam: boolean;
   entrySides: ScoreEntrySide[];
+};
+
+export type GroupScoringProgress = {
+  totalGroups: number;
+  completedGroups: number;
+  allComplete: boolean;
 };
 
 export function generateScoringCode(length = 6): string {
@@ -779,6 +786,111 @@ export async function getScoreEntryGroups(
   }
 
   return result;
+}
+
+function scoresMapToRecord(
+  scoresMap: Map<string, Map<number, number>>
+): Record<string, Record<number, number>> {
+  const record: Record<string, Record<number, number>> = {};
+  for (const [key, holeMap] of scoresMap) {
+    record[key] = Object.fromEntries(holeMap);
+  }
+  return record;
+}
+
+function isScoringGroupComplete(
+  group: ScoreEntryGroup,
+  format: string,
+  holeNumbers: number[],
+  scores: Awaited<ReturnType<typeof getScoresForEvent>>,
+  scoresRecord: Record<string, Record<number, number>>
+): boolean {
+  if (format === "match_play") {
+    if (group.players.length < 2) return false;
+    const [playerA, playerB] = group.players;
+    const result = computeSinglesMatch(
+      playerScoreMap(scores, playerA.id),
+      playerScoreMap(scores, playerB.id),
+      holeNumbers
+    );
+    return result.isComplete;
+  }
+
+  if (format === "ryder_cup") {
+    const teamAPlayers = group.players.filter((player) => player.teamSide === "a");
+    const teamBPlayers = group.players.filter((player) => player.teamSide === "b");
+
+    if (group.matchType === "foursomes") {
+      const result = computeFoursomesMatch(
+        teamScoreMap(scores, group.id, "a"),
+        teamScoreMap(scores, group.id, "b"),
+        holeNumbers
+      );
+      return result.isComplete;
+    }
+
+    if (group.matchType === "fourball") {
+      const result = computeFourballMatch(
+        teamAPlayers.map((player) => playerScoreMap(scores, player.id)),
+        teamBPlayers.map((player) => playerScoreMap(scores, player.id)),
+        holeNumbers
+      );
+      return result.isComplete;
+    }
+
+    const playerA = teamAPlayers[0];
+    const playerB = teamBPlayers[0];
+    if (!playerA || !playerB) return false;
+
+    const result = computeSinglesMatch(
+      playerScoreMap(scores, playerA.id),
+      playerScoreMap(scores, playerB.id),
+      holeNumbers
+    );
+    return result.isComplete;
+  }
+
+  const entryIds = group.entrySides.map((side) => side.id);
+  return isRoundComplete(holeNumbers, entryIds, scoresRecord);
+}
+
+export async function getGroupScoringProgress(
+  eventId: string,
+  format: string,
+  holes: "9" | "18"
+): Promise<GroupScoringProgress> {
+  const holeNumbers = getHoleNumbers(holes);
+  const scoreEntryGroups = await getScoreEntryGroups(eventId, format);
+
+  if (scoreEntryGroups.length === 0) {
+    return { totalGroups: 0, completedGroups: 0, allComplete: false };
+  }
+
+  const scores = await getScoresForEvent(eventId);
+  const scoresMap = scoresToMap(
+    scores,
+    format,
+    scoreEntryGroups.map((group) => ({
+      id: group.id,
+      matchType: group.matchType ?? null,
+    }))
+  );
+  const scoresRecord = scoresMapToRecord(scoresMap);
+
+  let completedGroups = 0;
+  for (const group of scoreEntryGroups) {
+    if (
+      isScoringGroupComplete(group, format, holeNumbers, scores, scoresRecord)
+    ) {
+      completedGroups += 1;
+    }
+  }
+
+  return {
+    totalGroups: scoreEntryGroups.length,
+    completedGroups,
+    allComplete: completedGroups === scoreEntryGroups.length,
+  };
 }
 
 export async function getPublishedEventForScoring(slug: string) {
