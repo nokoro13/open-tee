@@ -543,7 +543,26 @@ export default async function EventDetailPage({
                   </EventTabPanel>
                 )}
 
-                <EventTabPanel tab="features">
+                <EventTabPanel tab="analytics">
+                  {analyticsReport ? (
+                    <EventAnalyticsReportCard
+                      eventId={event.id}
+                      report={analyticsReport}
+                    />
+                  ) : (
+                    <Card className="rounded-2xl">
+                      <CardHeader>
+                        <CardTitle>Analytics</CardTitle>
+                        <CardDescription>
+                          Analytics will appear here once players register for
+                          your event.
+                        </CardDescription>
+                      </CardHeader>
+                    </Card>
+                  )}
+                </EventTabPanel>
+
+                <EventTabPanel tab="settings">
                   <div className="space-y-6">
                     <ProFeaturesPanel event={event} />
                     <EventBrandingPanel event={event} />
@@ -582,30 +601,7 @@ export default async function EventDetailPage({
                         </CardContent>
                       </Card>
                     )}
-                  </div>
-                </EventTabPanel>
 
-                <EventTabPanel tab="analytics">
-                  {analyticsReport ? (
-                    <EventAnalyticsReportCard
-                      eventId={event.id}
-                      report={analyticsReport}
-                    />
-                  ) : (
-                    <Card className="rounded-2xl">
-                      <CardHeader>
-                        <CardTitle>Analytics</CardTitle>
-                        <CardDescription>
-                          Analytics will appear here once players register for
-                          your event.
-                        </CardDescription>
-                      </CardHeader>
-                    </Card>
-                  )}
-                </EventTabPanel>
-
-                <EventTabPanel tab="settings">
-                  <div className="space-y-6">
                     <EventLifecycleCard event={event} />
 
                     {event.status === "published" && (

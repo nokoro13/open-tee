@@ -131,10 +131,14 @@ export function validatePairingsForFormat(
       issues.push(`${group.label}: ${warning}`);
     }
 
-    if (requiresTeamSides(format) && format !== "ryder_cup") {
+    if (requiresTeamSides(format)) {
       const unassignedSide = group.players.filter((p) => !p.teamSide);
       if (unassignedSide.length > 0) {
-        issues.push(`${group.label}: assign a team side for every player.`);
+        const label =
+          format === "best_ball"
+            ? "assign each player to Pair 1 or Pair 2"
+            : "assign a team side for every player";
+        issues.push(`${group.label}: ${label}.`);
       }
     }
   }

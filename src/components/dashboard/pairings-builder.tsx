@@ -77,6 +77,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  DEFAULT_PAIR_A_LABEL,
+  DEFAULT_PAIR_B_LABEL,
   DEFAULT_TEAM_A_NAME,
   DEFAULT_TEAM_B_NAME,
   RYDER_MATCH_TYPES,
@@ -85,6 +87,8 @@ import {
   getRyderMatchType,
   requiresMatchType,
   requiresTeamSides,
+  suggestBestBallTeamSide,
+  usesPairSides,
 } from "@/lib/event-formats";
 import { isEventSetupLocked } from "@/lib/event-setup-lock";
 import type { EventPairings } from "@/lib/pairings";
@@ -114,7 +118,37 @@ type PairingGroup = EventPairings["groups"][number];
 type DragPlayerData = {
   registrationId: string;
   fromGroupId: string | null;
+  fromTeamSide?: "a" | "b" | null;
 };
+
+type DropTarget = {
+  groupId: string | null;
+  teamSide?: "a" | "b";
+};
+
+function parseDropTarget(overId: string): DropTarget | null {
+  if (overId === UNASSIGNED_DROP_ID) {
+    return { groupId: null };
+  }
+
+  if (!overId.startsWith("group:")) {
+    return null;
+  }
+
+  const rest = overId.slice("group:".length);
+  const separator = rest.lastIndexOf(":");
+  if (separator === -1) {
+    return { groupId: rest };
+  }
+
+  const groupId = rest.slice(0, separator);
+  const teamSide = rest.slice(separator + 1);
+  if (teamSide === "a" || teamSide === "b") {
+    return { groupId, teamSide };
+  }
+
+  return { groupId: rest };
+}
 
 type GroupUpdateInput = {
   label?: string;
@@ -189,8 +223,12 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
     setLocalPairings(pairings);
   }, [pairings]);
 
-  const sideALabel = teamAName?.trim() || DEFAULT_TEAM_A_NAME;
-  const sideBLabel = teamBName?.trim() || DEFAULT_TEAM_B_NAME;
+  const sideALabel = usesPairSides(format)
+    ? DEFAULT_PAIR_A_LABEL
+    : teamAName?.trim() || DEFAULT_TEAM_A_NAME;
+  const sideBLabel = usesPairSides(format)
+    ? DEFAULT_PAIR_B_LABEL
+    : teamBName?.trim() || DEFAULT_TEAM_B_NAME;
   const showTeamSides = requiresTeamSides(format);
   const showMatchType = requiresMatchType(format);
   const setupLocked = isEventSetupLocked(scoringStatus);
@@ -339,7 +377,8 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
 
   function movePlayerLocally(
     registrationId: string,
-    toGroupId: string | null
+    toGroupId: string | null,
+    toTeamSide?: "a" | "b"
   ) {
     setLocalPairings((current) => {
       const found = findPlayer(current, registrationId);
@@ -360,19 +399,34 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
       if (toGroupId) {
         const targetIndex = groups.findIndex((group) => group.id === toGroupId);
         if (targetIndex === -1) return current;
+        const targetGroup = groups[targetIndex];
+        const assignedPlayer =
+          usesPairSides(format) && toTeamSide
+            ? { ...player, teamSide: toTeamSide }
+            : usesPairSides(format)
+              ? {
+                  ...player,
+                  teamSide: suggestBestBallTeamSide(targetGroup.players),
+                }
+              : player;
         groups[targetIndex] = {
-          ...groups[targetIndex],
-          players: [...groups[targetIndex].players, player].sort((a, b) =>
+          ...targetGroup,
+          players: [...targetGroup.players, assignedPlayer].sort((a, b) =>
             a.name.localeCompare(b.name)
           ),
         };
       }
 
+      const unassignedPlayer =
+        toGroupId === null && usesPairSides(format)
+          ? { ...player, teamSide: null }
+          : player;
+
       const unassigned =
         toGroupId === null
           ? [
               ...current.unassigned.filter((p) => p.id !== registrationId),
-              player,
+              unassignedPlayer,
             ].sort((a, b) => a.name.localeCompare(b.name))
           : current.unassigned.filter((p) => p.id !== registrationId);
 
@@ -380,9 +434,15 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
     });
   }
 
-  function handleMovePlayer(registrationId: string, toGroupId: string | null) {
-    movePlayerLocally(registrationId, toGroupId);
-    runAction(() => assignRegistrationToGroup(registrationId, toGroupId));
+  function handleMovePlayer(
+    registrationId: string,
+    toGroupId: string | null,
+    toTeamSide?: "a" | "b"
+  ) {
+    movePlayerLocally(registrationId, toGroupId, toTeamSide);
+    runAction(() =>
+      assignRegistrationToGroup(registrationId, toGroupId, toTeamSide)
+    );
   }
 
   function handleDragStart(event: DragStartEvent) {
@@ -401,19 +461,41 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
     if (!data) return;
 
     const overId = String(over.id);
-    let targetGroupId: string | null = null;
+    const target = parseDropTarget(overId);
+    if (!target) return;
 
-    if (overId === UNASSIGNED_DROP_ID) {
-      targetGroupId = null;
-    } else if (overId.startsWith("group:")) {
-      targetGroupId = overId.slice("group:".length);
-    } else {
-      return;
+    const activePlayer = findPlayer(localPairings, data.registrationId)?.player;
+    const fromTeamSide =
+      activePlayer?.teamSide === "a" || activePlayer?.teamSide === "b"
+        ? activePlayer.teamSide
+        : null;
+
+    if (target.groupId === data.fromGroupId) {
+      if (usesPairSides(format)) {
+        if (!target.teamSide || target.teamSide === fromTeamSide) return;
+      } else {
+        return;
+      }
     }
 
-    if (data.fromGroupId === targetGroupId) return;
+    if (
+      usesPairSides(format) &&
+      target.groupId &&
+      target.teamSide
+    ) {
+      const targetGroup = localPairings.groups.find(
+        (group) => group.id === target.groupId
+      );
+      const pairCount =
+        targetGroup?.players.filter(
+          (player) =>
+            player.teamSide === target.teamSide &&
+            player.id !== data.registrationId
+        ).length ?? 0;
+      if (pairCount >= 2) return;
+    }
 
-    handleMovePlayer(data.registrationId, targetGroupId);
+    handleMovePlayer(data.registrationId, target.groupId, target.teamSide);
   }
 
   function handleDragCancel() {
@@ -429,9 +511,11 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
             Pairings
           </CardTitle>
           <CardDescription className="text-pretty">
-            {showMatchType
-              ? `Drag players into matches and set ${sideALabel} / ${sideBLabel} sides.`
-              : "Drag registrants into groups."}{" "}
+            {usesPairSides(format)
+              ? "Drag registrants into Pair 1 or Pair 2 in each group."
+              : showMatchType
+                ? `Drag players into matches and set ${sideALabel} / ${sideBLabel} sides.`
+                : "Drag registrants into groups."}{" "}
             <span className="whitespace-nowrap">
               {totalAssigned} assigned · {localPairings.unassigned.length}{" "}
               unassigned
@@ -745,7 +829,7 @@ function RegistrantsSidebar({
 
           <div
             className={cn(
-              "flex min-h-40 flex-1 flex-col gap-1.5 overflow-x-hidden overflow-y-auto rounded-xl border bg-muted/10 p-2 lg:max-h-[calc(100vh-18rem)]",
+              "flex flex-1 flex-col gap-1.5 overflow-x-hidden overflow-y-auto rounded-xl border bg-muted/10 p-2 lg:max-h-[calc(100vh-18rem)]",
               isOver && "border-primary bg-primary/5",
               !isOver && "border-border"
             )}
@@ -875,23 +959,31 @@ function GroupRow({
   onTeamSide,
   onRemovePlayer,
 }: GroupRowProps) {
+  const usePairDropZones = usesPairSides(format);
   const dropId = `group:${group.id}`;
   const { isOver, setNodeRef } = useDroppable({
     id: dropId,
-    disabled,
+    disabled: disabled || usePairDropZones,
   });
 
   const capacity = getGroupCapacity(format, group.matchType);
   const openSlots = Math.max(capacity.target - group.players.length, 0);
   const overCapacity = group.players.length > capacity.max;
   const isFull = group.players.length >= capacity.target && openSlots === 0;
+  const pairAPlayers = group.players.filter((player) => player.teamSide === "a");
+  const pairBPlayers = group.players.filter((player) => player.teamSide === "b");
+  const unassignedPlayers = usePairDropZones
+    ? group.players.filter(
+        (player) => player.teamSide !== "a" && player.teamSide !== "b"
+      )
+    : [];
 
   return (
     <div
-      ref={setNodeRef}
+      ref={usePairDropZones ? undefined : setNodeRef}
       className={cn(
         "grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 rounded-xl border bg-card px-3 py-2.5 transition-colors sm:gap-3 sm:px-3.5 sm:py-3",
-        isOver
+        !usePairDropZones && isOver
           ? "border-primary bg-primary/5 ring-2 ring-inset ring-primary/20"
           : "border-border",
         isFull && "bg-muted/15"
@@ -957,11 +1049,41 @@ function GroupRow({
 
       <div
         className={cn(
-          "flex min-w-0 items-center gap-1.5",
-          group.players.length === 0 && "justify-start"
+          "min-w-0",
+          usePairDropZones
+            ? "grid grid-cols-1 gap-2 sm:grid-cols-2"
+            : "flex items-center gap-1.5",
+          !usePairDropZones && group.players.length === 0 && "justify-start"
         )}
       >
-        {group.players.length === 0 ? (
+        {usePairDropZones ? (
+          <>
+            <PairDropZone
+              groupId={group.id}
+              teamSide="a"
+              label={sideALabel}
+              players={pairAPlayers}
+              disabled={disabled}
+              onRemovePlayer={onRemovePlayer}
+            />
+            <PairDropZone
+              groupId={group.id}
+              teamSide="b"
+              label={sideBLabel}
+              players={pairBPlayers}
+              disabled={disabled}
+              onRemovePlayer={onRemovePlayer}
+            />
+            {unassignedPlayers.length > 0 && (
+              <p className="col-span-full text-xs text-amber-600">
+                {unassignedPlayers.length} player
+                {unassignedPlayers.length === 1 ? "" : "s"} need
+                {unassignedPlayers.length === 1 ? "s" : ""} a pair — drag into
+                Pair 1 or Pair 2.
+              </p>
+            )}
+          </>
+        ) : group.players.length === 0 ? (
           <span className="truncate text-xs text-muted-foreground/70">
             Drop players here
           </span>
@@ -980,7 +1102,8 @@ function GroupRow({
             />
           ))
         )}
-        {openSlots > 0 &&
+        {!usePairDropZones &&
+          openSlots > 0 &&
           Array.from({ length: openSlots }).map((_, index) => (
             <span
               key={index}
@@ -1028,6 +1151,78 @@ function GroupRow({
         >
           <Ellipsis className="size-4" />
         </Button>
+      </div>
+    </div>
+  );
+}
+
+type PairDropZoneProps = {
+  groupId: string;
+  teamSide: "a" | "b";
+  label: string;
+  players: PairingPlayer[];
+  disabled: boolean;
+  onRemovePlayer: (registrationId: string) => void;
+};
+
+function PairDropZone({
+  groupId,
+  teamSide,
+  label,
+  players,
+  disabled,
+  onRemovePlayer,
+}: PairDropZoneProps) {
+  const dropId = `group:${groupId}:${teamSide}`;
+  const openSlots = Math.max(2 - players.length, 0);
+  const isFull = players.length >= 2;
+  const { isOver, setNodeRef } = useDroppable({
+    id: dropId,
+    disabled: disabled || isFull,
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "flex min-w-0 flex-1 flex-col gap-1.5 rounded-lg border border-dashed p-2 transition-colors",
+        isOver
+          ? "border-primary bg-primary/5 ring-2 ring-inset ring-primary/20"
+          : "border-border/70 bg-muted/15",
+        isFull && "bg-muted/25"
+      )}
+    >
+      <div className="flex items-center justify-between gap-2 px-0.5">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          {label}
+        </span>
+        <span className="text-[10px] tabular-nums text-muted-foreground">
+          {players.length}/2
+        </span>
+      </div>
+      <div className="flex min-h-8 flex-wrap items-center gap-1.5">
+        {players.map((player) => (
+          <GroupPlayerPill
+            key={player.id}
+            player={player}
+            groupId={groupId}
+            disabled={disabled}
+            showTeamSides={false}
+            sideALabel={label}
+            sideBLabel={label}
+            onTeamSide={() => {}}
+            onRemove={() => onRemovePlayer(player.id)}
+          />
+        ))}
+        {openSlots > 0 &&
+          Array.from({ length: openSlots }).map((_, index) => (
+            <span
+              key={index}
+              className="inline-flex h-8 min-w-14 flex-1 items-center justify-center rounded-md border border-dashed border-border/50 text-[11px] text-muted-foreground/50"
+            >
+              {players.length === 0 && index === 0 ? "Drop here" : "Open"}
+            </span>
+          ))}
       </div>
     </div>
   );
@@ -1240,6 +1435,18 @@ function GroupDetailsSheet({
       })
     : null;
 
+  const detailPlayers = group
+    ? usesPairSides(format)
+      ? [...group.players].sort((a, b) => {
+          const order = { a: 0, b: 1 };
+          const aOrder = a.teamSide ? (order[a.teamSide as "a" | "b"] ?? 2) : 2;
+          const bOrder = b.teamSide ? (order[b.teamSide as "a" | "b"] ?? 2) : 2;
+          if (aOrder !== bOrder) return aOrder - bOrder;
+          return a.name.localeCompare(b.name);
+        })
+      : group.players
+    : [];
+
   const scoringUrl =
     group?.scoringCode != null
       ? getGroupScorePageUrl(appUrl, slug, group.scoringCode)
@@ -1387,7 +1594,8 @@ function GroupDetailsSheet({
 
               <div className="space-y-2">
                 <h4 className="text-xs font-medium text-muted-foreground">
-                  Players ({group.players.length})
+                  {usesPairSides(format) ? "Pairs" : "Players"} (
+                  {group.players.length})
                 </h4>
                 {group.players.length === 0 ? (
                   <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-sm text-muted-foreground">
@@ -1396,7 +1604,7 @@ function GroupDetailsSheet({
                   </p>
                 ) : (
                   <ul className="space-y-2">
-                    {group.players.map((player) => (
+                    {detailPlayers.map((player) => (
                       <li
                         key={player.id}
                         className="space-y-2 rounded-lg border border-border bg-background p-3"
@@ -1462,7 +1670,9 @@ function GroupDetailsSheet({
                                   </SelectValue>
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="none">No team</SelectItem>
+                                  {!usesPairSides(format) && (
+                                    <SelectItem value="none">No team</SelectItem>
+                                  )}
                                   <SelectItem value="a">
                                     {sideALabel}
                                   </SelectItem>

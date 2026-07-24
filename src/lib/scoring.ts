@@ -23,6 +23,7 @@ import {
   DEFAULT_TEAM_A_NAME,
   DEFAULT_TEAM_B_NAME,
   getLeaderboardMode,
+  getPairSideLabel,
   getSortDirection,
   isTeamHoleScoring,
   type TeamSide,
@@ -367,6 +368,7 @@ async function buildTeamStrokeLeaderboard(
 
 async function buildTeamBestBallLeaderboard(
   eventId: string,
+  format: string,
   holes: "9" | "18",
   options: LeaderboardOptions = {}
 ): Promise<LeaderboardEntry[]> {
@@ -378,6 +380,7 @@ async function buildTeamBestBallLeaderboard(
   const strokeIndexByHole = new Map(
     eventHoles.map((hole) => [hole.holeNumber, hole.strokeIndex ?? hole.holeNumber])
   );
+  const usePairs = format === "best_ball";
 
   const groups = await getDb().query.pairingGroups.findMany({
     where: eq(pairingGroups.eventId, eventId),
@@ -385,13 +388,32 @@ async function buildTeamBestBallLeaderboard(
     orderBy: (pairingGroups, { asc }) => [asc(pairingGroups.sortOrder)],
   });
 
-  const entries = groups
-    .filter((group) => group.registrations.length > 0)
-    .filter((group) =>
-      options.flightId ? group.flightId === options.flightId : true
-    )
-    .map((group) => {
-      const playerMaps = group.registrations.map((player) =>
+  const entries: Omit<LeaderboardEntry, "rank">[] = [];
+
+  for (const group of groups) {
+    if (group.registrations.length === 0) continue;
+    if (options.flightId && group.flightId !== options.flightId) continue;
+
+    const teamUnits = usePairs
+      ? (["a", "b"] as const)
+          .map((side) => ({
+            id: `${group.id}:${side}`,
+            label: `${group.label} · ${getPairSideLabel(side)}`,
+            players: group.registrations.filter(
+              (player) => player.teamSide === side
+            ),
+          }))
+          .filter((team) => team.players.length > 0)
+      : [
+          {
+            id: group.id,
+            label: group.label,
+            players: group.registrations,
+          },
+        ];
+
+    for (const team of teamUnits) {
+      const playerMaps = team.players.map((player) =>
         playerScoreMap(scores, player.id)
       );
 
@@ -403,8 +425,8 @@ async function buildTeamBestBallLeaderboard(
         const netScoresByHole: number[] = [];
         for (const holeNumber of holeNumbers) {
           let bestNet: number | null = null;
-          for (let i = 0; i < group.registrations.length; i++) {
-            const player = group.registrations[i];
+          for (let i = 0; i < team.players.length; i++) {
+            const player = team.players[i];
             const gross = playerMaps[i]?.get(holeNumber);
             if (gross == null) continue;
             const courseHandicap = parseCourseHandicap(player.handicap);
@@ -419,7 +441,10 @@ async function buildTeamBestBallLeaderboard(
           }
           if (bestNet != null) netScoresByHole.push(bestNet);
         }
-        total = netScoresByHole.length > 0 ? netScoresByHole.reduce((a, b) => a + b, 0) : null;
+        total =
+          netScoresByHole.length > 0
+            ? netScoresByHole.reduce((a, b) => a + b, 0)
+            : null;
         thru = netScoresByHole.length;
         scoredHoles = netScoresByHole.map((_, index) => holeNumbers[index]);
       } else {
@@ -429,19 +454,22 @@ async function buildTeamBestBallLeaderboard(
         scoredHoles = computed.scoredHoles;
       }
 
-      return strokeEntry(
-        {
-          id: group.id,
-          name: group.label,
-          subtitle: group.registrations.map((r) => r.name).join(", "),
-          thru,
-          total,
-          isComplete: thru === holeCount && scoredHoles.length === holeCount,
-        },
-        scoredHoles,
-        parMap
+      entries.push(
+        strokeEntry(
+          {
+            id: team.id,
+            name: team.label,
+            subtitle: team.players.map((player) => player.name).join(", "),
+            thru,
+            total,
+            isComplete: thru === holeCount && scoredHoles.length === holeCount,
+          },
+          scoredHoles,
+          parMap
+        )
       );
-    });
+    }
+  }
 
   return assignRanks(entries, "asc");
 }
@@ -660,7 +688,7 @@ export async function buildLeaderboard(
       break;
     case "team_best_ball":
       result = {
-        entries: await buildTeamBestBallLeaderboard(eventId, holes, options),
+        entries: await buildTeamBestBallLeaderboard(eventId, format, holes, options),
       };
       break;
     case "stableford":

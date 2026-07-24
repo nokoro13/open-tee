@@ -13,6 +13,7 @@ import { getDb } from "@/db";
 import { pairingGroups, registrations } from "@/db/schema";
 import { requireOrganization } from "@/lib/auth";
 import { assertEventSetupUnlocked } from "@/lib/event-setup-lock";
+import { suggestBestBallTeamSide } from "@/lib/event-formats";
 import { isPairingsFinalized } from "@/lib/event-workflow";
 import { isOperationalEventStatus } from "@/lib/events";
 import type { PairingGroupWithPlayers } from "@/lib/pairings";
@@ -213,7 +214,8 @@ export async function deletePairingGroup(groupId: string): Promise<ActionResult>
 
 export async function assignRegistrationToGroup(
   registrationId: string,
-  pairingGroupId: string | null
+  pairingGroupId: string | null,
+  requestedTeamSide?: "a" | "b" | null
 ): Promise<ActionResult> {
   const org = await requireOrganization();
 
@@ -246,10 +248,35 @@ export async function assignRegistrationToGroup(
     }
   }
 
+  const isBestBall = registration.event.format === "best_ball";
+  let teamSide: "a" | "b" | null =
+    registration.teamSide === "a" || registration.teamSide === "b"
+      ? registration.teamSide
+      : null;
+
+  if (isBestBall) {
+    if (pairingGroupId) {
+      if (requestedTeamSide === "a" || requestedTeamSide === "b") {
+        teamSide = requestedTeamSide;
+      } else {
+        const groupPlayers = await getDb().query.registrations.findMany({
+          where: eq(registrations.pairingGroupId, pairingGroupId),
+        });
+        const otherPlayers = groupPlayers.filter(
+          (player) => player.id !== registrationId
+        );
+        teamSide = suggestBestBallTeamSide(otherPlayers);
+      }
+    } else {
+      teamSide = null;
+    }
+  }
+
   await getDb()
     .update(registrations)
     .set({
       pairingGroupId,
+      ...(isBestBall ? { teamSide } : {}),
       updatedAt: new Date(),
     })
     .where(eq(registrations.id, registrationId));
@@ -279,8 +306,11 @@ export async function assignRegistrationTeamSide(
     return { success: false, error: "Pairings are only available for published events." };
   }
 
-  if (registration.event.format !== "ryder_cup") {
-    return { success: false, error: "Team sides are only used for Ryder Cup events." };
+  if (
+    registration.event.format !== "ryder_cup" &&
+    registration.event.format !== "best_ball"
+  ) {
+    return { success: false, error: "Team sides are not used for this format." };
   }
 
   const locked = assertSetupUnlocked(registration.event);

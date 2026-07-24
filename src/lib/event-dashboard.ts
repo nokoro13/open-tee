@@ -7,7 +7,6 @@ export type PublishedEventTab =
   | "players"
   | "pairings"
   | "scoring"
-  | "features"
   | "analytics"
   | "settings";
 
@@ -25,7 +24,6 @@ export const PUBLISHED_EVENT_TABS: EventTabDefinition[] = [
   { id: "players", label: "Players" },
   { id: "pairings", label: "Pairings" },
   { id: "scoring", label: "Scoring" },
-  { id: "features", label: "Features" },
   { id: "analytics", label: "Analytics", shortLabel: "Stats" },
   { id: "settings", label: "Settings" },
 ];
@@ -48,6 +46,10 @@ export function parseEventTab(
 
   if (tab === "overview") {
     return "players";
+  }
+
+  if (tab === "features") {
+    return "settings";
   }
 
   return tab && PUBLISHED_TAB_SET.has(tab)

@@ -60,7 +60,8 @@ export const EVENT_FORMATS = [
   {
     value: "best_ball",
     label: "Best ball",
-    description: "Each player plays their own ball; team counts the best score per hole.",
+    description:
+      "Two-player teams; each player plays their own ball and the best score per hole counts.",
     category: "team",
     entryMode: "individual_hole",
     leaderboardMode: "team_best_ball",
@@ -68,9 +69,12 @@ export const EVENT_FORMATS = [
     defaultGroupSize: 4,
     minGroupSize: 2,
     maxGroupSize: 4,
+    preferredGroupSize: 4,
     totalColumnLabel: "Total",
     entityColumnLabel: "Team",
     showToPar: true,
+    requiresTeamConfig: true,
+    requiresTeamSides: true,
   },
   {
     value: "alternate_shot",
@@ -247,11 +251,35 @@ export function usesTeamLeaderboard(format: string): boolean {
 }
 
 export function requiresTeamConfig(format: string): boolean {
-  return format === "ryder_cup";
+  return format === "ryder_cup" || format === "best_ball";
 }
 
 export function requiresTeamSides(format: string): boolean {
-  return format === "ryder_cup";
+  return format === "ryder_cup" || format === "best_ball";
+}
+
+export function usesPairSides(format: string): boolean {
+  return format === "best_ball";
+}
+
+export const DEFAULT_PAIR_A_LABEL = "Pair 1";
+export const DEFAULT_PAIR_B_LABEL = "Pair 2";
+
+export function getPairSideLabel(side: "a" | "b"): string {
+  return side === "a" ? DEFAULT_PAIR_A_LABEL : DEFAULT_PAIR_B_LABEL;
+}
+
+export function suggestBestBallTeamSide(
+  players: { teamSide: string | null }[]
+): "a" | "b" {
+  const teamACount = players.filter((player) => player.teamSide === "a").length;
+  const teamBCount = players.filter((player) => player.teamSide === "b").length;
+
+  if (teamACount < 2 && (teamACount <= teamBCount || teamBCount >= 2)) {
+    return "a";
+  }
+
+  return "b";
 }
 
 export function requiresMatchType(format: string): boolean {
@@ -292,6 +320,37 @@ export function getGroupSizeWarning(
         return "Ryder Cup matches need at least 2 players (one per team).";
       }
     }
+    return null;
+  }
+
+  if (format === "best_ball") {
+    if (playerCount % 2 !== 0) {
+      return `Best ball groups need 2 or 4 players in pairs of 2 (${playerCount} assigned).`;
+    }
+
+    const teamACount = options?.teamACount ?? 0;
+    const teamBCount = options?.teamBCount ?? 0;
+
+    if (teamACount > 2 || teamBCount > 2) {
+      return "Each pair can have at most 2 players.";
+    }
+
+    if (playerCount === 4 && (teamACount !== 2 || teamBCount !== 2)) {
+      return "Groups with 4 players need two pairs of 2 (assign each player to Pair 1 or Pair 2).";
+    }
+
+    if (playerCount === 2 && teamACount !== 2 && teamBCount !== 2) {
+      return "Assign both players to the same pair.";
+    }
+
+    if (playerCount < meta.minGroupSize) {
+      return `${meta.label} groups should have at least ${meta.minGroupSize} players (${playerCount} assigned).`;
+    }
+
+    if (playerCount > meta.maxGroupSize) {
+      return `${meta.label} groups should have at most ${meta.maxGroupSize} players (${playerCount} assigned).`;
+    }
+
     return null;
   }
 

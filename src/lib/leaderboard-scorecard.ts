@@ -237,7 +237,7 @@ type EntryContext = {
   matchType: string | null;
 };
 
-async function loadEntryContexts(eventId: string) {
+async function loadEntryContexts(eventId: string, format: string) {
   const groups = await getDb().query.pairingGroups.findMany({
     where: eq(pairingGroups.eventId, eventId),
     with: { registrations: true },
@@ -248,12 +248,31 @@ async function loadEntryContexts(eventId: string) {
   });
 
   const contexts = new Map<string, EntryContext>();
+  const usePairs = format === "best_ball";
 
   for (const group of groups) {
     const active = group.registrations.filter(
       (player) => player.paymentStatus !== "refunded"
     );
     if (active.length === 0) continue;
+
+    if (usePairs) {
+      for (const side of ["a", "b"] as const) {
+        const teamPlayers = active.filter((player) => player.teamSide === side);
+        if (teamPlayers.length === 0) continue;
+
+        contexts.set(`${group.id}:${side}`, {
+          groupId: group.id,
+          matchType: group.matchType,
+          players: teamPlayers.map((player) => ({
+            id: player.id,
+            name: player.name,
+            handicap: player.handicap,
+          })),
+        });
+      }
+      continue;
+    }
 
     contexts.set(group.id, {
       groupId: group.id,
@@ -447,7 +466,7 @@ export async function attachLeaderboardScorecards(
 
   const scores = await getScoresForEvent(eventId);
   const holeData = buildHoleData(eventHoles, holes);
-  const contexts = await loadEntryContexts(eventId);
+  const contexts = await loadEntryContexts(eventId, format);
 
   return entries.map((entry) => ({
     ...entry,
