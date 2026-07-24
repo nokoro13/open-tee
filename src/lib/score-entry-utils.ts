@@ -230,6 +230,40 @@ export function getConfirmedHoles(
   );
 }
 
+/** Merge server scores into local state when another scorer saves for the group. */
+export function applyRemoteScores(
+  local: Record<string, Record<number, number>>,
+  remote: Record<string, Record<number, number>>,
+  holeNumbers: number[],
+  entryIds: string[],
+  options: { skipHole?: number } = {}
+): Record<string, Record<number, number>> {
+  const merged: Record<string, Record<number, number>> = { ...local };
+
+  for (const entityId of entryIds) {
+    const entityScores = { ...(merged[entityId] ?? {}) };
+
+    for (const hole of holeNumbers) {
+      if (options.skipHole === hole) continue;
+      if (!isHoleCompleteForEntries(hole, entryIds, remote)) continue;
+
+      const remoteValue = remote[entityId]?.[hole];
+      if (remoteValue != null) {
+        entityScores[hole] = remoteValue;
+      }
+    }
+
+    merged[entityId] = entityScores;
+  }
+
+  for (const [entityId, holes] of Object.entries(remote)) {
+    if (entryIds.includes(entityId)) continue;
+    merged[entityId] = { ...(merged[entityId] ?? {}), ...holes };
+  }
+
+  return merged;
+}
+
 export function getHoleStatuses(
   holeNumbers: number[],
   entryIds: string[],

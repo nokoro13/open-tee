@@ -45,6 +45,7 @@ import {
 import type { MatchRunningScore, RunningScore } from "@/lib/score-entry-utils";
 import type { ScoreEntryGroup } from "@/lib/scoring";
 import {
+  applyRemoteScores,
   computeMatchRunningScore,
   computeRunningScores,
   countCompletedHoles,
@@ -53,6 +54,7 @@ import {
   findStartingHoleIndex,
   getConfirmedHoles,
   getHoleStatuses,
+  isHoleCompleteForEntries,
   isRoundComplete,
   validatePriorHolesComplete,
 } from "@/lib/score-entry-utils";
@@ -96,6 +98,7 @@ type ScoreEntryFormProps = {
   hasHeatmapByHole?: Record<number, boolean>;
   selectedTeeKey?: string | null;
   selectedTeeColor?: string | null;
+  pollIntervalMs?: number;
 };
 
 type SlideDirection = "forward" | "back";
@@ -306,9 +309,12 @@ export function ScoreEntryForm({
   hasHeatmapByHole = {},
   selectedTeeKey = null,
   selectedTeeColor = null,
+  pollIntervalMs = 4000,
 }: ScoreEntryFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const isPendingRef = useRef(isPending);
+  const activeHoleRef = useRef(1);
   const [error, setError] = useState<string | null>(null);
   const [justSaved, setJustSaved] = useState(false);
   const [changeScoresUnlocked, setChangeScoresUnlocked] = useState(false);
@@ -357,10 +363,89 @@ export function ScoreEntryForm({
   }, [slug, code, demoMode]);
 
   useEffect(() => {
+    isPendingRef.current = isPending;
+  }, [isPending]);
+
+  useEffect(() => {
+    if (demoMode || readOnly || pollIntervalMs <= 0) return;
+
+    async function refreshScores() {
+      if (document.visibilityState === "hidden") return;
+
+      try {
+        const response = await fetch(
+          `/api/e/${slug}/scores?code=${encodeURIComponent(code)}`,
+          { cache: "no-store" }
+        );
+        if (!response.ok) return;
+
+        const payload = (await response.json()) as {
+          scores: Record<string, Record<number, number>>;
+        };
+
+        setScores((prev) =>
+          applyRemoteScores(
+            prev,
+            payload.scores,
+            holeNumbers,
+            entryIds,
+            {
+              skipHole: isPendingRef.current
+                ? activeHoleRef.current
+                : undefined,
+            }
+          )
+        );
+        setConfirmedHoles((prev) => {
+          const next = new Set(prev);
+          for (const hole of holeNumbers) {
+            if (isHoleCompleteForEntries(hole, entryIds, payload.scores)) {
+              next.add(hole);
+            }
+          }
+          return next;
+        });
+      } catch {
+        // Ignore transient network errors; next poll will retry.
+      }
+    }
+
+    const interval = window.setInterval(() => {
+      void refreshScores();
+    }, pollIntervalMs);
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        void refreshScores();
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [
+    slug,
+    code,
+    demoMode,
+    readOnly,
+    pollIntervalMs,
+    holeNumbers,
+    entryIds,
+  ]);
+
+  useEffect(() => {
     setChangeScoresUnlocked(false);
   }, [activeHoleIndex]);
 
   const activeHole = holeNumbers[activeHoleIndex] ?? 1;
+
+  useEffect(() => {
+    activeHoleRef.current = activeHole;
+  }, [activeHole]);
+
   const activePar = parByHole[activeHole];
   const activeYardage = yardageByHole[activeHole];
   const caddieEnabled = Boolean(greenTargetsByHole);

@@ -586,6 +586,7 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
           </p>
         ) : (
           <DndContext
+            id={`pairings-dnd-${eventId}`}
             sensors={sensors}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}

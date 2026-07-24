@@ -979,6 +979,29 @@ export function scoresToMap(
   return map;
 }
 
+export async function buildEventScoresRecord(
+  eventId: string,
+  format: string
+): Promise<Record<string, Record<number, number>>> {
+  const [scores, allGroups] = await Promise.all([
+    getScoresForEvent(eventId),
+    getScoreEntryGroups(eventId, format),
+  ]);
+
+  const scoreMap = scoresToMap(
+    scores,
+    format,
+    allGroups.map((group) => ({ id: group.id, matchType: group.matchType ?? null }))
+  );
+
+  const record: Record<string, Record<number, number>> = {};
+  for (const [key, holes] of scoreMap.entries()) {
+    record[key] = Object.fromEntries(holes.entries());
+  }
+
+  return record;
+}
+
 export function formatRyderCupScore(
   teamAPoints: number,
   teamBPoints: number

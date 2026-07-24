@@ -2,13 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import {
+  buildEventScoresRecord,
   getHoleNumbers,
   getScoreEntryGroups,
-  getScoresForEvent,
   getPublishedEventForScoring,
   isScoringEditable,
   resolveScoringAccess,
-  scoresToMap,
 } from "@/lib/scoring";
 import { getCaddieContextForEvent } from "@/lib/golf-courses";
 import {
@@ -108,17 +107,7 @@ export default async function ScorePage({ params, searchParams }: ScorePageProps
     );
   }
 
-  const [scores] = await Promise.all([getScoresForEvent(event.id)]);
-
-  const scoreMap = scoresToMap(
-    scores,
-    event.format,
-    allGroups.map((g) => ({ id: g.id, matchType: g.matchType ?? null }))
-  );
-  const initialScores: Record<string, Record<number, number>> = {};
-  for (const [key, holes] of scoreMap.entries()) {
-    initialScores[key] = Object.fromEntries(holes.entries());
-  }
+  const initialScores = await buildEventScoresRecord(event.id, event.format);
 
   const readOnly = !isScoringEditable(event.scoringStatus);
 
