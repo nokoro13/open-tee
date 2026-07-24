@@ -309,7 +309,7 @@ export function ScoreEntryForm({
   hasHeatmapByHole = {},
   selectedTeeKey = null,
   selectedTeeColor = null,
-  pollIntervalMs = 4000,
+  pollIntervalMs = 1000,
 }: ScoreEntryFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
