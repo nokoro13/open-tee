@@ -14,6 +14,7 @@ import {
 import type { EventFormat } from "@/lib/event-formats";
 import { getEventFormat } from "@/lib/event-formats";
 import { generateEventSlug } from "@/lib/slug";
+import { validateEventDateNotPast } from "@/lib/events";
 import type { StartFormat } from "@/lib/start-format";
 import {
   parseRegistrationWindowInput,
@@ -231,6 +232,11 @@ export async function createEvent(
   const parsed = parseEventInput(input);
   if ("success" in parsed) {
     return parsed;
+  }
+
+  const dateError = validateEventDateNotPast(parsed.date);
+  if (dateError) {
+    return { success: false, error: dateError };
   }
 
   const org = await requireOrganization();

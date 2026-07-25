@@ -49,7 +49,6 @@ export async function GET(
     ["Scoring completion %", String(report.scoringCompletionPercent)],
     ["Scores entered", String(report.scoresEntered)],
     ["Waitlist size", String(report.waitlistSize)],
-    ["Early bird registrations", String(report.earlyBirdRegistrations)],
   ];
 
   const csv = rows

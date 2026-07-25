@@ -344,7 +344,7 @@ export function LandingPage({ stats = defaultStats }: LandingPageProps) {
                   className="mt-6 sm:mt-8"
                   items={[
                     "Custom event branding and URLs",
-                    "Early-bird and group pricing",
+                    "Group pricing",
                     "Waitlist management",
                     "Automated confirmation emails",
                   ]}

@@ -189,8 +189,6 @@ export const events = pgTable("events", {
     .default(false),
   maxGroupSize: integer("max_group_size").notNull().default(4),
   smsRemindersEnabled: boolean("sms_reminders_enabled").notNull().default(false),
-  earlyBirdFeeCents: integer("early_bird_fee_cents"),
-  earlyBirdEndsAt: timestamp("early_bird_ends_at", { withTimezone: true }),
   status: eventStatusEnum("status").notNull().default("draft"),
   description: text("description"),
   registrationOpens: timestamp("registration_opens", { withTimezone: true }),

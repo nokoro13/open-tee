@@ -22,6 +22,7 @@ export type DatePickerProps = {
   disabled?: boolean;
   required?: boolean;
   className?: string;
+  minDate?: string;
 };
 
 function parseDateValue(value: string): Date | undefined {
@@ -43,10 +44,15 @@ export function DatePicker({
   disabled,
   required,
   className,
+  minDate,
 }: DatePickerProps) {
   const [open, setOpen] = React.useState(false);
   const selected = parseDateValue(value);
   const today = React.useMemo(() => new Date(), []);
+  const minSelectable = React.useMemo(
+    () => (minDate ? parseDateValue(minDate) : undefined),
+    [minDate]
+  );
   const startMonth = React.useMemo(
     () => new Date(today.getFullYear(), 0),
     [today]
@@ -90,10 +96,11 @@ export function DatePicker({
           <Calendar
             mode="single"
             selected={selected}
-            defaultMonth={selected ?? today}
+            defaultMonth={selected ?? minSelectable ?? today}
             captionLayout="dropdown"
             startMonth={startMonth}
             endMonth={endMonth}
+            disabled={minSelectable ? { before: minSelectable } : undefined}
             onSelect={(date) => {
               if (date) {
                 onChange(toDateValue(date));

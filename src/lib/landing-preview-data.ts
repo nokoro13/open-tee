@@ -45,8 +45,6 @@ function baseEvent(overrides: Partial<Event> = {}): Event {
     groupRegistrationEnabled: true,
     maxGroupSize: 4,
     smsRemindersEnabled: true,
-    earlyBirdFeeCents: null,
-    earlyBirdEndsAt: null,
     status: "published",
     description:
       "Join us for our annual charity outing supporting local youth golf programs. Lunch, awards, and a silent auction included.",

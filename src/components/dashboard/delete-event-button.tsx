@@ -23,7 +23,7 @@ type DeleteEventButtonProps = {
   eventId: string;
   eventName: string;
   status: Event["status"];
-  variant?: "default" | "compact";
+  variant?: "default" | "compact" | "ghost";
   className?: string;
 };
 
@@ -65,25 +65,41 @@ export function DeleteEventButton({
     <div className={className}>
       <Button
         type="button"
-        variant={variant === "compact" ? "ghost" : "destructive"}
-        size={variant === "compact" ? "icon-sm" : "lg"}
+        variant={
+          variant === "compact" || variant === "ghost" ? "ghost" : "destructive"
+        }
+        size={variant === "compact" ? "icon-sm" : variant === "ghost" ? "sm" : "lg"}
         className={
           variant === "compact"
             ? "text-muted-foreground hover:text-destructive"
-            : "h-11 w-full sm:w-auto"
+            : variant === "ghost"
+              ? "text-muted-foreground hover:text-destructive"
+              : "h-11 w-full sm:w-auto"
         }
         disabled={isPending}
         aria-label={variant === "compact" ? `Delete ${eventName}` : undefined}
         onClick={() => setDialogOpen(true)}
       >
-        <Trash2 className={variant === "compact" ? "size-4" : undefined} />
-        {variant === "default" &&
-          (isPending ? "Deleting..." : status === "draft" ? "Delete draft" : "Delete event")}
+        {variant === "compact" ? (
+          <Trash2 className="size-4" />
+        ) : variant === "ghost" ? null : (
+          <Trash2 />
+        )}
+        {variant !== "compact" &&
+          (isPending
+            ? "Deleting..."
+            : status === "draft"
+              ? "Delete draft"
+              : "Delete event")}
       </Button>
 
       {error && (
         <p
-          className={variant === "compact" ? "mt-1 text-xs text-destructive" : "mt-2 text-sm text-destructive"}
+          className={
+            variant === "compact" || variant === "ghost"
+              ? "mt-1 text-xs text-destructive"
+              : "mt-2 text-sm text-destructive"
+          }
           role="alert"
         >
           {error}

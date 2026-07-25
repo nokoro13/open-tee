@@ -8,7 +8,6 @@ import {
   sponsorPurchases,
 } from "@/db/schema";
 import { getRegistrationCount } from "@/lib/events";
-import { getActiveEntryFee } from "@/lib/event-pricing";
 
 export type EventAnalyticsReport = {
   eventId: string;
@@ -29,7 +28,6 @@ export type EventAnalyticsReport = {
   scoringCompletionPercent: number;
   holesExpected: number;
   scoresEntered: number;
-  earlyBirdRegistrations: number;
   waitlistSize: number;
 };
 
@@ -95,14 +93,6 @@ export async function buildEventAnalyticsReport(
       ? Math.min(100, Math.round((scoresEntered / holesExpected) * 100))
       : 0;
 
-  const activePricing = getActiveEntryFee(event);
-  const earlyBirdRegistrations = paid.filter(
-    (row) =>
-      row.entryFeePaidCents != null &&
-      row.entryFeePaidCents < event.entryFeeCents &&
-      row.entryFeePaidCents === activePricing.feeCents
-  ).length;
-
   const averageEntryFeeCents =
     paid.length > 0 ? Math.round(entryFeeRevenueCents / paid.length) : 0;
 
@@ -125,7 +115,6 @@ export async function buildEventAnalyticsReport(
     scoringCompletionPercent,
     holesExpected,
     scoresEntered,
-    earlyBirdRegistrations,
     waitlistSize: event.waitlistEntries.length,
   };
 }

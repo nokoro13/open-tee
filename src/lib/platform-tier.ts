@@ -10,7 +10,6 @@ export type ProFeature =
   | "custom_branding"
   | "sponsor_packages"
   | "waitlist"
-  | "early_bird_pricing"
   | "group_registration"
   | "sms_reminders"
   | "multi_flight"

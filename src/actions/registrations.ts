@@ -223,9 +223,7 @@ export async function registerForEvent(
           currency: BILLING_CURRENCY,
           product_data: {
             name: `${event.name} — Entry fee`,
-            description: pricing.isEarlyBird
-              ? `${event.courseName} · Early bird pricing`
-              : `${event.courseName} · ${getEventFormatLabel(event.format)}`,
+            description: `${event.courseName} · ${getEventFormatLabel(event.format)}`,
           },
           unit_amount: pricing.feeCents,
         },
@@ -590,9 +588,7 @@ export async function registerGroupForEvent(
           currency: BILLING_CURRENCY,
           product_data: {
             name: `${event.name} — Group entry (${players.length} players)`,
-            description: pricing.isEarlyBird
-              ? "Early bird group registration"
-              : "Group registration",
+            description: "Group registration",
           },
           unit_amount: pricing.feeCents,
         },

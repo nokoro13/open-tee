@@ -24,6 +24,7 @@ type RegistrationWindowFieldsProps = {
   opensAt: Date | null;
   closesAt: Date | null;
   editable?: boolean;
+  disabled?: boolean;
   onDraftChange?: (values: RegistrationWindowFieldValues) => void;
   draftValues?: RegistrationWindowFieldValues;
 };
@@ -81,12 +82,14 @@ export function RegistrationWindowFields({
   opensAt,
   closesAt,
   editable = false,
+  disabled = false,
   onDraftChange,
   draftValues,
 }: RegistrationWindowFieldsProps) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const fieldsDisabled = disabled || isPending;
   const [liveValues, setLiveValues] = useState<RegistrationWindowFieldValues>(() =>
     registrationWindowValuesFromEvent({ registrationOpens: opensAt, registrationCloses: closesAt })
   );
@@ -154,7 +157,7 @@ export function RegistrationWindowFields({
           timeValue={values.opensTime}
           datePlaceholder="Select open date"
           description="Leave blank to open immediately when the event is published."
-          disabled={isPending}
+          disabled={fieldsDisabled}
           onDateChange={(value) => updateValue("opensDate", value)}
           onTimeChange={(value) => updateValue("opensTime", value)}
         />
@@ -166,7 +169,7 @@ export function RegistrationWindowFields({
           timeValue={values.closesTime}
           datePlaceholder="Select close date"
           description="Leave blank to stay open until you close registration or open scoring."
-          disabled={isPending}
+          disabled={fieldsDisabled}
           onDateChange={(value) => updateValue("closesDate", value)}
           onTimeChange={(value) => updateValue("closesTime", value)}
         />
@@ -174,7 +177,7 @@ export function RegistrationWindowFields({
 
       {error && <FieldError>{error}</FieldError>}
 
-      {eventId && (
+      {eventId && !onDraftChange && (
         <div className="flex flex-wrap items-center gap-3">
           <Button
             type="button"

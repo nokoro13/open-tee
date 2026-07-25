@@ -22,7 +22,6 @@ import { EventForm } from "@/components/dashboard/event-form";
 import { PairingsPanel } from "@/components/dashboard/pairings-panel";
 import { PublishEventCard } from "@/components/dashboard/publish-event-card";
 import { RegistrationsList } from "@/components/dashboard/registrations-list";
-import { RegistrationWindowFields } from "@/components/dashboard/registration-window-fields";
 import { EventLifecycleCard } from "@/components/dashboard/event-lifecycle-card";
 import { getFlightsForEvent } from "@/actions/flights";
 import { getSponsorPackagesForDashboard } from "@/actions/sponsors";
@@ -431,30 +430,14 @@ export default async function EventDetailPage({
                 </EventTabPanel>
 
                 <EventTabPanel tab="publish">
-                  <>
-                    <PublishEventCard
-                      eventId={event.id}
-                      eventName={event.name}
-                      hasActiveSubscription={isOrgSubscriptionActive(org)}
-                      subscribed={subscribed === "1"}
-                      subscribeCanceled={subscribe_canceled === "1"}
-                    />
-                    <Card className="rounded-2xl border-dashed">
-                      <CardHeader>
-                        <CardTitle>Delete draft</CardTitle>
-                        <CardDescription>
-                          Permanently remove this draft and all associated data.
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <DeleteEventButton
-                          eventId={event.id}
-                          eventName={event.name}
-                          status={event.status}
-                        />
-                      </CardContent>
-                    </Card>
-                  </>
+                  <PublishEventCard
+                    eventId={event.id}
+                    eventName={event.name}
+                    eventStatus={event.status}
+                    hasActiveSubscription={isOrgSubscriptionActive(org)}
+                    subscribed={subscribed === "1"}
+                    subscribeCanceled={subscribe_canceled === "1"}
+                  />
             </EventTabPanel>
           </>
         )}
@@ -603,26 +586,6 @@ export default async function EventDetailPage({
                     )}
 
                     <EventLifecycleCard event={event} />
-
-                    {event.status === "published" && (
-                      <Card className="rounded-2xl">
-                        <CardHeader>
-                          <CardTitle>Registration window</CardTitle>
-                          <CardDescription>
-                            Set when players can register. Leave blank to use
-                            defaults.
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                          <RegistrationWindowFields
-                            eventId={event.id}
-                            opensAt={event.registrationOpens}
-                            closesAt={event.registrationCloses}
-                            editable
-                          />
-                        </CardContent>
-                      </Card>
-                    )}
 
                     <PayoutInfoCard />
 

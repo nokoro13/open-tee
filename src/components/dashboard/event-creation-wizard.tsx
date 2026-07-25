@@ -54,7 +54,7 @@ import {
   getEventFormatLabel,
   type EventFormat,
 } from "@/lib/event-formats";
-import { formatEventDate, formatFee } from "@/lib/events";
+import { formatEventDate, formatFee, todayDateString, validateEventDateNotPast } from "@/lib/events";
 import {
   getStartFormatSummary,
   validateStartFormatSettings,
@@ -191,9 +191,11 @@ export function EventCreationWizard({
       case "name":
         if (!form.name.trim()) return "Event name is required.";
         return null;
-      case "date":
-        if (!form.date) return "Event date is required.";
+      case "date": {
+        const dateError = validateEventDateNotPast(form.date);
+        if (dateError) return dateError;
         return null;
+      }
       case "format":
         if (!getEventFormat(form.format)) return "Select a valid format.";
         if (form.format === "ryder_cup") {
@@ -378,6 +380,7 @@ export function EventCreationWizard({
                 value={form.date}
                 onChange={(value) => updateField("date", value)}
                 placeholder="Select event date"
+                minDate={todayDateString()}
               />
             </Field>
           </FieldGroup>

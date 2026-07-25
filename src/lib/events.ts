@@ -127,6 +127,22 @@ export function formatEventDate(dateStr: string): string {
   });
 }
 
+export function todayDateString(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+export function validateEventDateNotPast(dateStr: string): string | null {
+  if (!dateStr) return "Event date is required.";
+  if (dateStr < todayDateString()) {
+    return "Event date cannot be in the past.";
+  }
+  return null;
+}
+
 export function formatFee(cents: number): string {
   if (cents === 0) return "Free";
   return `$${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}`;

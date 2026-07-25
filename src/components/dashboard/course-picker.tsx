@@ -315,15 +315,15 @@ export function CoursePicker({ selection, holes, onChange }: CoursePickerProps) 
           )}
         </Field>
       ) : (
-        <div className="space-y-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-3 text-sm">
+        <div className="space-y-3 rounded-lg border border-primary bg-primary px-3 py-3 text-sm text-primary-foreground">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="font-medium">{selectedCourseName}</p>
               {selectedCourseAddress && (
-                <p className="text-muted-foreground">{selectedCourseAddress}</p>
+                <p className="text-primary-foreground/80">{selectedCourseAddress}</p>
               )}
               {(selectedCourse?.phone || selectedCourse?.website) && (
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-primary-foreground/80">
                   {[selectedCourse.phone, selectedCourse.website]
                     .filter(Boolean)
                     .join(" · ")}
@@ -334,7 +334,7 @@ export function CoursePicker({ selection, holes, onChange }: CoursePickerProps) 
               type="button"
               variant="ghost"
               size="sm"
-              className="shrink-0 text-muted-foreground"
+              className="shrink-0 text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
               onClick={handleClearCourse}
             >
               Change
@@ -342,19 +342,19 @@ export function CoursePicker({ selection, holes, onChange }: CoursePickerProps) 
           </div>
 
           {isLoadingCourse && (
-            <p className="text-sm text-muted-foreground">Loading tees...</p>
+            <p className="text-sm text-primary-foreground/80">Loading tees...</p>
           )}
 
           {!isLoadingCourse && teeOptions.length > 0 && (
             <Field>
-              <FieldLabel>Tournament tees</FieldLabel>
+              <FieldLabel className="text-primary-foreground">Tournament tees</FieldLabel>
               <Select
                 value={selectedTeeKey ?? undefined}
                 onValueChange={(value) => {
                   if (value) void handleTeeChange(value);
                 }}
               >
-                <SelectTrigger className="h-11 w-full">
+                <SelectTrigger className="h-11 w-full bg-background text-foreground">
                   <SelectValue placeholder="Select tees">
                     {teeOptions.find((tee) => tee.tee_key === selectedTeeKey)
                       ? formatTeeOptionLabel(
@@ -373,14 +373,14 @@ export function CoursePicker({ selection, holes, onChange }: CoursePickerProps) 
                   ))}
                 </SelectContent>
               </Select>
-              <FieldDescription>
+              <FieldDescription className="text-primary-foreground/80">
                 Yardages and rating on scorecards use the selected tee.
               </FieldDescription>
             </Field>
           )}
 
           {!isLoadingCourse && teeOptions.length === 0 && selection.teeName && (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-primary-foreground/80">
               Selected tee: {selection.teeName}
             </p>
           )}

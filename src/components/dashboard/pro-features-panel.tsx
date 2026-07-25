@@ -3,6 +3,8 @@
 import { useState, useTransition } from "react";
 
 import { updateProSettings } from "@/actions/pro-features";
+import { updateRegistrationWindow } from "@/actions/events";
+import { RegistrationWindowFields } from "@/components/dashboard/registration-window-fields";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -11,9 +13,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import type { Event } from "@/db/schema";
+import { registrationWindowValuesFromEvent } from "@/lib/registration-window";
 
 type ProFeaturesPanelProps = {
   event: Event;
@@ -26,37 +27,43 @@ export function ProFeaturesPanel({ event }: ProFeaturesPanelProps) {
   const [form, setForm] = useState({
     waitlistEnabled: event.waitlistEnabled,
     groupRegistrationEnabled: event.groupRegistrationEnabled,
-    maxGroupSize: event.maxGroupSize,
     smsRemindersEnabled: event.smsRemindersEnabled,
-    earlyBirdFeeDollars:
-      event.earlyBirdFeeCents != null
-        ? String(event.earlyBirdFeeCents / 100)
-        : "",
-    earlyBirdEndsAt: event.earlyBirdEndsAt
-      ? event.earlyBirdEndsAt.toISOString().slice(0, 16)
-      : "",
   });
+  const [registrationWindow, setRegistrationWindow] = useState(() =>
+    registrationWindowValuesFromEvent({
+      registrationOpens: event.registrationOpens,
+      registrationCloses: event.registrationCloses,
+    })
+  );
 
   function handleSave() {
     setMessage(null);
     setError(null);
     startTransition(async () => {
-      const result = await updateProSettings(event.id, {
+      const proResult = await updateProSettings(event.id, {
         waitlistEnabled: form.waitlistEnabled,
         groupRegistrationEnabled: form.groupRegistrationEnabled,
-        maxGroupSize: form.maxGroupSize,
         smsRemindersEnabled: form.smsRemindersEnabled,
-        earlyBirdFeeDollars: form.earlyBirdFeeDollars
-          ? Number.parseFloat(form.earlyBirdFeeDollars)
-          : null,
-        earlyBirdEndsAt: form.earlyBirdEndsAt || null,
       });
 
-      if (result.success) {
-        setMessage("Settings saved.");
-      } else {
-        setError(result.error);
+      if (!proResult.success) {
+        setError(proResult.error);
+        return;
       }
+
+      if (event.status === "published") {
+        const windowResult = await updateRegistrationWindow(
+          event.id,
+          registrationWindow
+        );
+
+        if (!windowResult.success) {
+          setError(windowResult.error);
+          return;
+        }
+      }
+
+      setMessage("Settings saved.");
     });
   }
 
@@ -65,7 +72,7 @@ export function ProFeaturesPanel({ event }: ProFeaturesPanelProps) {
       <CardHeader>
         <CardTitle>Registration features</CardTitle>
         <CardDescription>
-          Waitlist, early-bird pricing, group signup, and SMS reminders.
+          Registration window, waitlist, group signup, and SMS reminders.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -107,49 +114,18 @@ export function ProFeaturesPanel({ event }: ProFeaturesPanelProps) {
           </label>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="max-group-size">Max group size</Label>
-            <Input
-              id="max-group-size"
-              type="number"
-              min={2}
-              max={4}
-              value={form.maxGroupSize}
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  maxGroupSize: Number.parseInt(e.target.value, 10) || 4,
-                })
-              }
+        {event.status === "published" && (
+          <div className="border-t border-border/70 pt-5">
+            <RegistrationWindowFields
+              opensAt={event.registrationOpens}
+              closesAt={event.registrationCloses}
+              draftValues={registrationWindow}
+              onDraftChange={setRegistrationWindow}
+              editable
+              disabled={isPending}
             />
           </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="early-bird-fee">Early bird fee ($)</Label>
-            <Input
-              id="early-bird-fee"
-              inputMode="decimal"
-              placeholder="Leave blank to disable"
-              value={form.earlyBirdFeeDollars}
-              onChange={(e) =>
-                setForm({ ...form, earlyBirdFeeDollars: e.target.value })
-              }
-            />
-          </div>
-
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="early-bird-ends">Early bird ends</Label>
-            <Input
-              id="early-bird-ends"
-              type="datetime-local"
-              value={form.earlyBirdEndsAt}
-              onChange={(e) =>
-                setForm({ ...form, earlyBirdEndsAt: e.target.value })
-              }
-            />
-          </div>
-        </div>
+        )}
 
         {message && <p className="text-sm text-primary">{message}</p>}
         {error && <p className="text-sm text-destructive">{error}</p>}

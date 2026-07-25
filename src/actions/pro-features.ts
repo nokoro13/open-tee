@@ -16,10 +16,7 @@ export type ActionResult =
 export type ProSettingsInput = {
   waitlistEnabled?: boolean;
   groupRegistrationEnabled?: boolean;
-  maxGroupSize?: number;
   smsRemindersEnabled?: boolean;
-  earlyBirdFeeDollars?: number | null;
-  earlyBirdEndsAt?: string | null;
 };
 
 export async function updateProSettings(
@@ -45,39 +42,8 @@ export async function updateProSettings(
     updates.groupRegistrationEnabled = input.groupRegistrationEnabled;
   }
 
-  if (input.maxGroupSize != null) {
-    if (input.maxGroupSize < 2 || input.maxGroupSize > 4) {
-      return { success: false, error: "Group size must be between 2 and 4." };
-    }
-    updates.maxGroupSize = input.maxGroupSize;
-  }
-
   if (input.smsRemindersEnabled != null) {
     updates.smsRemindersEnabled = input.smsRemindersEnabled;
-  }
-
-  if ("earlyBirdFeeDollars" in input) {
-    if (input.earlyBirdFeeDollars == null) {
-      updates.earlyBirdFeeCents = null;
-      updates.earlyBirdEndsAt = null;
-    } else {
-      if (input.earlyBirdFeeDollars < 0) {
-        return { success: false, error: "Early bird fee cannot be negative." };
-      }
-      if (input.earlyBirdFeeDollars >= event.entryFeeCents / 100) {
-        return {
-          success: false,
-          error: "Early bird fee must be lower than the standard entry fee.",
-        };
-      }
-      updates.earlyBirdFeeCents = Math.round(input.earlyBirdFeeDollars * 100);
-    }
-  }
-
-  if ("earlyBirdEndsAt" in input) {
-    updates.earlyBirdEndsAt = input.earlyBirdEndsAt
-      ? new Date(input.earlyBirdEndsAt)
-      : null;
   }
 
   await getDb().update(events).set(updates).where(eq(events.id, eventId));

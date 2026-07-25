@@ -22,6 +22,13 @@
       "when": 1784586515113,
       "tag": "0002_furry_whistler",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1784963943520,
+      "tag": "0003_mighty_power_man",
+      "breakpoints": true
     }
   ]
 }
