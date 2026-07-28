@@ -2,6 +2,8 @@ import type { HoleMapCamera } from "@/lib/hole-map-view";
 
 export type FlyHoleMapCameraOptions = {
   durationMs?: number;
+  /** Prefer this over map.getHeading(), which is unreliable on some platforms mid-flight. */
+  fromHeading?: number;
   onComplete?: () => void;
 };
 
@@ -41,6 +43,11 @@ function durationForFly(from: HoleMapCamera, to: HoleMapCamera): number {
   return Math.min(Math.max(650, distanceScore + spinScore + 550), 1400);
 }
 
+/** Shortest angular distance between two headings in degrees. */
+export function headingDeltaDegrees(a: number, b: number): number {
+  return Math.abs((((b - a + 540) % 360) - 180));
+}
+
 /** Smoothly flies the map camera — returns a cancel function. */
 export function flyHoleMapCamera(
   map: google.maps.Map,
@@ -48,6 +55,9 @@ export function flyHoleMapCamera(
   options: FlyHoleMapCameraOptions = {}
 ): () => void {
   const from = readCurrentCamera(map);
+  if (options.fromHeading != null) {
+    from.heading = options.fromHeading;
+  }
   const durationMs = options.durationMs ?? durationForFly(from, target);
   const startedAt = performance.now();
   let frameId = 0;
@@ -69,6 +79,8 @@ export function flyHoleMapCamera(
     if (rawProgress < 1) {
       frameId = requestAnimationFrame(step);
     } else {
+      // Some browsers (notably Windows Chrome) drop per-frame heading during rAF.
+      snapHoleMapCamera(map, target);
       options.onComplete?.();
     }
   };

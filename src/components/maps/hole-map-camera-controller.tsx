@@ -5,6 +5,7 @@ import { useMap } from "@vis.gl/react-google-maps";
 
 import {
   flyHoleMapCamera,
+  headingDeltaDegrees,
   snapHoleMapCamera,
 } from "@/lib/hole-map-camera-animation";
 import {
@@ -43,6 +44,7 @@ export function HoleMapCameraController({
   const isFlyingRef = useRef(false);
   const userAdjustedCameraRef = useRef(false);
   const isProgrammaticCameraRef = useRef(false);
+  const lastAppliedHeadingRef = useRef<number | null>(null);
 
   viewRef.current = view;
   enabledRef.current = enabled;
@@ -87,6 +89,7 @@ export function HoleMapCameraController({
           zoom: 17,
           heading: 0,
         });
+        lastAppliedHeadingRef.current = 0;
         hasInitialFitRef.current = true;
         pendingFlyHoleRef.current = null;
         return true;
@@ -99,6 +102,10 @@ export function HoleMapCameraController({
         padding: paddingRef.current,
       });
 
+      const recordAppliedHeading = (heading: number) => {
+        lastAppliedHeadingRef.current = heading;
+      };
+
       const shouldAnimate = animate && hasInitialFitRef.current;
 
       if (shouldAnimate) {
@@ -109,7 +116,9 @@ export function HoleMapCameraController({
         isFlyingRef.current = true;
         isProgrammaticCameraRef.current = true;
         cancelFlyRef.current = flyHoleMapCamera(map, camera, {
+          fromHeading: lastAppliedHeadingRef.current ?? undefined,
           onComplete: () => {
+            recordAppliedHeading(camera.heading);
             isFlyingRef.current = false;
             isProgrammaticCameraRef.current = false;
             cancelFlyRef.current = null;
@@ -124,6 +133,7 @@ export function HoleMapCameraController({
         stopFly();
         markProgrammaticCamera();
         snapHoleMapCamera(map, camera);
+        recordAppliedHeading(camera.heading);
         if (animate) {
           pendingFlyHoleRef.current = null;
         }
@@ -189,6 +199,19 @@ export function HoleMapCameraController({
 
     if (wantsFly) {
       applyCamera(true);
+      return;
+    }
+
+    const headingNeedsCorrection =
+      lastAppliedHeadingRef.current != null &&
+      headingDeltaDegrees(lastAppliedHeadingRef.current, view.bearing) > 0.5;
+
+    if (
+      !userAdjustedCameraRef.current &&
+      !isFlyingRef.current &&
+      headingNeedsCorrection
+    ) {
+      applyCamera(false);
     }
   }, [
     map,
