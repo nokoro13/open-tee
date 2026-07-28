@@ -244,18 +244,24 @@ export function LeaderboardView({
           {event.courseName && (
             <p className="text-sm text-muted-foreground">{event.courseName}</p>
           )}
-          <div className="flex flex-wrap gap-2">
-            <Badge variant="outline">{getEventFormatLabel(event.format)}</Badge>
-            <Badge variant="outline">{event.holes} holes</Badge>
+          <div className="space-y-2.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline">{getEventFormatLabel(event.format)}</Badge>
+              <Badge variant="outline">{event.holes} holes</Badge>
+            </div>
             {showNetToggle && (
-              <div className="inline-flex rounded-full border border-border bg-background p-0.5">
+              <div
+                role="group"
+                aria-label="Score basis"
+                className="inline-flex h-9 rounded-full border border-border bg-muted/30 p-1"
+              >
                 <button
                   type="button"
                   className={cn(
-                    "rounded-full px-3 py-1 text-xs font-medium",
+                    "h-full min-w-18 rounded-full px-5 text-sm font-medium transition-colors",
                     scoreBasis === "gross"
-                      ? "bg-muted text-foreground"
-                      : "text-muted-foreground"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
                   )}
                   onClick={() => setScoreBasis("gross")}
                 >
@@ -264,10 +270,10 @@ export function LeaderboardView({
                 <button
                   type="button"
                   className={cn(
-                    "rounded-full px-3 py-1 text-xs font-medium",
+                    "h-full min-w-18 rounded-full px-5 text-sm font-medium transition-colors",
                     scoreBasis === "net"
-                      ? "bg-muted text-foreground"
-                      : "text-muted-foreground"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
                   )}
                   onClick={() => setScoreBasis("net")}
                 >

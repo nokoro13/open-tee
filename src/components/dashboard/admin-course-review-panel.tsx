@@ -11,6 +11,7 @@ import {
 } from "@/actions/course-onboarding";
 import { CourseHolePinMap } from "@/components/dashboard/course-hole-pin-map";
 import { CourseScorecardReviewTable } from "@/components/dashboard/course-scorecard-review-table";
+import { HoleStrip } from "@/components/dashboard/hole-strip";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,12 +26,10 @@ import type {
 import {
   countCourseMappingProgress,
   extractHolePinsFromFeatures,
-  holeNumbersForCount,
 } from "@/lib/course-onboarding";
 import { sortCourseTees } from "@/lib/course-tees";
-import { parseCoordinate } from "@/lib/green-distance";
+import { parseCoordinate, holeNumbersForMapping } from "@/lib/green-distance";
 import { formatCourseLocationLine } from "@/lib/course-location";
-import { cn } from "@/lib/utils";
 
 type AdminCourseReviewPanelProps = {
   course: GolfCourse & {
@@ -79,13 +78,23 @@ export function AdminCourseReviewPanel({ course }: AdminCourseReviewPanelProps) 
     return lat != null && lng != null ? { lat, lng } : { lat: 0, lng: 0 };
   }, [course.latitude, course.longitude]);
 
-  const holeNumbers = useMemo(
-    () => holeNumbersForCount(course.holeCount),
-    [course.holeCount]
+  const mappingHoleNumbers = useMemo(
+    () =>
+      holeNumbersForMapping({
+        holeCount: course.holeCount,
+        backNineMirrorsFront: course.backNineMirrorsFront,
+      }),
+    [course.holeCount, course.backNineMirrorsFront]
   );
+  const mappingHoleCount = mappingHoleNumbers.length;
 
-  const frontNine = holeNumbers.filter((hole) => hole <= 9);
-  const backNine = holeNumbers.filter((hole) => hole > 9);
+  const mappingPercent =
+    mappingProgress.requiredTeeCount > 0
+      ? Math.round(
+          (mappingProgress.mappedTeeCount / mappingProgress.requiredTeeCount) *
+            100
+        )
+      : 0;
 
   const activeHoleScorecardYardages = useMemo(() => {
     const hole = course.courseHoles.find(
@@ -102,6 +111,10 @@ export function AdminCourseReviewPanel({ course }: AdminCourseReviewPanelProps) 
         .filter((entry): entry is [string, number] => entry != null)
     );
   }, [activeHole, course.courseHoles, sortedTees]);
+
+  const activeHolePar = course.courseHoles.find(
+    (entry) => entry.holeNumber === activeHole
+  )?.par;
 
   function isHoleMappingComplete(holeNumber: number) {
     const pins = holePins[holeNumber];
@@ -130,11 +143,12 @@ export function AdminCourseReviewPanel({ course }: AdminCourseReviewPanelProps) 
   }
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-lg border p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="space-y-1">
-            <p className="text-sm text-muted-foreground">
+    <div className="space-y-4 sm:space-y-6">
+      {/* Course summary */}
+      <div className="rounded-xl border bg-card p-4 shadow-sm sm:p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 space-y-1">
+            <p className="text-sm font-medium">
               {course.organization?.name ?? "Unknown organization"}
             </p>
             <p className="text-sm text-muted-foreground">
@@ -158,29 +172,157 @@ export function AdminCourseReviewPanel({ course }: AdminCourseReviewPanelProps) 
               </p>
             )}
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
             <Badge variant="outline">{course.holeCount} holes</Badge>
             <Badge variant="outline">
-              {mappingProgress.mappedHoleCount}/{course.holeCount} greens
+              {mappingProgress.mappedHoleCount}/{mappingHoleCount} greens
             </Badge>
             <Badge variant="outline">
-              {mappingProgress.mappedTeeCount}/{mappingProgress.requiredTeeCount} tee boxes
+              {mappingProgress.mappedTeeCount}/{mappingProgress.requiredTeeCount}{" "}
+              tee boxes
+            </Badge>
+            <Badge variant="outline" className="max-w-full">
+              <span className="truncate">
+                {sortedTees.map((tee) => tee.teeName).join(" · ")}
+              </span>
             </Badge>
           </div>
         </div>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
-        <section className="space-y-3 rounded-lg border p-4">
-          <div>
-            <h2 className="font-medium">Scorecard</h2>
-            <p className="text-sm text-muted-foreground">
-              Par, handicap, and yardages submitted by the course.
+      {/* Hole mapping — full width, primary review surface */}
+      <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
+        <div className="border-b bg-muted/20 px-4 py-3 sm:px-5">
+          <div className="mb-3 sm:mb-0">
+            <h2 className="text-sm font-semibold sm:text-base">Hole mapping</h2>
+            <p className="text-xs text-muted-foreground sm:text-sm">
+              Review greens, tee boxes, and fairway paths hole by hole.
             </p>
           </div>
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Hole {activeHole}
+                {activeHolePar != null ? ` · Par ${activeHolePar}` : ""}
+              </p>
+              <span className="hidden h-4 w-px bg-border sm:inline-block" />
+              <p className="text-xs text-muted-foreground">
+                {mappingProgress.mappedHoleCount}/{mappingHoleCount} greens ·{" "}
+                {mappingProgress.mappedTeeCount}/
+                {mappingProgress.requiredTeeCount} tees
+              </p>
+              <div className="flex min-w-28 flex-1 items-center gap-2 sm:max-w-xs">
+                <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-primary transition-all duration-300"
+                    style={{ width: `${mappingPercent}%` }}
+                  />
+                </div>
+                <span className="text-xs font-medium tabular-nums text-primary">
+                  {mappingPercent}%
+                </span>
+              </div>
+            </div>
+            <div className="hidden shrink-0 items-center gap-2 sm:flex">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon-sm"
+                disabled={activeHole <= 1}
+                onClick={() => setActiveHole((current) => current - 1)}
+              >
+                <ChevronLeft />
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={activeHole >= mappingHoleCount}
+                onClick={() => setActiveHole((current) => current + 1)}
+              >
+                Next hole
+                <ChevronRight />
+              </Button>
+            </div>
+          </div>
+        </div>
 
+        <HoleStrip
+          holes={mappingHoleNumbers}
+          activeHole={activeHole}
+          onSelect={setActiveHole}
+          isHoleComplete={isHoleMappingComplete}
+        />
+
+        <div className="min-h-[min(52vh,560px)] min-w-0 lg:min-h-[min(78vh,820px)]">
+          <CourseHolePinMap
+            readOnly
+            className="h-full min-h-[min(52vh,560px)] lg:min-h-[min(78vh,820px)]"
+            courseCenter={courseCenter}
+            holeNumber={activeHole}
+            courseTees={course.courseTees}
+            initialGreen={holePins[activeHole]?.green ?? null}
+            initialTees={holePins[activeHole]?.tees ?? {}}
+            initialLineBreak={holePins[activeHole]?.lineBreak ?? null}
+            scorecardYardages={activeHoleScorecardYardages}
+            canGoPrevious={activeHole > 1}
+            canGoNext={activeHole < mappingHoleCount}
+            onPreviousHole={() =>
+              setActiveHole((current) => Math.max(1, current - 1))
+            }
+            onNextHole={() =>
+              setActiveHole((current) => Math.min(mappingHoleCount, current + 1))
+            }
+          />
+        </div>
+
+        <div className="flex items-center justify-between gap-3 border-t px-4 py-3 sm:hidden">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-10 flex-1"
+            disabled={activeHole <= 1}
+            onClick={() => setActiveHole((current) => current - 1)}
+          >
+            <ChevronLeft />
+            Previous
+          </Button>
+          <span className="shrink-0 text-xs font-medium tabular-nums text-muted-foreground">
+            {activeHole} / {mappingHoleCount}
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-10 flex-1"
+            disabled={activeHole >= mappingHoleCount}
+            onClick={() => setActiveHole((current) => current + 1)}
+          >
+            Next
+            <ChevronRight />
+          </Button>
+        </div>
+      </section>
+
+      {/* Scorecard — below the map */}
+      <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
+        <div className="border-b px-4 py-3 sm:px-5">
+          <h2 className="text-sm font-semibold sm:text-base">Scorecard</h2>
+          <p className="text-xs text-muted-foreground sm:text-sm">
+            Par, handicap, and yardages submitted by the course.
+          </p>
+        </div>
+
+        <div className="space-y-4 p-4 sm:p-5">
           {course.scorecardImageUrl ? (
-            <div className="relative h-56 w-full overflow-hidden rounded-md border bg-muted/20">
+            <a
+              href={course.scorecardImageUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="relative block h-48 w-full overflow-hidden rounded-lg border bg-muted/20 transition-opacity hover:opacity-90 sm:h-64"
+              aria-label="Open scorecard image in a new tab"
+            >
               <Image
                 src={course.scorecardImageUrl}
                 alt={`${course.name} scorecard`}
@@ -188,7 +330,7 @@ export function AdminCourseReviewPanel({ course }: AdminCourseReviewPanelProps) 
                 className="object-contain"
                 unoptimized
               />
-            </div>
+            </a>
           ) : (
             <p className="text-sm text-muted-foreground">
               No scorecard image uploaded.
@@ -200,163 +342,58 @@ export function AdminCourseReviewPanel({ course }: AdminCourseReviewPanelProps) 
             courseHoles={course.courseHoles}
             sortedTees={sortedTees}
           />
-        </section>
+        </div>
+      </section>
 
-        <section className="overflow-hidden rounded-lg border">
-          <div className="border-b px-4 py-3">
-            <h2 className="font-medium">Hole mapping</h2>
-            <p className="text-sm text-muted-foreground">
-              Review greens, tee boxes, and fairway doglegs hole by hole.
+      {/* Approval actions */}
+      <section className="rounded-xl border bg-card p-4 shadow-sm sm:p-5">
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-sm font-semibold sm:text-base">Decision</h2>
+            <p className="text-xs text-muted-foreground sm:text-sm">
+              Approve to publish this course, or reject with notes for the
+              course owner.
             </p>
           </div>
 
-          <div className="grid min-h-[min(70vh,720px)] lg:grid-cols-[12rem_1fr]">
-            <aside className="flex flex-col border-b bg-muted/20 lg:border-b-0 lg:border-r">
-              <div className="space-y-4 overflow-y-auto px-3 py-3">
-                {[
-                  { label: "Front nine", holes: frontNine },
-                  { label: "Back nine", holes: backNine },
-                ]
-                  .filter((section) => section.holes.length > 0)
-                  .map((section) => (
-                    <div key={section.label}>
-                      <p className="mb-2 px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                        {section.label}
-                      </p>
-                      <div className="grid grid-cols-3 gap-1.5">
-                        {section.holes.map((holeNumber) => {
-                          const complete = isHoleMappingComplete(holeNumber);
-                          const isActive = activeHole === holeNumber;
-
-                          return (
-                            <button
-                              key={holeNumber}
-                              type="button"
-                              onClick={() => setActiveHole(holeNumber)}
-                              className={cn(
-                                "relative flex h-9 items-center justify-center rounded-md text-sm font-medium transition-colors",
-                                isActive
-                                  ? "bg-primary text-primary-foreground shadow-sm"
-                                  : "bg-background/80 text-foreground ring-1 ring-foreground/10 hover:bg-background",
-                                complete && !isActive && "ring-primary/30"
-                              )}
-                            >
-                              {holeNumber}
-                              {complete && (
-                                <CheckCircle2
-                                  className={cn(
-                                    "absolute -right-1 -top-1 size-3.5",
-                                    isActive
-                                      ? "text-primary-foreground"
-                                      : "text-primary"
-                                  )}
-                                />
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-              </div>
-
-              <div className="mt-auto border-t p-3">
-                <div className="grid grid-cols-[auto_1fr_auto] gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon-sm"
-                    disabled={activeHole <= 1}
-                    onClick={() => setActiveHole((current) => current - 1)}
-                  >
-                    <ChevronLeft />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full"
-                    disabled={activeHole >= course.holeCount}
-                    onClick={() => setActiveHole((current) => current + 1)}
-                  >
-                    Next hole
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon-sm"
-                    disabled={activeHole >= course.holeCount}
-                    onClick={() => setActiveHole((current) => current + 1)}
-                  >
-                    <ChevronRight />
-                  </Button>
-                </div>
-              </div>
-            </aside>
-
-            <div className="min-h-[min(52vh,560px)] min-w-0 lg:min-h-0">
-              <CourseHolePinMap
-                readOnly
-                className="h-full min-h-[min(52vh,560px)] lg:min-h-full"
-                courseCenter={courseCenter}
-                holeNumber={activeHole}
-                courseTees={course.courseTees}
-                initialGreen={holePins[activeHole]?.green ?? null}
-                initialTees={holePins[activeHole]?.tees ?? {}}
-                initialLineBreak={holePins[activeHole]?.lineBreak ?? null}
-                scorecardYardages={activeHoleScorecardYardages}
-                canGoPrevious={activeHole > 1}
-                canGoNext={activeHole < course.holeCount}
-                onPreviousHole={() =>
-                  setActiveHole((current) => Math.max(1, current - 1))
-                }
-                onNextHole={() =>
-                  setActiveHole((current) =>
-                    Math.min(course.holeCount, current + 1)
-                  )
-                }
-              />
-            </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              disabled={isPending}
+              onClick={() =>
+                runAction(() => verifySubmittedCourse(course.id), true)
+              }
+            >
+              <CheckCircle2 />
+              Approve and publish
+            </Button>
           </div>
-        </section>
-      </div>
 
-      <div className="space-y-4 rounded-lg border p-4">
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            disabled={isPending}
-            onClick={() =>
-              runAction(() => verifySubmittedCourse(course.id), true)
-            }
-          >
-            Approve and publish
-          </Button>
+          <div className="flex flex-col gap-2 rounded-lg border border-dashed bg-muted/30 p-3 sm:flex-row sm:items-center">
+            <Input
+              className="bg-background sm:flex-1"
+              placeholder="Rejection notes for the course owner"
+              value={rejectNotes}
+              onChange={(event) => setRejectNotes(event.target.value)}
+            />
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="shrink-0 sm:w-auto"
+              disabled={isPending}
+              onClick={() =>
+                runAction(
+                  () => rejectSubmittedCourse(course.id, rejectNotes),
+                  true
+                )
+              }
+            >
+              Reject course
+            </Button>
+          </div>
         </div>
-
-        <div className="flex flex-col gap-2 rounded-lg border border-dashed bg-muted/30 p-3 sm:flex-row sm:items-center">
-          <Input
-            className="bg-background sm:flex-1"
-            placeholder="Rejection notes for the course owner"
-            value={rejectNotes}
-            onChange={(event) => setRejectNotes(event.target.value)}
-          />
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="shrink-0 sm:w-auto"
-            disabled={isPending}
-            onClick={() =>
-              runAction(
-                () => rejectSubmittedCourse(course.id, rejectNotes),
-                true
-              )
-            }
-          >
-            Reject course
-          </Button>
-        </div>
-      </div>
+      </section>
     </div>
   );
 }

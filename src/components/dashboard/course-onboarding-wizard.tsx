@@ -44,6 +44,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
   Sheet,
   SheetContent,
@@ -83,7 +84,7 @@ import type {
   GreenTarget,
   HoleFeature,
 } from "@/db/schema";
-import { parseCoordinate } from "@/lib/green-distance";
+import { parseCoordinate, holeNumbersForMapping } from "@/lib/green-distance";
 import {
   COURSE_COUNTRIES,
   formatCourseLocationLine,
@@ -421,6 +422,9 @@ export function CourseOnboardingWizard({
   const [holeCount, setHoleCount] = useState<"9" | "18">(
     course.holeCount === 9 ? "9" : "18"
   );
+  const [backNineMirrorsFront, setBackNineMirrorsFront] = useState(
+    course.backNineMirrorsFront
+  );
   const [scorecardImageUrl, setScorecardImageUrl] = useState(
     course.scorecardImageUrl ?? ""
   );
@@ -487,6 +491,7 @@ export function CourseOnboardingWizard({
     setLatitude(parseCoordinate(course.latitude)?.toString() ?? "");
     setLongitude(parseCoordinate(course.longitude)?.toString() ?? "");
     setHoleCount(course.holeCount === 9 ? "9" : "18");
+    setBackNineMirrorsFront(course.backNineMirrorsFront);
   }, [
     step,
     course.id,
@@ -498,7 +503,27 @@ export function CourseOnboardingWizard({
     course.latitude,
     course.longitude,
     course.holeCount,
+    course.backNineMirrorsFront,
   ]);
+
+  const mappingLayout = useMemo(
+    () => ({
+      holeCount: course.holeCount,
+      backNineMirrorsFront: course.backNineMirrorsFront,
+    }),
+    [course.holeCount, course.backNineMirrorsFront]
+  );
+  const mappingHoleNumbers = useMemo(
+    () => holeNumbersForMapping(mappingLayout),
+    [mappingLayout]
+  );
+  const mappingHoleCount = mappingHoleNumbers.length;
+
+  useEffect(() => {
+    if (activeHole > mappingHoleCount) {
+      setActiveHole(mappingHoleCount);
+    }
+  }, [activeHole, mappingHoleCount]);
 
   const sortedTees = useMemo(() => sortCourseTees(teeRows), [teeRows]);
   const sortedHandicapRows = useMemo(
@@ -877,6 +902,9 @@ export function CourseOnboardingWizard({
               onValueChange={(value) => {
                 if (value === "9" || value === "18") {
                   setHoleCount(value);
+                  if (value === "9") {
+                    setBackNineMirrorsFront(false);
+                  }
                   setScorecardRows(
                     buildScorecardRows(
                       value === "9" ? 9 : 18,
@@ -896,6 +924,27 @@ export function CourseOnboardingWizard({
               </SelectContent>
             </Select>
           </Field>
+          {holeCount === "18" && (
+            <Field className="sm:col-span-2">
+              <div className="flex items-start justify-between gap-4 rounded-lg border p-4">
+                <div className="space-y-1">
+                  <FieldLabel htmlFor="backNineMirrorsFront">
+                    Back nine mirrors front nine
+                  </FieldLabel>
+                  <FieldDescription>
+                    Enable for 9-hole courses played twice as 18. Map holes 1–9
+                    only; holes 10–18 reuse the same layout. Scorecard data stays
+                    separate for all 18 holes.
+                  </FieldDescription>
+                </div>
+                <Switch
+                  id="backNineMirrorsFront"
+                  checked={backNineMirrorsFront}
+                  onCheckedChange={setBackNineMirrorsFront}
+                />
+              </div>
+            </Field>
+          )}
           <div className="sm:col-span-2">
             <CourseDuplicateWarning
               matches={duplicateCheck.matches}
@@ -920,6 +969,8 @@ export function CourseOnboardingWizard({
                     latitude: lat,
                     longitude: lng,
                     holeCount: holeCount === "9" ? 9 : 18,
+                    backNineMirrorsFront:
+                      holeCount === "18" ? backNineMirrorsFront : false,
                   });
                   if (result.success) setStep("scorecard");
                   return result;
@@ -1388,6 +1439,12 @@ export function CourseOnboardingWizard({
 
       {step === "mapping" && (
         <div className="space-y-3">
+          {course.backNineMirrorsFront && (
+            <div className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-muted-foreground">
+              This course is played twice through the same nine holes. Map holes
+              1–9 only; holes 10–18 reuse this layout during live play.
+            </div>
+          )}
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted-foreground">
               Select a hole, place the green and each tee box, then choose
@@ -1432,7 +1489,7 @@ export function CourseOnboardingWizard({
                   </p>
                   <span className="hidden h-4 w-px bg-border sm:inline-block" />
                   <p className="text-xs text-muted-foreground">
-                    {mappingProgress.mappedHoleCount}/{course.holeCount} greens
+                    {mappingProgress.mappedHoleCount}/{mappingHoleCount} greens
                     · {mappingProgress.mappedTeeCount}/
                     {mappingProgress.requiredTeeCount} tees
                   </p>
@@ -1462,7 +1519,7 @@ export function CourseOnboardingWizard({
                     type="button"
                     variant="outline"
                     size="sm"
-                    disabled={activeHole >= course.holeCount}
+                    disabled={activeHole >= mappingHoleCount}
                     onClick={() => setActiveHole((current) => current + 1)}
                   >
                     Next hole
@@ -1478,7 +1535,7 @@ export function CourseOnboardingWizard({
             </div>
 
             <HoleStrip
-              holes={holeNumbersForCount(course.holeCount)}
+              holes={mappingHoleNumbers}
               activeHole={activeHole}
               onSelect={setActiveHole}
               isHoleComplete={isHoleMappingComplete}
@@ -1496,13 +1553,13 @@ export function CourseOnboardingWizard({
                 scorecardYardages={activeHoleScorecardYardages}
                 isSaving={isPending}
                 canGoPrevious={activeHole > 1}
-                canGoNext={activeHole < course.holeCount}
+                canGoNext={activeHole < mappingHoleCount}
                 onPreviousHole={() =>
                   setActiveHole((current) => Math.max(1, current - 1))
                 }
                 onNextHole={() =>
                   setActiveHole((current) =>
-                    Math.min(course.holeCount, current + 1)
+                    Math.min(mappingHoleCount, current + 1)
                   )
                 }
                 onSavePin={async (pin) => {
@@ -1548,14 +1605,20 @@ export function CourseOnboardingWizard({
                   Previous
                 </Button>
                 <span className="shrink-0 text-xs font-medium tabular-nums text-muted-foreground">
-                  {activeHole} / {course.holeCount}
+                  {activeHole} / {mappingHoleCount}
+                  {course.backNineMirrorsFront && (
+                    <span className="text-muted-foreground">
+                      {" "}
+                      (18-hole scorecard)
+                    </span>
+                  )}
                 </span>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   className="h-10 flex-1"
-                  disabled={activeHole >= course.holeCount}
+                  disabled={activeHole >= mappingHoleCount}
                   onClick={() => setActiveHole((current) => current + 1)}
                 >
                   Next
@@ -1590,7 +1653,10 @@ export function CourseOnboardingWizard({
               </p>
             </div>
             <div className="text-sm text-muted-foreground">
-              <p>{course.holeCount} holes</p>
+              <p>
+                {course.holeCount} holes
+                {course.backNineMirrorsFront && " · 9 physical layouts"}
+              </p>
               <p>
                 {course.courseTees.length} tee sets · {mappingProgress.mappedTeeCount}{" "}
                 tee boxes mapped

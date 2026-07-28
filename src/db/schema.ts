@@ -427,6 +427,9 @@ export const golfCourses = pgTable(
     latitude: text("latitude"),
     longitude: text("longitude"),
     holeCount: integer("hole_count").notNull().default(18),
+    backNineMirrorsFront: boolean("back_nine_mirrors_front")
+      .notNull()
+      .default(false),
     status: golfCourseStatusEnum("status").notNull().default("draft"),
     onboardingStatus: courseOnboardingStatusEnum("onboarding_status")
       .notNull()

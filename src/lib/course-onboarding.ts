@@ -26,7 +26,7 @@ import {
 } from "@/lib/hole-distance-guide";
 import { computeGreenTargets } from "@/lib/green-targets";
 import type { LatLng } from "@/lib/green-distance";
-import { parseCoordinate, yardsBetween } from "@/lib/green-distance";
+import { parseCoordinate, physicalHoleCount, yardsBetween } from "@/lib/green-distance";
 import type { ScorecardHoleSnapshot } from "@/lib/scorecard";
 import {
   type CourseDetail,
@@ -54,17 +54,21 @@ export type CourseMappingProgress = {
 };
 
 export function countCourseMappingProgress(
-  course: Pick<GolfCourse, "holeCount">,
+  course: Pick<GolfCourse, "holeCount" | "backNineMirrorsFront">,
   courseTees: Pick<CourseTee, "teeKey">[],
   greenTargets: { holeNumber: number; targetType: string }[],
-  holeFeatures: { osmId: string | null; featureType: string }[]
+  holeFeatures: { osmId: string | null; featureType: string; holeNumber?: number }[]
 ): CourseMappingProgress {
   const teeKeys = courseTees.map((tee) => tee.teeKey);
-  const requiredTeeCount = course.holeCount * teeKeys.length;
+  const mappingHoleCount = physicalHoleCount(course);
+  const requiredTeeCount = mappingHoleCount * teeKeys.length;
 
   const mappedHoleCount = new Set(
     greenTargets
-      .filter((target) => target.targetType === "middle")
+      .filter(
+        (target) =>
+          target.targetType === "middle" && target.holeNumber <= mappingHoleCount
+      )
       .map((target) => target.holeNumber)
   ).size;
 
@@ -73,12 +77,13 @@ export function countCourseMappingProgress(
     if (feature.featureType !== "tee") continue;
     const parsed = parseManualTeeOsmId(feature.osmId);
     if (!parsed || !teeKeys.includes(parsed.teeKey)) continue;
+    if (parsed.holeNumber > mappingHoleCount) continue;
     mappedTeeKeys.add(`${parsed.holeNumber}:${parsed.teeKey}`);
   }
 
   const mappedTeeCount = mappedTeeKeys.size;
   const isComplete =
-    mappedHoleCount >= course.holeCount &&
+    mappedHoleCount >= mappingHoleCount &&
     (teeKeys.length === 0 || mappedTeeCount >= requiredTeeCount);
 
   return {
@@ -393,7 +398,7 @@ export async function upsertManualGreenTargets(
   }
 }
 
-async function refreshCourseMappedHoleCount(courseId: string) {
+export async function refreshCourseMappedHoleCount(courseId: string) {
   const db = getDb();
   const mappedHoles = await db.query.greenTargets.findMany({
     where: and(

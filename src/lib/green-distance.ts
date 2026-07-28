@@ -13,6 +13,41 @@ export type GreenTargetsByEventHole = Record<number, GreenTargets | null>;
 
 export const MIN_LIVE_DISTANCE_YARDS = 30;
 
+export type CourseMappingLayout = {
+  holeCount: number;
+  backNineMirrorsFront: boolean;
+};
+
+export function physicalHoleCount(course: CourseMappingLayout): number {
+  if (course.backNineMirrorsFront && course.holeCount >= 18) {
+    return 9;
+  }
+  return course.holeCount;
+}
+
+export function courseHoleToPhysicalHole(
+  courseHole: number,
+  course: CourseMappingLayout
+): number {
+  if (course.backNineMirrorsFront && course.holeCount >= 18 && courseHole > 9) {
+    return courseHole - 9;
+  }
+  return courseHole;
+}
+
+export function holeNumbersForMapping(course: CourseMappingLayout): number[] {
+  return Array.from({ length: physicalHoleCount(course) }, (_, index) => index + 1);
+}
+
+export function eventHoleToPhysicalHole(
+  eventHole: number,
+  event: { holes: "9" | "18"; nineSide?: "front" | "back" | null },
+  course: CourseMappingLayout
+): number {
+  const courseHole = eventHoleToCourseHole(eventHole, event);
+  return courseHoleToPhysicalHole(courseHole, course);
+}
+
 export function eventHoleToCourseHole(
   eventHole: number,
   event: { holes: "9" | "18"; nineSide?: "front" | "back" | null }
@@ -44,12 +79,16 @@ export function yardsBetween(from: LatLng, to: LatLng): number {
 export function buildGreenTargetsByEventHole(
   holeNumbers: number[],
   event: { holes: "9" | "18"; nineSide?: "front" | "back" | null },
-  courseHoleTargets: Record<number, GreenTargets | null>
+  physicalHoleTargets: Record<number, GreenTargets | null>,
+  course?: CourseMappingLayout | null
 ): GreenTargetsByEventHole {
   return Object.fromEntries(
     holeNumbers.map((eventHole) => {
       const courseHole = eventHoleToCourseHole(eventHole, event);
-      return [eventHole, courseHoleTargets[courseHole] ?? null];
+      const physicalHole = course
+        ? courseHoleToPhysicalHole(courseHole, course)
+        : courseHole;
+      return [eventHole, physicalHoleTargets[physicalHole] ?? null];
     })
   );
 }

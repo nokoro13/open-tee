@@ -1,11 +1,11 @@
 "use server";
 
 import { auth } from "@clerk/nextjs/server";
-import { eq } from "drizzle-orm";
+import { and, eq, gt } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 import { getDb } from "@/db";
-import { golfCourses } from "@/db/schema";
+import { golfCourses, greenTargets, holeFeatures } from "@/db/schema";
 import { requireOrganization } from "@/lib/auth";
 import {
   countCourseMappingProgress,
@@ -16,6 +16,7 @@ import {
   onboardingStepForCourse,
   replaceCourseHoles,
   replaceCourseTees,
+  refreshCourseMappedHoleCount,
   saveManualGreenPin,
   saveManualLineBreak,
   saveManualTeePin,
@@ -33,7 +34,7 @@ import {
   type CourseTeeInput,
 } from "@/lib/course-tees";
 import { applyOsmOnboardingPrefill } from "@/lib/course-onboarding-osm-prefill";
-import { parseCoordinate } from "@/lib/green-distance";
+import { parseCoordinate, physicalHoleCount } from "@/lib/green-distance";
 import { extractScorecardFromImage } from "@/lib/scorecard-ocr";
 import type { ScorecardHandicapRowInput } from "@/lib/scorecard-handicap-rows";
 import { DEFAULT_SCORECARD_HANDICAP_ROWS } from "@/lib/scorecard-handicap-rows";
@@ -210,6 +211,7 @@ export async function updateCourseOnboardingDetails(
     latitude: number;
     longitude: number;
     holeCount: 9 | 18;
+    backNineMirrorsFront?: boolean;
   }
 ): Promise<OnboardingActionResult> {
   const allowVerifiedEdit = await canEditVerifiedCourse(courseId);
@@ -240,6 +242,11 @@ export async function updateCourseOnboardingDetails(
     return { success: false, error: duplicateCourseError(duplicates) };
   }
 
+  const backNineMirrorsFront =
+    input.holeCount === 18 && input.backNineMirrorsFront === true;
+  const enablingMirroredBackNine =
+    backNineMirrorsFront && !course.backNineMirrorsFront;
+
   await getDb()
     .update(golfCourses)
     .set({
@@ -251,9 +258,24 @@ export async function updateCourseOnboardingDetails(
       latitude: String(input.latitude),
       longitude: String(input.longitude),
       holeCount: input.holeCount,
+      backNineMirrorsFront,
       updatedAt: new Date(),
     })
     .where(eq(golfCourses.id, courseId));
+
+  if (enablingMirroredBackNine) {
+    await getDb()
+      .delete(holeFeatures)
+      .where(
+        and(eq(holeFeatures.courseId, courseId), gt(holeFeatures.holeNumber, 9))
+      );
+    await getDb()
+      .delete(greenTargets)
+      .where(
+        and(eq(greenTargets.courseId, courseId), gt(greenTargets.holeNumber, 9))
+      );
+    await refreshCourseMappedHoleCount(courseId);
+  }
 
   if (input.holeCount !== course.holeCount) {
     const holes = holeNumbersForCount(input.holeCount).map((holeNumber) => {
@@ -428,7 +450,7 @@ export async function saveCourseOnboardingHolePin(
     return { success: false, error: "Course not found." };
   }
 
-  if (holeNumber < 1 || holeNumber > course.holeCount) {
+  if (holeNumber < 1 || holeNumber > physicalHoleCount(course)) {
     return { success: false, error: "Invalid hole number." };
   }
 
@@ -490,7 +512,7 @@ export async function prefillCourseOnboardingFromOsm(
       courseId,
       latitude,
       longitude,
-      holeCount: course.holeCount,
+      holeCount: physicalHoleCount(course),
       courseHoles: course.courseHoles,
       courseTees: course.courseTees,
     });
@@ -673,7 +695,10 @@ export async function verifySubmittedCourse(
     return { success: false, error: "Course has no mapped holes." };
   }
 
-  const holeNumbers = holeNumbersForCount(course.holeCount);
+  const holeNumbers = Array.from(
+    { length: physicalHoleCount(course) },
+    (_, index) => index + 1
+  );
   const { seedElevationForCourse } = await import("@/lib/golf-courses");
   await seedElevationForCourse(courseId, holeNumbers);
 

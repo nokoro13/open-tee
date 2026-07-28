@@ -36,6 +36,13 @@
       "when": 1785185387807,
       "tag": "0004_fat_mariko_yashida",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785271249465,
+      "tag": "0005_mature_jubilee",
+      "breakpoints": true
     }
   ]
 }

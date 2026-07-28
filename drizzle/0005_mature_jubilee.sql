@@ -1,0 +1,1 @@
+ALTER TABLE "golf_courses" ADD COLUMN "back_nine_mirrors_front" boolean DEFAULT false NOT NULL;

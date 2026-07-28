@@ -15,6 +15,7 @@ import {
 import { sortCourseTees, teeMarkerColor } from "@/lib/course-tees";
 import {
   buildGreenTargetsByEventHole,
+  courseHoleToPhysicalHole,
   eventHoleToCourseHole,
   parseCoordinate,
   type GreenTargets,
@@ -93,7 +94,10 @@ export async function searchGolfCourses(query: string, limit = 8) {
 
 export async function getGolfCourseWithDetails(courseId: string) {
   return getDb().query.golfCourses.findFirst({
-    where: eq(golfCourses.id, courseId),
+    where: or(
+      eq(golfCourses.id, courseId),
+      eq(golfCourses.externalCourseId, courseId)
+    ),
     with: {
       holeFeatures: {
         orderBy: [asc(holeFeatures.holeNumber)],
@@ -106,6 +110,38 @@ export async function getGolfCourseWithDetails(courseId: string) {
       },
     },
   });
+}
+
+async function getCourseForGeometryLookup(courseId: string) {
+  return (
+    (await getDb().query.golfCourses.findFirst({
+      where: eq(golfCourses.id, courseId),
+    })) ??
+    (await getDb().query.golfCourses.findFirst({
+      where: eq(golfCourses.externalCourseId, courseId),
+    })) ??
+    null
+  );
+}
+
+export async function resolvePhysicalCourseHole(
+  courseId: string,
+  courseHole: number
+): Promise<number> {
+  const resolved = await resolveCourseHoleGeometry(courseId, courseHole);
+  return resolved?.physicalHole ?? courseHole;
+}
+
+export async function resolveCourseHoleGeometry(
+  courseKey: string,
+  courseHole: number
+): Promise<{ courseId: string; physicalHole: number } | null> {
+  const course = await getCourseForGeometryLookup(courseKey);
+  if (!course) return null;
+  return {
+    courseId: course.id,
+    physicalHole: courseHoleToPhysicalHole(courseHole, course),
+  };
 }
 
 export async function getHoleFeatureCollection(
@@ -226,10 +262,13 @@ export async function getHoleTargets(
   courseId: string,
   holeNumber: number
 ): Promise<GreenTargets | null> {
+  const resolved = await resolveCourseHoleGeometry(courseId, holeNumber);
+  if (!resolved) return null;
+
   const rows = await getDb().query.greenTargets.findMany({
     where: and(
-      eq(greenTargets.courseId, courseId),
-      eq(greenTargets.holeNumber, holeNumber)
+      eq(greenTargets.courseId, resolved.courseId),
+      eq(greenTargets.holeNumber, resolved.physicalHole)
     ),
   });
 
@@ -251,24 +290,30 @@ export async function getGreenTargetsForEvent(event: {
     where: eq(greenTargets.courseId, course.id),
   });
 
-  const byCourseHole: Record<number, GreenTargets | null> = {};
-  const holeNumbers = [
+  const byPhysicalHole: Record<number, GreenTargets | null> = {};
+  const physicalHoles = [
     ...new Set(
-      event.holeNumbers.map((hole) =>
-        eventHoleToCourseHole(hole, {
+      event.holeNumbers.map((hole) => {
+        const courseHole = eventHoleToCourseHole(hole, {
           holes: event.holes,
           nineSide: event.nineSide,
-        })
-      )
+        });
+        return courseHoleToPhysicalHole(courseHole, course);
+      })
     ),
   ];
 
-  for (const holeNumber of holeNumbers) {
-    const holeRows = rows.filter((row) => row.holeNumber === holeNumber);
-    byCourseHole[holeNumber] = targetsFromRows(holeRows);
+  for (const physicalHole of physicalHoles) {
+    const holeRows = rows.filter((row) => row.holeNumber === physicalHole);
+    byPhysicalHole[physicalHole] = targetsFromRows(holeRows);
   }
 
-  return buildGreenTargetsByEventHole(event.holeNumbers, event, byCourseHole);
+  return buildGreenTargetsByEventHole(
+    event.holeNumbers,
+    event,
+    byPhysicalHole,
+    course
+  );
 }
 
 export async function getHoleFeaturesForEvent(event: {
@@ -290,7 +335,8 @@ export async function getHoleFeaturesForEvent(event: {
       holes: event.holes,
       nineSide: event.nineSide,
     });
-    result[eventHole] = await getHoleFeatureCollection(course.id, courseHole);
+    const physicalHole = courseHoleToPhysicalHole(courseHole, course);
+    result[eventHole] = await getHoleFeatureCollection(course.id, physicalHole);
   }
 
   return result;
@@ -300,11 +346,14 @@ export async function getGreenElevationGrid(
   courseId: string,
   holeNumber: number
 ): Promise<GreenElevationGrid | null> {
+  const resolved = await resolveCourseHoleGeometry(courseId, holeNumber);
+  if (!resolved) return null;
+
   return (
     (await getDb().query.greenElevationGrids.findFirst({
       where: and(
-        eq(greenElevationGrids.courseId, courseId),
-        eq(greenElevationGrids.holeNumber, holeNumber)
+        eq(greenElevationGrids.courseId, resolved.courseId),
+        eq(greenElevationGrids.holeNumber, resolved.physicalHole)
       ),
     })) ?? null
   );
@@ -428,12 +477,13 @@ export async function getCaddieContextForEvent(event: {
       holes: event.holes,
       nineSide: event.nineSide,
     });
+    const physicalHole = courseHoleToPhysicalHole(courseHole, course);
     holeFeaturesByHole[eventHole] = await getHoleFeatureCollection(
       course.id,
-      courseHole
+      physicalHole
     );
     hasHeatmapByHole[eventHole] = elevationGrids.some(
-      (grid) => grid.holeNumber === courseHole
+      (grid) => grid.holeNumber === physicalHole
     );
   }
 

@@ -20,11 +20,10 @@ import type {
 import {
   countCourseMappingProgress,
   extractHolePinsFromFeatures,
-  holeNumbersForCount,
 } from "@/lib/course-onboarding";
 import { sortCourseTees } from "@/lib/course-tees";
 import { formatCourseLocationLine } from "@/lib/course-location";
-import { parseCoordinate } from "@/lib/green-distance";
+import { parseCoordinate, holeNumbersForMapping } from "@/lib/green-distance";
 import { cn } from "@/lib/utils";
 
 type VerifiedCoursePreviewPanelProps = {
@@ -73,13 +72,19 @@ export function VerifiedCoursePreviewPanel({
     return lat != null && lng != null ? { lat, lng } : { lat: 0, lng: 0 };
   }, [course.latitude, course.longitude]);
 
-  const holeNumbers = useMemo(
-    () => holeNumbersForCount(course.holeCount),
-    [course.holeCount]
+  const mappingHoleNumbers = useMemo(
+    () =>
+      holeNumbersForMapping({
+        holeCount: course.holeCount,
+        backNineMirrorsFront: course.backNineMirrorsFront,
+      }),
+    [course.holeCount, course.backNineMirrorsFront]
   );
 
-  const frontNine = holeNumbers.filter((hole) => hole <= 9);
-  const backNine = holeNumbers.filter((hole) => hole > 9);
+  const mappingHoleCount = mappingHoleNumbers.length;
+
+  const mappingFrontNine = mappingHoleNumbers.filter((hole) => hole <= 9);
+  const mappingBackNine = mappingHoleNumbers.filter((hole) => hole > 9);
 
   const activeHoleScorecardYardages = useMemo(() => {
     const hole = course.courseHoles.find(
@@ -140,7 +145,7 @@ export function VerifiedCoursePreviewPanel({
             <Badge variant="default">Verified</Badge>
             <Badge variant="outline">{course.holeCount} holes</Badge>
             <Badge variant="outline">
-              {mappingProgress.mappedHoleCount}/{course.holeCount} mapped
+              {mappingProgress.mappedHoleCount}/{mappingHoleCount} mapped
             </Badge>
             <Badge variant="outline" className="max-w-full">
               <span className="truncate">
@@ -206,7 +211,7 @@ export function VerifiedCoursePreviewPanel({
           {/* Mobile: horizontal hole strip */}
           <div className="border-b bg-muted/20 lg:hidden">
             <HoleStrip
-              holes={holeNumbers}
+              holes={mappingHoleNumbers}
               activeHole={activeHole}
               onSelect={setActiveHole}
               isHoleComplete={isHoleMappingComplete}
@@ -218,8 +223,8 @@ export function VerifiedCoursePreviewPanel({
             <aside className="hidden flex-col border-r bg-muted/20 lg:flex">
               <div className="space-y-4 overflow-y-auto px-3 py-3">
                 {[
-                  { label: "Front nine", holes: frontNine },
-                  { label: "Back nine", holes: backNine },
+                  { label: "Front nine", holes: mappingFrontNine },
+                  { label: "Back nine", holes: mappingBackNine },
                 ]
                   .filter((section) => section.holes.length > 0)
                   .map((section) => (
@@ -279,7 +284,7 @@ export function VerifiedCoursePreviewPanel({
                     type="button"
                     variant="outline"
                     className="w-full"
-                    disabled={activeHole >= course.holeCount}
+                    disabled={activeHole >= mappingHoleCount}
                     onClick={() => setActiveHole((current) => current + 1)}
                   >
                     Next hole
@@ -288,7 +293,7 @@ export function VerifiedCoursePreviewPanel({
                     type="button"
                     variant="outline"
                     size="icon-sm"
-                    disabled={activeHole >= course.holeCount}
+                    disabled={activeHole >= mappingHoleCount}
                     onClick={() => setActiveHole((current) => current + 1)}
                   >
                     <ChevronRight />
@@ -309,13 +314,13 @@ export function VerifiedCoursePreviewPanel({
                 initialLineBreak={holePins[activeHole]?.lineBreak ?? null}
                 scorecardYardages={activeHoleScorecardYardages}
                 canGoPrevious={activeHole > 1}
-                canGoNext={activeHole < course.holeCount}
+                canGoNext={activeHole < mappingHoleCount}
                 onPreviousHole={() =>
                   setActiveHole((current) => Math.max(1, current - 1))
                 }
                 onNextHole={() =>
                   setActiveHole((current) =>
-                    Math.min(course.holeCount, current + 1)
+                    Math.min(mappingHoleCount, current + 1)
                   )
                 }
               />
@@ -336,7 +341,7 @@ export function VerifiedCoursePreviewPanel({
               Previous
             </Button>
             <span className="shrink-0 text-xs font-medium tabular-nums text-muted-foreground">
-              {activeHole} / {course.holeCount}
+              {activeHole} / {mappingHoleCount}
             </span>
             <Button
               type="button"
