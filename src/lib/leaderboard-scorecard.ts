@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 
 import { getDb } from "@/db";
 import { events, pairingGroups, registrations } from "@/db/schema";
-import { getLeaderboardMode } from "@/lib/event-formats";
+import { deriveTeamUnits, getLeaderboardMode } from "@/lib/event-formats";
 import {
   strokesToStablefordPoints,
   type HoleScores,
@@ -235,9 +235,14 @@ type EntryContext = {
   players: { id: string; name: string; handicap: string | null }[];
   groupId: string | null;
   matchType: string | null;
+  teamSide?: "a" | "b" | "team";
 };
 
-async function loadEntryContexts(eventId: string, format: string) {
+async function loadEntryContexts(
+  eventId: string,
+  format: string,
+  teamSize: number | null
+) {
   const groups = await getDb().query.pairingGroups.findMany({
     where: eq(pairingGroups.eventId, eventId),
     with: { registrations: true },
@@ -248,7 +253,6 @@ async function loadEntryContexts(eventId: string, format: string) {
   });
 
   const contexts = new Map<string, EntryContext>();
-  const usePairs = format === "best_ball";
 
   for (const group of groups) {
     const active = group.registrations.filter(
@@ -256,33 +260,21 @@ async function loadEntryContexts(eventId: string, format: string) {
     );
     if (active.length === 0) continue;
 
-    if (usePairs) {
-      for (const side of ["a", "b"] as const) {
-        const teamPlayers = active.filter((player) => player.teamSide === side);
-        if (teamPlayers.length === 0) continue;
+    for (const unit of deriveTeamUnits(format, teamSize, active)) {
+      const key =
+        unit.side === "team" ? group.id : `${group.id}:${unit.side}`;
 
-        contexts.set(`${group.id}:${side}`, {
-          groupId: group.id,
-          matchType: group.matchType,
-          players: teamPlayers.map((player) => ({
-            id: player.id,
-            name: player.name,
-            handicap: player.handicap,
-          })),
-        });
-      }
-      continue;
+      contexts.set(key, {
+        groupId: group.id,
+        matchType: group.matchType,
+        teamSide: unit.side,
+        players: unit.players.map((player) => ({
+          id: player.id,
+          name: player.name,
+          handicap: player.handicap,
+        })),
+      });
     }
-
-    contexts.set(group.id, {
-      groupId: group.id,
-      matchType: group.matchType,
-      players: active.map((player) => ({
-        id: player.id,
-        name: player.name,
-        handicap: player.handicap,
-      })),
-    });
   }
 
   for (const player of soloPlayers) {
@@ -345,7 +337,11 @@ function buildScorecardForEntry(
   const mode = getLeaderboardMode(format);
 
   if (mode === "team_stroke" && context.groupId) {
-    const teamScores = teamScoreMapFromRows(scores, context.groupId, "team");
+    const teamScores = teamScoreMapFromRows(
+      scores,
+      context.groupId,
+      context.teamSide ?? "team"
+    );
     return {
       holes: holeData,
       playerRows: [],
@@ -461,12 +457,16 @@ export async function attachLeaderboardScorecards(
 
   const event = await getDb().query.events.findFirst({
     where: eq(events.id, eventId),
-    columns: { teamAName: true, teamBName: true },
+    columns: { teamAName: true, teamBName: true, teamSize: true },
   });
 
   const scores = await getScoresForEvent(eventId);
   const holeData = buildHoleData(eventHoles, holes);
-  const contexts = await loadEntryContexts(eventId, format);
+  const contexts = await loadEntryContexts(
+    eventId,
+    format,
+    event?.teamSize ?? null
+  );
 
   return entries.map((entry) => ({
     ...entry,

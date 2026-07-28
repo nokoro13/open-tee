@@ -1,8 +1,5 @@
 import type { Event } from "@/db/schema";
-import {
-  getGroupSizeWarning,
-  requiresTeamSides,
-} from "@/lib/event-formats";
+import { getGroupSizeWarning } from "@/lib/event-formats";
 import type { EventPairings } from "@/lib/pairings";
 
 export type EventWorkflowPhase =
@@ -88,16 +85,10 @@ export function getEventWorkflowPhase(
   return "registration";
 }
 
-export function isRegistrationWindowExpired(
-  event: Pick<Event, "registrationCloses">
-): boolean {
-  if (!event.registrationCloses) return false;
-  return new Date() > event.registrationCloses;
-}
-
 export function validatePairingsForFormat(
   format: string,
-  pairings: EventPairings
+  pairings: EventPairings,
+  teamSize?: number | null
 ): string[] {
   const issues: string[] = [];
 
@@ -125,20 +116,19 @@ export function validatePairingsForFormat(
       matchType: group.matchType,
       teamACount,
       teamBCount,
+      teamSize,
     });
 
     if (warning) {
       issues.push(`${group.label}: ${warning}`);
     }
 
-    if (requiresTeamSides(format)) {
+    // Pair-side (teams of 2) assignment issues are covered by
+    // getGroupSizeWarning above; Ryder Cup still needs every player sided.
+    if (format === "ryder_cup") {
       const unassignedSide = group.players.filter((p) => !p.teamSide);
       if (unassignedSide.length > 0) {
-        const label =
-          format === "best_ball"
-            ? "assign each player to Pair 1 or Pair 2"
-            : "assign a team side for every player";
-        issues.push(`${group.label}: ${label}.`);
+        issues.push(`${group.label}: assign a team side for every player.`);
       }
     }
   }
@@ -149,17 +139,12 @@ export function validatePairingsForFormat(
 export function getRegistrationFinalizeReasons(options: {
   registrationCount: number;
   maxPlayers: number;
-  registrationCloses: Date | null;
 }): string[] {
   const reasons: string[] = [];
-  const { registrationCount, maxPlayers, registrationCloses } = options;
+  const { registrationCount, maxPlayers } = options;
 
   if (maxPlayers > 0 && registrationCount >= maxPlayers) {
     reasons.push("Field is at capacity.");
-  }
-
-  if (registrationCloses && new Date() > registrationCloses) {
-    reasons.push("Registration deadline has passed.");
   }
 
   return reasons;
@@ -170,8 +155,6 @@ export function buildEventWorkflowSnapshot(options: {
     Event,
     | "status"
     | "scoringStatus"
-    | "registrationOpens"
-    | "registrationCloses"
     | "registrationFinalizedAt"
     | "pairingsFinalizedAt"
     | "scorecardsReadyAt"
@@ -180,28 +163,26 @@ export function buildEventWorkflowSnapshot(options: {
   >;
   eventId: string;
   format: string;
+  teamSize?: number | null;
   registrationCount: number;
   pairings: EventPairings | null;
 }): EventWorkflowSnapshot {
-  const { event, eventId, format, registrationCount, pairings } = options;
+  const { event, eventId, format, teamSize, registrationCount, pairings } =
+    options;
   const hasPairingGroups = (pairings?.groups.length ?? 0) > 0;
   const phase = getEventWorkflowPhase(event, { hasPairingGroups });
   const registrationOpen = isPublicRegistrationOpen(event);
   const registrationClosed = !registrationOpen;
+  const pairingsIssues =
+    pairings != null ? validatePairingsForFormat(format, pairings, teamSize) : [];
   const pairingsReady =
-    pairings != null &&
-    registrationCount > 0 &&
-    validatePairingsForFormat(format, pairings).length === 0;
+    pairings != null && registrationCount > 0 && pairingsIssues.length === 0;
   const scoringDone = event.scoringStatus === "finalized";
   const scoringLive = event.scoringStatus === "open";
-
-  const pairingsIssues =
-    pairings != null ? validatePairingsForFormat(format, pairings) : [];
 
   const autoFinalizeReasons = getRegistrationFinalizeReasons({
     registrationCount,
     maxPlayers: event.maxPlayers,
-    registrationCloses: event.registrationCloses,
   });
 
   const steps: WorkflowStep[] = [
@@ -209,7 +190,7 @@ export function buildEventWorkflowSnapshot(options: {
       id: "registration",
       label: "Registration",
       description: registrationOpen
-        ? "Online signup is open. Close it anytime in Settings."
+        ? "Online signup is open. Toggle it off in Registration features when your field is set."
         : "Online signup is closed.",
       tab: "players",
       finalizedAt: event.registrationFinalizedAt,

@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 import { getEventById } from "@/actions/events";
@@ -63,7 +63,6 @@ export async function finalizeRegistration(
     .update(events)
     .set({
       registrationFinalizedAt: now,
-      registrationCloses: event.registrationCloses ?? now,
       status: "closed",
       updatedAt: now,
     })
@@ -134,7 +133,11 @@ export async function finalizePairings(eventId: string): Promise<ActionResult> {
     return { success: false, error: "Could not load pairings." };
   }
 
-  const issues = validatePairingsForFormat(event.format, pairings);
+  const issues = validatePairingsForFormat(
+    event.format,
+    pairings,
+    event.teamSize
+  );
   if (issues.length > 0) {
     return {
       success: false,
@@ -257,7 +260,7 @@ export async function undoScorecardsReady(
   return { success: true };
 }
 
-/** Auto-close registration when sold out or past deadline. Idempotent. */
+/** Auto-close registration when sold out. Idempotent. */
 export async function syncRegistrationWorkflow(eventId: string): Promise<void> {
   const org = await requireOrganization();
   const event = await getEventById(eventId);
@@ -278,6 +281,7 @@ export async function syncRegistrationWorkflow(eventId: string): Promise<void> {
     event,
     eventId,
     format: event.format,
+    teamSize: event.teamSize,
     registrationCount,
     pairings: null,
   });
@@ -292,7 +296,6 @@ export async function syncRegistrationWorkflow(eventId: string): Promise<void> {
     .update(events)
     .set({
       registrationFinalizedAt: now,
-      registrationCloses: event.registrationCloses ?? now,
       status: "closed",
       updatedAt: now,
     })

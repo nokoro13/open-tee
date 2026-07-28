@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, isNull, ne, or } from "drizzle-orm";
+import { and, eq, inArray, isNull, notInArray, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 import { getEventById } from "@/actions/events";
@@ -206,7 +206,7 @@ async function isScoringCodeTaken(code: string): Promise<boolean> {
   return false;
 }
 
-async function createUniqueScoringCode(eventId: string): Promise<string> {
+async function createUniqueScoringCode(): Promise<string> {
   for (let attempt = 0; attempt < 12; attempt++) {
     const code = generateScoringCode(attempt >= 10 ? 8 : 6);
     if (!(await isScoringCodeTaken(code))) {
@@ -232,7 +232,7 @@ export async function syncEventScoringCodes(eventId: string): Promise<void> {
       await getDb()
         .update(pairingGroups)
         .set({
-          scoringCode: await createUniqueScoringCode(eventId),
+          scoringCode: await createUniqueScoringCode(),
           updatedAt: new Date(),
         })
         .where(eq(pairingGroups.id, group.id));
@@ -253,7 +253,7 @@ export async function syncEventScoringCodes(eventId: string): Promise<void> {
       await getDb()
         .update(registrations)
         .set({
-          scoringCode: await createUniqueScoringCode(eventId),
+          scoringCode: await createUniqueScoringCode(),
           updatedAt: new Date(),
         })
         .where(eq(registrations.id, player.id));
@@ -274,7 +274,7 @@ export async function ensurePairingGroupScoringCode(groupId: string): Promise<vo
   await getDb()
     .update(pairingGroups)
     .set({
-      scoringCode: await createUniqueScoringCode(group.eventId),
+      scoringCode: await createUniqueScoringCode(),
       updatedAt: new Date(),
     })
     .where(eq(pairingGroups.id, groupId));
@@ -316,7 +316,7 @@ export async function syncRegistrationScoringCode(
     await getDb()
       .update(registrations)
       .set({
-        scoringCode: await createUniqueScoringCode(registration.eventId),
+        scoringCode: await createUniqueScoringCode(),
         updatedAt: new Date(),
       })
       .where(eq(registrations.id, registrationId));
@@ -341,12 +341,16 @@ export async function openScoring(eventId: string): Promise<ActionResult> {
     return { success: false, error: "Could not load pairings." };
   }
 
-  const pairingsIssues = validatePairingsForFormat(event.format, pairings);
+  const pairingsIssues = validatePairingsForFormat(
+    event.format,
+    pairings,
+    event.teamSize
+  );
   if (pairingsIssues.length > 0) {
     return { success: false, error: pairingsIssues[0] };
   }
 
-  const marshalCode = event.scoringCode ?? (await createUniqueScoringCode(eventId));
+  const marshalCode = event.scoringCode ?? (await createUniqueScoringCode());
   const now = new Date();
 
   await getDb()
@@ -354,7 +358,6 @@ export async function openScoring(eventId: string): Promise<ActionResult> {
     .set({
       scoringStatus: "open",
       scoringCode: marshalCode,
-      registrationCloses: event.registrationCloses ?? now,
       registrationFinalizedAt: event.registrationFinalizedAt ?? now,
       status: event.status === "published" ? "closed" : event.status,
       pairingsFinalizedAt: event.pairingsFinalizedAt ?? now,
@@ -613,18 +616,12 @@ export async function saveHoleScores(
   );
 
   const holeNumbers = getHoleNumbers(event.holes);
-  const entryIds = isTeamHoleScoring(input.format, input.matchType)
+  const isTeamEntry = isTeamHoleScoring(input.format, input.matchType);
+  const entryIds = isTeamEntry
     ? targetGroup.entrySides.map((side) => side.id)
     : targetGroup.players.map((player) => player.id);
   const existingScores = await getScoresForEvent(event.id);
-  const scoreMap = scoresToMap(
-    existingScores,
-    event.format,
-    scoreGroups.map((group) => ({
-      id: group.id,
-      matchType: group.matchType ?? null,
-    }))
-  );
+  const scoreMap = scoresToMap(existingScores);
   const savedScores: Record<string, Record<number, number>> = {};
 
   for (const entryId of entryIds) {
@@ -646,24 +643,26 @@ export async function saveHoleScores(
 
   const now = new Date();
 
+  // The valid team sides for this group ("team" for a single-team group,
+  // "a"/"b" when two teams share the group or for Ryder Cup foursomes).
+  const allowedTeamSides = new Set(
+    targetGroup.entrySides
+      .map((side) => side.teamSide)
+      .filter((side): side is "a" | "b" | "team" => side != null)
+  );
+
   for (const score of input.scores) {
     if (score.strokes < 1 || score.strokes > 20) {
       return { success: false, error: "Scores must be between 1 and 20." };
     }
 
-    if (isTeamHoleScoring(input.format, input.matchType)) {
+    if (isTeamEntry) {
       if (!score.pairingGroupId || score.pairingGroupId !== targetGroup.id) {
         return { success: false, error: "Invalid team score." };
       }
 
-      const teamSide =
-        input.format === "ryder_cup" && input.matchType === "foursomes"
-          ? score.teamSide === "a" || score.teamSide === "b"
-            ? score.teamSide
-            : null
-          : "team";
-
-      if (!teamSide) {
+      const teamSide = score.teamSide ?? "team";
+      if (!allowedTeamSides.has(teamSide)) {
         return { success: false, error: "Invalid team side." };
       }
 
@@ -689,34 +688,6 @@ export async function saveHoleScores(
           teamSide,
           strokes: score.strokes,
         });
-      }
-
-      await getDb()
-        .delete(holeScores)
-        .where(
-          and(
-            eq(holeScores.eventId, event.id),
-            eq(holeScores.holeNumber, input.holeNumber),
-            eq(holeScores.pairingGroupId, score.pairingGroupId),
-            or(isNull(holeScores.teamSide), ne(holeScores.teamSide, teamSide))
-          )
-        );
-
-      const groupPlayers = await getDb().query.registrations.findMany({
-        where: eq(registrations.pairingGroupId, score.pairingGroupId),
-        columns: { id: true },
-      });
-
-      for (const player of groupPlayers) {
-        await getDb()
-          .delete(holeScores)
-          .where(
-            and(
-              eq(holeScores.eventId, event.id),
-              eq(holeScores.holeNumber, input.holeNumber),
-              eq(holeScores.registrationId, player.id)
-            )
-          );
       }
     } else {
       if (!score.registrationId) {
@@ -748,6 +719,40 @@ export async function saveHoleScores(
           strokes: score.strokes,
         });
       }
+    }
+  }
+
+  if (isTeamEntry) {
+    // Clean up stale rows for this hole in one pass: group-level scores on
+    // sides that are no longer valid, plus any individual scores left over
+    // from a format/team-size change. Doing this after all upserts avoids
+    // sibling team sides deleting each other's fresh scores.
+    const validSides = [...allowedTeamSides];
+    await getDb()
+      .delete(holeScores)
+      .where(
+        and(
+          eq(holeScores.eventId, event.id),
+          eq(holeScores.holeNumber, input.holeNumber),
+          eq(holeScores.pairingGroupId, targetGroup.id),
+          or(
+            isNull(holeScores.teamSide),
+            notInArray(holeScores.teamSide, validSides)
+          )
+        )
+      );
+
+    const groupPlayerIds = targetGroup.players.map((player) => player.id);
+    if (groupPlayerIds.length > 0) {
+      await getDb()
+        .delete(holeScores)
+        .where(
+          and(
+            eq(holeScores.eventId, event.id),
+            eq(holeScores.holeNumber, input.holeNumber),
+            inArray(holeScores.registrationId, groupPlayerIds)
+          )
+        );
     }
   }
 

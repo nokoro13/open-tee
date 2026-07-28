@@ -22,9 +22,9 @@ import {
 import {
   DEFAULT_TEAM_A_NAME,
   DEFAULT_TEAM_B_NAME,
+  deriveTeamUnits,
   getLeaderboardMode,
   getPairSideLabel,
-  getSortDirection,
   isTeamHoleScoring,
   type TeamSide,
 } from "@/lib/event-formats";
@@ -271,7 +271,6 @@ async function buildIndividualStrokeLeaderboard(
   options: LeaderboardOptions = {}
 ): Promise<LeaderboardEntry[]> {
   const holeCount = getHoleCount(holes);
-  const holeNumbers = getHoleNumbers(holes);
   const scores = await getScoresForEvent(eventId);
   const parMap = await getEventParMap(eventId);
   const eventHoles = await getEventScorecard(eventId);
@@ -329,11 +328,17 @@ async function buildIndividualStrokeLeaderboard(
 
 async function buildTeamStrokeLeaderboard(
   eventId: string,
+  format: string,
   holes: "9" | "18"
 ): Promise<LeaderboardEntry[]> {
   const holeCount = getHoleCount(holes);
   const scores = await getScoresForEvent(eventId);
   const parMap = await getEventParMap(eventId);
+
+  const event = await getDb().query.events.findFirst({
+    where: eq(events.id, eventId),
+    columns: { teamSize: true },
+  });
 
   const groups = await getDb().query.pairingGroups.findMany({
     where: eq(pairingGroups.eventId, eventId),
@@ -343,24 +348,37 @@ async function buildTeamStrokeLeaderboard(
 
   const entries = groups
     .filter((group) => group.registrations.length > 0)
-    .map((group) => {
-      const groupScores = scores.filter(
-        (s) => s.pairingGroupId === group.id && (s.teamSide ?? "team") === "team"
+    .flatMap((group) => {
+      const units = deriveTeamUnits(
+        format,
+        event?.teamSize ?? null,
+        group.registrations
       );
-      const { total, thru, scoredHoles } = sumDedupedStrokes(groupScores);
 
-      return strokeEntry(
-        {
-          id: group.id,
-          name: group.label,
-          subtitle: group.registrations.map((r) => r.name).join(", "),
-          thru,
-          total,
-          isComplete: thru === holeCount && scoredHoles.length === holeCount,
-        },
-        scoredHoles,
-        parMap
-      );
+      return units.map((unit) => {
+        const unitScores = scores.filter(
+          (s) =>
+            s.pairingGroupId === group.id &&
+            (s.teamSide ?? "team") === unit.side
+        );
+        const { total, thru, scoredHoles } = sumDedupedStrokes(unitScores);
+
+        return strokeEntry(
+          {
+            id: unit.side === "team" ? group.id : `${group.id}:${unit.side}`,
+            name:
+              unit.side === "team"
+                ? group.label
+                : `${group.label} · ${getPairSideLabel(unit.side)}`,
+            subtitle: unit.players.map((r) => r.name).join(", "),
+            thru,
+            total,
+            isComplete: thru === holeCount && scoredHoles.length === holeCount,
+          },
+          scoredHoles,
+          parMap
+        );
+      });
     });
 
   return assignRanks(entries, "asc");
@@ -380,7 +398,11 @@ async function buildTeamBestBallLeaderboard(
   const strokeIndexByHole = new Map(
     eventHoles.map((hole) => [hole.holeNumber, hole.strokeIndex ?? hole.holeNumber])
   );
-  const usePairs = format === "best_ball";
+
+  const event = await getDb().query.events.findFirst({
+    where: eq(events.id, eventId),
+    columns: { teamSize: true },
+  });
 
   const groups = await getDb().query.pairingGroups.findMany({
     where: eq(pairingGroups.eventId, eventId),
@@ -394,23 +416,18 @@ async function buildTeamBestBallLeaderboard(
     if (group.registrations.length === 0) continue;
     if (options.flightId && group.flightId !== options.flightId) continue;
 
-    const teamUnits = usePairs
-      ? (["a", "b"] as const)
-          .map((side) => ({
-            id: `${group.id}:${side}`,
-            label: `${group.label} · ${getPairSideLabel(side)}`,
-            players: group.registrations.filter(
-              (player) => player.teamSide === side
-            ),
-          }))
-          .filter((team) => team.players.length > 0)
-      : [
-          {
-            id: group.id,
-            label: group.label,
-            players: group.registrations,
-          },
-        ];
+    const teamUnits = deriveTeamUnits(
+      format,
+      event?.teamSize ?? null,
+      group.registrations
+    ).map((unit) => ({
+      id: unit.side === "team" ? group.id : `${group.id}:${unit.side}`,
+      label:
+        unit.side === "team"
+          ? group.label
+          : `${group.label} · ${getPairSideLabel(unit.side)}`,
+      players: unit.players,
+    }));
 
     for (const team of teamUnits) {
       const playerMaps = team.players.map((player) =>
@@ -684,7 +701,9 @@ export async function buildLeaderboard(
 
   switch (mode) {
     case "team_stroke":
-      result = { entries: await buildTeamStrokeLeaderboard(eventId, holes) };
+      result = {
+        entries: await buildTeamStrokeLeaderboard(eventId, format, holes),
+      };
       break;
     case "team_best_ball":
       result = {
@@ -726,6 +745,7 @@ export async function buildLeaderboard(
 
 function buildEntrySides(
   format: string,
+  teamSize: number | null,
   group: {
     id: string;
     label: string;
@@ -743,7 +763,19 @@ function buildEntrySides(
   }
 
   if (isTeamHoleScoring(format, group.matchType)) {
-    return [{ id: group.id, label: group.label, teamSide: "team" }];
+    const units = deriveTeamUnits(format, teamSize, group.registrations);
+
+    return units.map((unit) => {
+      if (unit.side === "team") {
+        return { id: group.id, label: group.label, teamSide: "team" as const };
+      }
+      const playerNames = unit.players.map((player) => player.name).join(" & ");
+      return {
+        id: `${group.id}:${unit.side}`,
+        label: playerNames || getPairSideLabel(unit.side),
+        teamSide: unit.side,
+      };
+    });
   }
 
   return group.registrations.map((player) => ({
@@ -762,6 +794,7 @@ export async function getScoreEntryGroups(
 
   const teamAName = event?.teamAName?.trim() || DEFAULT_TEAM_A_NAME;
   const teamBName = event?.teamBName?.trim() || DEFAULT_TEAM_B_NAME;
+  const teamSize = event?.teamSize ?? null;
 
   const groups = await getDb().query.pairingGroups.findMany({
     where: eq(pairingGroups.eventId, eventId),
@@ -788,7 +821,7 @@ export async function getScoreEntryGroups(
         teamSide: r.teamSide,
       })),
       isTeam,
-      entrySides: buildEntrySides(format, group, teamAName, teamBName),
+      entrySides: buildEntrySides(format, teamSize, group, teamAName, teamBName),
     });
   }
 
@@ -895,14 +928,7 @@ export async function getGroupScoringProgress(
   }
 
   const scores = await getScoresForEvent(eventId);
-  const scoresMap = scoresToMap(
-    scores,
-    format,
-    scoreEntryGroups.map((group) => ({
-      id: group.id,
-      matchType: group.matchType ?? null,
-    }))
-  );
+  const scoresMap = scoresToMap(scores);
   const scoresRecord = scoresMapToRecord(scoresMap);
 
   let completedGroups = 0;
@@ -937,12 +963,9 @@ export async function getPublishedEventForScoring(slug: string) {
 }
 
 export function scoresToMap(
-  scores: Awaited<ReturnType<typeof getScoresForEvent>>,
-  format: string,
-  groups?: { id: string; matchType: string | null }[]
+  scores: Awaited<ReturnType<typeof getScoresForEvent>>
 ) {
   const buckets = new Map<string, Awaited<ReturnType<typeof getScoresForEvent>>>();
-  const groupMatchTypes = new Map(groups?.map((g) => [g.id, g.matchType]));
 
   for (const score of scores) {
     let key: string | null = null;
@@ -950,13 +973,13 @@ export function scoresToMap(
     if (score.registrationId) {
       key = score.registrationId;
     } else if (score.pairingGroupId) {
-      const matchType = groupMatchTypes?.get(score.pairingGroupId);
-      if (format === "ryder_cup" && matchType === "foursomes") {
-        const side = score.teamSide ?? "team";
-        key = `${score.pairingGroupId}:${side}`;
-      } else {
-        key = score.pairingGroupId;
-      }
+      // Side-scoped team scores (two teams sharing a group, or Ryder Cup
+      // foursomes) are keyed per side; whole-group team scores by group id.
+      const side = score.teamSide ?? "team";
+      key =
+        side === "a" || side === "b"
+          ? `${score.pairingGroupId}:${side}`
+          : score.pairingGroupId;
     }
 
     if (!key) continue;
@@ -980,19 +1003,10 @@ export function scoresToMap(
 }
 
 export async function buildEventScoresRecord(
-  eventId: string,
-  format: string
+  eventId: string
 ): Promise<Record<string, Record<number, number>>> {
-  const [scores, allGroups] = await Promise.all([
-    getScoresForEvent(eventId),
-    getScoreEntryGroups(eventId, format),
-  ]);
-
-  const scoreMap = scoresToMap(
-    scores,
-    format,
-    allGroups.map((group) => ({ id: group.id, matchType: group.matchType ?? null }))
-  );
+  const scores = await getScoresForEvent(eventId);
+  const scoreMap = scoresToMap(scores);
 
   const record: Record<string, Record<number, number>> = {};
   for (const [key, holes] of scoreMap.entries()) {

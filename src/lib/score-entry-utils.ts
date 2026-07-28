@@ -1,3 +1,4 @@
+import type { LeaderboardScorecard } from "@/lib/leaderboard-scorecard";
 import { formatScoreToPar } from "@/lib/scorecard";
 import {
   computeSinglesMatch,
@@ -262,6 +263,47 @@ export function applyRemoteScores(
   }
 
   return merged;
+}
+
+export function buildLeaderboardScorecardFromHoleStatuses(
+  holes: HoleScoreStatus[],
+  players: { id: string; label: string }[]
+): LeaderboardScorecard {
+  const lbHoles = holes.map((hole) => ({
+    holeNumber: hole.hole,
+    par: hole.par ?? 4,
+    strokeIndex: null as number | null,
+  }));
+
+  const playerRows = players.map((player) => {
+    const grossScores = holes.map((hole) => {
+      if (hole.entries) {
+        return hole.entries.find((entry) => entry.id === player.id)?.strokes ?? null;
+      }
+      return player.id === players[0]?.id ? (hole.strokes ?? null) : null;
+    });
+
+    let grossTotal: number | null = null;
+    let total = 0;
+    let count = 0;
+    for (const strokes of grossScores) {
+      if (strokes == null) continue;
+      total += strokes;
+      count += 1;
+    }
+    if (count > 0) grossTotal = total;
+
+    return {
+      id: player.id,
+      name: player.label,
+      handicapDisplay: null,
+      grossScores,
+      strokesReceived: Array(holes.length).fill(0),
+      grossTotal,
+    };
+  });
+
+  return { holes: lbHoles, playerRows };
 }
 
 export function getHoleStatuses(

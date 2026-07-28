@@ -9,10 +9,7 @@ import {
   Trophy,
 } from "lucide-react";
 
-import {
-  MobileContextBar,
-  MobileHoleHero,
-} from "@/components/public/mobile-scoring-ui";
+import { MobileHoleHero } from "@/components/public/mobile-scoring-ui";
 import {
   getDefaultScoreForHole,
   ScoreStepper,
@@ -122,20 +119,6 @@ function ScoreShowcaseContent() {
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden px-3 py-2">
-        <MobileContextBar
-          allowGroupSwitch={false}
-          selectedGroupId={showcaseStrokeGroup.id}
-          selectedGroup={showcaseStrokeGroup}
-          groups={[showcaseStrokeGroup]}
-          isPending={false}
-          onGroupChange={() => undefined}
-          matchRunningScore={null}
-          runningScores={runningScores}
-          completedHoles={completedHoles}
-          totalHoles={totalHoles}
-          onOpenDetails={() => undefined}
-        />
-
         <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/60 bg-card shadow-md">
             <MobileHoleHero

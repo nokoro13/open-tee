@@ -1,25 +1,29 @@
 "use server";
 
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { getDb } from "@/db";
-import { events, type Event } from "@/db/schema";
+import { events, pairingGroups, registrations, type Event } from "@/db/schema";
 import { requireOrganization } from "@/lib/auth";
 import {
   replaceEventScorecard,
   type ScorecardHoleSnapshot,
 } from "@/lib/scorecard";
-import type { EventFormat } from "@/lib/event-formats";
-import { getEventFormat } from "@/lib/event-formats";
+import type { EventFormat, TeamSizeOption } from "@/lib/event-formats";
+import {
+  getEffectiveTeamSize,
+  getEventFormat,
+  isTeamFormat,
+  reorganizePairingsForTeamSize,
+  TEAM_SIZE_OPTIONS,
+} from "@/lib/event-formats";
+import { assertEventSetupUnlocked } from "@/lib/event-setup-lock";
+import { isPairingsFinalized } from "@/lib/event-workflow";
 import { generateEventSlug } from "@/lib/slug";
 import { validateEventDateNotPast } from "@/lib/events";
 import type { StartFormat } from "@/lib/start-format";
-import {
-  parseRegistrationWindowInput,
-  type RegistrationWindowInput,
-} from "@/lib/registration-window";
 import { validateMaxPlayersForTier } from "@/lib/platform-tier";
 import {
   DEFAULT_FIRST_TEE_TIME,
@@ -46,6 +50,7 @@ export type EventFormInput = {
   courseSlope?: number | null;
   courseTotalYardage?: number | null;
   format: EventFormat;
+  teamSize?: number | null;
   holes: "9" | "18";
   maxPlayers: number;
   entryFeeDollars: number;
@@ -56,10 +61,6 @@ export type EventFormInput = {
   shotgunStartTime?: string | null;
   firstTeeTime?: string | null;
   teeTimeIntervalMinutes?: number | null;
-  opensDate?: string | null;
-  opensTime?: string | null;
-  closesDate?: string | null;
-  closesTime?: string | null;
 };
 
 export type ActionResult =
@@ -91,6 +92,14 @@ function parseEventInput(input: EventFormInput): EventFormInput | ActionResult {
     return { success: false, error: "Invalid event format." };
   }
 
+  if (
+    isTeamFormat(input.format) &&
+    input.teamSize != null &&
+    ![2, 3, 4].includes(input.teamSize)
+  ) {
+    return { success: false, error: "Team size must be 2, 3, or 4 players." };
+  }
+
   if (input.format === "ryder_cup") {
     if (!input.teamAName?.trim()) {
       return { success: false, error: "Team A name is required for Ryder Cup." };
@@ -110,33 +119,7 @@ function parseEventInput(input: EventFormInput): EventFormInput | ActionResult {
     return { success: false, error: startFormatError };
   }
 
-  const windowResult = parseRegistrationWindowInput({
-    opensDate: input.opensDate ?? "",
-    opensTime: input.opensTime ?? "",
-    closesDate: input.closesDate ?? "",
-    closesTime: input.closesTime ?? "",
-  });
-  if ("error" in windowResult) {
-    return { success: false, error: windowResult.error };
-  }
-
   return input;
-}
-
-function registrationWindowValues(input: EventFormInput) {
-  const parsed = parseRegistrationWindowInput({
-    opensDate: input.opensDate ?? "",
-    opensTime: input.opensTime ?? "",
-    closesDate: input.closesDate ?? "",
-    closesTime: input.closesTime ?? "",
-  });
-  if ("error" in parsed) {
-    return { registrationOpens: null, registrationCloses: null };
-  }
-  return {
-    registrationOpens: parsed.opens,
-    registrationCloses: parsed.closes,
-  };
 }
 
 function startFormatValues(input: EventFormInput) {
@@ -253,6 +236,7 @@ export async function createEvent(
       nineSide: parsed.nineSide ?? null,
       ...courseMetadataValues(parsed),
       format: parsed.format,
+      teamSize: getEffectiveTeamSize(parsed.format, parsed.teamSize),
       holes: parsed.holes,
       maxPlayers: parsed.maxPlayers,
       entryFeeCents: Math.round(parsed.entryFeeDollars * 100),
@@ -262,7 +246,6 @@ export async function createEvent(
       teamBName:
         parsed.format === "ryder_cup" ? parsed.teamBName?.trim() || null : null,
       ...startFormatValues(parsed),
-      ...registrationWindowValues(parsed),
       status: "draft",
     })
     .returning();
@@ -271,6 +254,123 @@ export async function createEvent(
 
   revalidatePath("/dashboard");
   redirect(`/dashboard/events/${event.id}`);
+}
+
+export async function updateEventTeamSize(
+  eventId: string,
+  teamSize: TeamSizeOption
+): Promise<ActionResult> {
+  if (!TEAM_SIZE_OPTIONS.includes(teamSize)) {
+    return { success: false, error: "Team size must be 2, 3, or 4 players." };
+  }
+
+  const org = await requireOrganization();
+  const existing = await getEventById(eventId);
+
+  if (!existing) {
+    return { success: false, error: "Event not found." };
+  }
+
+  if (!isTeamFormat(existing.format)) {
+    return { success: false, error: "This format does not use team size." };
+  }
+
+  const unlocked = assertEventSetupUnlocked(existing.scoringStatus);
+  if (!unlocked.ok) {
+    return { success: false, error: unlocked.error };
+  }
+
+  if (isPairingsFinalized(existing)) {
+    return {
+      success: false,
+      error: "Pairings are finalized. Reopen pairings to change team size.",
+    };
+  }
+
+  const previousSize = getEffectiveTeamSize(existing.format, existing.teamSize);
+  const sizeChanged = previousSize !== teamSize;
+
+  await getDb()
+    .update(events)
+    .set({
+      teamSize,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(events.id, eventId), eq(events.orgId, org.id)));
+
+  if (sizeChanged) {
+    const groups = await getDb().query.pairingGroups.findMany({
+      where: eq(pairingGroups.eventId, eventId),
+      with: { registrations: true },
+    });
+
+    const unassignedRegs = await getDb().query.registrations.findMany({
+      where: and(
+        eq(registrations.eventId, eventId),
+        isNull(registrations.pairingGroupId)
+      ),
+    });
+
+    const reorganized = reorganizePairingsForTeamSize(
+      groups.map((group) => ({
+        id: group.id,
+        players: group.registrations.map((reg) => ({
+          id: reg.id,
+          teamSide: reg.teamSide,
+        })),
+      })),
+      unassignedRegs.map((reg) => ({
+        id: reg.id,
+        teamSide: reg.teamSide,
+      })),
+      teamSize
+    );
+
+    const updates: {
+      id: string;
+      pairingGroupId: string | null;
+      teamSide: "a" | "b" | null;
+    }[] = [];
+
+    for (const group of reorganized.groups) {
+      for (const player of group.players) {
+        updates.push({
+          id: player.id,
+          pairingGroupId: group.id,
+          teamSide:
+            player.teamSide === "a" || player.teamSide === "b"
+              ? player.teamSide
+              : null,
+        });
+      }
+    }
+
+    for (const player of reorganized.unassigned) {
+      updates.push({
+        id: player.id,
+        pairingGroupId: null,
+        teamSide: null,
+      });
+    }
+
+    for (const update of updates) {
+      await getDb()
+        .update(registrations)
+        .set({
+          pairingGroupId: update.pairingGroupId,
+          teamSide: update.teamSide,
+          updatedAt: new Date(),
+        })
+        .where(eq(registrations.id, update.id));
+    }
+
+    const { syncEventScoringCodes } = await import("@/actions/scoring");
+    await syncEventScoringCodes(eventId);
+  }
+
+  revalidatePath("/dashboard");
+  revalidatePath(`/dashboard/events/${eventId}`);
+  return { success: true };
 }
 
 export async function updateEvent(
@@ -306,6 +406,7 @@ export async function updateEvent(
       nineSide: parsed.nineSide ?? null,
       ...courseMetadataValues(parsed),
       format: parsed.format,
+      teamSize: getEffectiveTeamSize(parsed.format, parsed.teamSize),
       holes: parsed.holes,
       maxPlayers: parsed.maxPlayers,
       entryFeeCents: Math.round(parsed.entryFeeDollars * 100),
@@ -315,7 +416,6 @@ export async function updateEvent(
       teamBName:
         parsed.format === "ryder_cup" ? parsed.teamBName?.trim() || null : null,
       ...startFormatValues(parsed),
-      ...registrationWindowValues(parsed),
       updatedAt: new Date(),
     })
     .where(and(eq(events.id, id), eq(events.orgId, org.id)));
@@ -343,43 +443,6 @@ export async function deleteEvent(id: string): Promise<ActionResult> {
   redirect("/dashboard");
 }
 
-export async function updateRegistrationWindow(
-  eventId: string,
-  input: RegistrationWindowInput
-): Promise<ActionResult> {
-  const org = await requireOrganization();
-  const existing = await getEventById(eventId);
-
-  if (!existing) {
-    return { success: false, error: "Event not found." };
-  }
-
-  if (existing.status !== "published") {
-    return {
-      success: false,
-      error: "Registration window can only be updated for live events.",
-    };
-  }
-
-  const windowResult = parseRegistrationWindowInput(input);
-  if ("error" in windowResult) {
-    return { success: false, error: windowResult.error };
-  }
-
-  await getDb()
-    .update(events)
-    .set({
-      registrationOpens: windowResult.opens,
-      registrationCloses: windowResult.closes,
-      updatedAt: new Date(),
-    })
-    .where(and(eq(events.id, eventId), eq(events.orgId, org.id)));
-
-  revalidatePath(`/dashboard/events/${eventId}`);
-  revalidatePath(`/e/${existing.slug}`);
-  return { success: true };
-}
-
 export async function closeEventRegistration(eventId: string): Promise<ActionResult> {
   const org = await requireOrganization();
   const existing = await getEventById(eventId);
@@ -399,7 +462,6 @@ export async function closeEventRegistration(eventId: string): Promise<ActionRes
     .set({
       status: "closed",
       registrationFinalizedAt: existing.registrationFinalizedAt ?? now,
-      registrationCloses: existing.registrationCloses ?? now,
       updatedAt: now,
     })
     .where(and(eq(events.id, eventId), eq(events.orgId, org.id)));
@@ -466,7 +528,6 @@ export async function archiveEvent(eventId: string): Promise<ActionResult> {
     .update(events)
     .set({
       status: "archived",
-      registrationCloses: existing.registrationCloses ?? now,
       updatedAt: now,
     })
     .where(and(eq(events.id, eventId), eq(events.orgId, org.id)));

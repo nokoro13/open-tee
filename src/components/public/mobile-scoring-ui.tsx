@@ -1,11 +1,8 @@
 "use client";
 
-import { LocateFixed, LocateOff, Map, Waves } from "lucide-react";
-import { ChevronUp } from "lucide-react";
+import { Waves } from "lucide-react";
 
-import type { LiveDistanceStatus } from "@/hooks/use-live-distances";
-import { requestGeolocationFromUserGesture, runWithGeolocationUserGesture } from "@/lib/geolocation-controller";
-import type { MatchRunningScore, RunningScore } from "@/lib/score-entry-utils";
+import { runWithGeolocationUserGesture } from "@/lib/geolocation-controller";
 import type { ScoreEntryGroup } from "@/lib/scoring";
 import {
   Select,
@@ -22,10 +19,6 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
-
-function firstName(label: string): string {
-  return label.split(" ")[0] ?? label;
-}
 
 export function playerInitials(name: string): string {
   const parts = name.trim().split(/\s+/);
@@ -59,84 +52,39 @@ const AVATAR_TONES = [
 ];
 
 type MobileContextBarProps = {
-  allowGroupSwitch: boolean;
   selectedGroupId: string;
   selectedGroup: ScoreEntryGroup | undefined;
   groups: ScoreEntryGroup[];
   isPending: boolean;
   onGroupChange: (groupId: string) => void;
-  matchRunningScore: MatchRunningScore | null;
-  runningScores: RunningScore[];
-  completedHoles: number;
-  totalHoles: number;
-  onOpenDetails: () => void;
 };
 
+/** Compact group picker for marshal scorers on mobile. */
 export function MobileContextBar({
-  allowGroupSwitch,
   selectedGroupId,
   selectedGroup,
   groups,
   isPending,
   onGroupChange,
-  matchRunningScore,
-  runningScores,
-  completedHoles,
-  totalHoles,
-  onOpenDetails,
 }: MobileContextBarProps) {
-  const statusLine = matchRunningScore
-    ? matchRunningScore.status
-    : `${completedHoles} of ${totalHoles} holes`;
-
-  const statsLine = matchRunningScore
-    ? `${firstName(matchRunningScore.playerA.label)} ${matchRunningScore.playerATotal ?? "—"} · ${firstName(matchRunningScore.playerB.label)} ${matchRunningScore.playerBTotal ?? "—"}`
-    : runningScores.length === 1
-      ? `Total ${runningScores[0].total ?? "—"} · thru ${runningScores[0].thru}`
-      : runningScores
-          .map((r) => `${firstName(r.label)} ${r.total ?? "—"}`)
-          .join(" · ");
-
   return (
-    <div className="flex w-full items-center gap-3 rounded-2xl border border-border/60 bg-card px-3.5 py-3 shadow-sm">
-      <div className="min-w-0 flex-1">
-        {allowGroupSwitch ? (
-          <Select
-            value={selectedGroupId}
-            disabled={isPending}
-            onValueChange={(value) => value && onGroupChange(value)}
-          >
-            <SelectTrigger className="h-8 w-full border-0 bg-transparent px-0 text-base font-semibold shadow-none">
-              <SelectValue>{selectedGroup?.label}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {groups.map((group) => (
-                <SelectItem key={group.id} value={group.id}>
-                  {group.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ) : (
-          <p className="text-base font-semibold leading-tight text-foreground">
-            {selectedGroup?.label}
-          </p>
-        )}
-        <p className="mt-0.5 text-sm text-muted-foreground">{statsLine}</p>
-      </div>
-      <button
-        type="button"
-        onClick={onOpenDetails}
-        className="flex shrink-0 flex-col items-end rounded-xl px-2 py-1 transition-colors active:bg-muted/60"
-        aria-label="View round details"
-      >
-        <p className="text-sm font-semibold text-primary">{statusLine}</p>
-        <span className="mt-0.5 flex items-center gap-0.5 text-xs font-medium text-muted-foreground">
-          Details
-          <ChevronUp className="size-3.5" />
-        </span>
-      </button>
-    </div>
+    <Select
+      value={selectedGroupId}
+      disabled={isPending}
+      onValueChange={(value) => value && onGroupChange(value)}
+    >
+      <SelectTrigger className="h-11 w-full rounded-2xl border-border/60 bg-card px-3.5 text-base font-semibold shadow-sm">
+        <SelectValue>{selectedGroup?.label}</SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {groups.map((group) => (
+          <SelectItem key={group.id} value={group.id}>
+            {group.label}
+            {group.players.length > 1 ? ` (${group.players.length} players)` : ""}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 
@@ -149,67 +97,35 @@ type MobileHoleHeroProps = {
   onOpenGreenHeatmap?: () => void;
   hasHeatmap?: boolean;
   isAtGreen?: boolean;
-  liveDistanceStatus?: LiveDistanceStatus;
 };
 
-export function LiveLocationButton({
-  status,
+const GPS_BUTTON_SIZE = "size-[4.5rem]";
+
+function HoleStatPill({
+  label,
+  value,
+  emphasized = false,
 }: {
-  status: LiveDistanceStatus;
+  label: string;
+  value: number;
+  emphasized?: boolean;
 }) {
-  if (status === "hidden") return null;
-
-  const isActive = status === "live" || status === "at-green";
-  const Icon = status === "denied" || status === "unavailable" ? LocateOff : LocateFixed;
-
-  const ariaLabel =
-    status === "prompt"
-      ? "Enable location for live yardage"
-      : status === "locating"
-        ? "Getting location"
-        : status === "denied"
-          ? "Location blocked. Tap to try again"
-          : status === "unavailable"
-            ? "Location unavailable. Tap to retry"
-            : "Live yardage enabled";
-
-  const className = cn(
-    "inline-flex size-8 shrink-0 items-center justify-center rounded-full border shadow-sm transition-colors",
-    isActive && "border-primary/50 bg-primary/15 text-primary",
-    status === "locating" &&
-      "border-border/70 bg-background/80 text-muted-foreground animate-pulse",
-    status === "prompt" &&
-      "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15",
-    (status === "denied" || status === "unavailable") &&
-      "border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/15"
-  );
-
-  if (isActive) {
-    return (
-      <span
-        className={className}
-        aria-label={ariaLabel}
-        title={ariaLabel}
-      >
-        <LocateFixed className="size-3.5" />
-      </span>
-    );
-  }
-
   return (
-    <button
-      type="button"
-      onPointerDown={(event) => {
-        if (event.pointerType === "mouse" && event.button !== 0) return;
-        requestGeolocationFromUserGesture();
-      }}
-      onClick={() => requestGeolocationFromUserGesture()}
-      className={className}
-      aria-label={ariaLabel}
-      title={ariaLabel}
+    <div
+      className={cn(
+        "flex min-w-18 flex-col items-center justify-center rounded-xl border px-3 py-2 text-center shadow-sm backdrop-blur-sm",
+        emphasized
+          ? "border-primary/15 bg-background/80"
+          : "border-border/60 bg-background/80"
+      )}
     >
-      <Icon className="size-3.5" />
-    </button>
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {label}
+      </p>
+      <p className="font-heading text-xl font-semibold tabular-nums leading-none text-foreground">
+        {value}
+      </p>
+    </div>
   );
 }
 
@@ -222,83 +138,62 @@ export function MobileHoleHero({
   onOpenGreenHeatmap,
   hasHeatmap = false,
   isAtGreen = false,
-  liveDistanceStatus = "hidden",
 }: MobileHoleHeroProps) {
+  const showPuttingRead = onOpenGreenHeatmap && hasHeatmap;
+
   return (
     <div className="relative shrink-0 overflow-hidden rounded-t-2xl bg-linear-to-br from-primary/8 via-primary/4 to-transparent px-5 py-4">
       <div className="absolute -right-6 -top-6 size-24 rounded-full bg-primary/5" />
-      <div className="relative flex items-end justify-between gap-3">
-        <div className="min-w-0">
+      <div className="relative flex items-center justify-between gap-4">
+        <div className="min-w-0 flex-1 space-y-2">
           <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
             Current hole
           </p>
-          <div className="mt-1 flex items-baseline gap-2">
+          <div className="flex items-baseline gap-2">
             <span className="font-heading text-5xl font-semibold tabular-nums leading-none tracking-tight text-foreground">
               {activeHole}
             </span>
-            <span className="pb-1 text-base font-medium text-muted-foreground">
+            <span className="text-base font-medium text-muted-foreground">
               of {totalHoles}
             </span>
           </div>
-          {(onOpenHoleMap ||
-            (onOpenGreenHeatmap && hasHeatmap) ||
-            liveDistanceStatus !== "hidden") && (
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              {onOpenHoleMap && (
-                <button
-                  type="button"
-                  onPointerDown={(event) => {
-                    if (event.pointerType === "mouse" && event.button !== 0) return;
-                    runWithGeolocationUserGesture(onOpenHoleMap);
-                  }}
-                  onClick={() => runWithGeolocationUserGesture(onOpenHoleMap)}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/80 px-3 py-1.5 text-xs font-medium text-foreground shadow-sm"
-                >
-                  <Map className="size-3.5" />
-                  Hole view
-                </button>
-              )}
-              {onOpenGreenHeatmap && hasHeatmap && (
-                <button
-                  type="button"
-                  onClick={onOpenGreenHeatmap}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium shadow-sm",
-                    isAtGreen
-                      ? "border-primary/50 bg-primary/15 text-primary"
-                      : "border-border/70 bg-background/80 text-foreground"
-                  )}
-                >
-                  <Waves className="size-3.5" />
-                  {isAtGreen ? "Read putt" : "Putting read"}
-                </button>
-              )}
-              {liveDistanceStatus !== "hidden" && (
-                <LiveLocationButton status={liveDistanceStatus} />
-              )}
-            </div>
-          )}
-        </div>
-        <div className="flex items-stretch gap-2">
-          {yardage != null && (
-            <div className="rounded-2xl border border-border/60 bg-background/80 px-3 py-2.5 text-center shadow-sm backdrop-blur-sm">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Yds
-              </p>
-              <p className="font-heading text-2xl font-semibold tabular-nums leading-none text-foreground">
-                {yardage}
-              </p>
-            </div>
-          )}
-          <div className="rounded-2xl border border-primary/15 bg-background/80 px-4 py-2.5 text-center shadow-sm backdrop-blur-sm">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Par
-            </p>
-            <p className="font-heading text-3xl font-semibold tabular-nums leading-none text-foreground">
-              {par}
-            </p>
+          <div className="flex items-center gap-2">
+            {yardage != null && <HoleStatPill label="Yds" value={yardage} />}
+            <HoleStatPill label="Par" value={par} emphasized />
           </div>
+          {showPuttingRead && (
+            <button
+              type="button"
+              onClick={onOpenGreenHeatmap}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium shadow-sm",
+                isAtGreen
+                  ? "border-primary/50 bg-primary/15 text-primary"
+                  : "border-border/70 bg-background/80 text-foreground"
+              )}
+            >
+              <Waves className="size-3.5" />
+              {isAtGreen ? "Read putt" : "Putting read"}
+            </button>
+          )}
         </div>
+        {onOpenHoleMap && (
+          <button
+            type="button"
+            onPointerDown={(event) => {
+              if (event.pointerType === "mouse" && event.button !== 0) return;
+              runWithGeolocationUserGesture(onOpenHoleMap);
+            }}
+            onClick={() => runWithGeolocationUserGesture(onOpenHoleMap)}
+            className={cn(
+              GPS_BUTTON_SIZE,
+              "flex shrink-0 flex-col items-center justify-center rounded-full border-2 border-primary/25 bg-primary text-primary-foreground shadow-md ring-4 ring-primary/10 transition-transform active:scale-95"
+            )}
+            aria-label="Open GPS hole view"
+          >
+            <span className="text-sm font-bold tracking-wider">GPS</span>
+          </button>
+        )}
       </div>
     </div>
   );

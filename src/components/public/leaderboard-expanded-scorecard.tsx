@@ -14,6 +14,10 @@ import { cn } from "@/lib/utils";
 type LeaderboardExpandedScorecardProps = {
   scorecard: LeaderboardScorecard;
   thru: number;
+  /** Overrides `thru` for highlighting the active hole column. */
+  highlightHole?: number;
+  onSelectHole?: (hole: number) => void;
+  showLegend?: boolean;
 };
 
 const MARK_SIZE = "size-5 min-w-5 text-[9px] leading-none";
@@ -116,19 +120,23 @@ function ScoreCell({
   strokeDots = 0,
   isCurrentHole,
   emphasized,
+  onSelectHole,
 }: {
   strokes: number | null;
   par: number | null;
   strokeDots?: number;
   isCurrentHole?: boolean;
   emphasized?: boolean;
+  onSelectHole?: () => void;
 }) {
   return (
     <td
+      onClick={onSelectHole}
       className={cn(
         "relative h-7 border-b border-r border-slate-200/80 p-0 text-center",
         scoreCellBackground(strokes, par),
-        isCurrentHole && "ring-1 ring-inset ring-primary/40"
+        isCurrentHole && "ring-1 ring-inset ring-primary/40",
+        onSelectHole && "cursor-pointer transition-colors hover:bg-slate-100/80 active:bg-slate-200/60"
       )}
     >
       <StrokeDots count={strokeDots} />
@@ -142,17 +150,21 @@ function ScoreCell({
 function HoleHeaderCell({
   holeNumber,
   isCurrentHole,
+  onSelectHole,
 }: {
   holeNumber: number;
   isCurrentHole: boolean;
+  onSelectHole?: () => void;
 }) {
   return (
     <th
+      onClick={onSelectHole}
       className={cn(
         "h-6 border-b border-r border-slate-200/80 p-0 text-center text-[10px] font-semibold leading-none tabular-nums",
         isCurrentHole
           ? "bg-primary text-primary-foreground"
-          : "bg-slate-100/80 text-slate-600"
+          : "bg-slate-100/80 text-slate-600",
+        onSelectHole && "cursor-pointer transition-colors hover:bg-slate-200/80 active:bg-slate-300/60"
       )}
     >
       {holeNumber}
@@ -164,16 +176,18 @@ function ScorecardHalf({
   title,
   sectionHoles,
   allHoles,
-  thru,
+  highlightHole,
   playerRows,
   summaryRow,
+  onSelectHole,
 }: {
   title: string;
   sectionHoles: LeaderboardScorecardHole[];
   allHoles: LeaderboardScorecardHole[];
-  thru: number;
+  highlightHole: number;
   playerRows: LeaderboardScorecardPlayerRow[];
   summaryRow?: LeaderboardScorecardSummaryRow;
+  onSelectHole?: (hole: number) => void;
 }) {
   if (sectionHoles.length === 0) return null;
 
@@ -201,7 +215,10 @@ function ScorecardHalf({
                 <HoleHeaderCell
                   key={hole.holeNumber}
                   holeNumber={hole.holeNumber}
-                  isCurrentHole={thru === hole.holeNumber}
+                  isCurrentHole={highlightHole === hole.holeNumber}
+                  onSelectHole={
+                    onSelectHole ? () => onSelectHole(hole.holeNumber) : undefined
+                  }
                 />
               ))}
               <th className="h-6 border-b border-slate-200/80 bg-slate-100/80 p-0 text-center text-[9px] font-semibold leading-none text-slate-600">
@@ -243,7 +260,10 @@ function ScorecardHalf({
                       strokes={player.grossScores[index] ?? null}
                       par={hole.par}
                       strokeDots={player.strokesReceived[index] ?? 0}
-                      isCurrentHole={thru === hole.holeNumber}
+                      isCurrentHole={highlightHole === hole.holeNumber}
+                      onSelectHole={
+                        onSelectHole ? () => onSelectHole(hole.holeNumber) : undefined
+                      }
                     />
                   );
                 })}
@@ -266,8 +286,11 @@ function ScorecardHalf({
                       key={`${summaryRow.label}-${hole.holeNumber}`}
                       strokes={summaryRow.scores[index] ?? null}
                       par={hole.par}
-                      isCurrentHole={thru === hole.holeNumber}
+                      isCurrentHole={highlightHole === hole.holeNumber}
                       emphasized
+                      onSelectHole={
+                        onSelectHole ? () => onSelectHole(hole.holeNumber) : undefined
+                      }
                     />
                   );
                 })}
@@ -317,6 +340,9 @@ function ScoreLegend() {
 export function LeaderboardExpandedScorecard({
   scorecard,
   thru,
+  highlightHole,
+  onSelectHole,
+  showLegend = true,
 }: LeaderboardExpandedScorecardProps) {
   const { holes, playerRows, summaryRow } = scorecard;
 
@@ -338,10 +364,11 @@ export function LeaderboardExpandedScorecard({
   }
 
   const displayHoles = frontNine.length > 0 ? frontNine : holes;
+  const activeHole = highlightHole ?? thru;
 
   return (
     <div className="w-full min-w-0 space-y-3">
-      {thru > 0 && (
+      {thru > 0 && highlightHole == null && (
         <div className="flex justify-end">
           <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[9px] font-semibold text-primary ring-1 ring-primary/15">
             Thru {thru}
@@ -353,9 +380,10 @@ export function LeaderboardExpandedScorecard({
         title="Front nine"
         sectionHoles={displayHoles}
         allHoles={holes}
-        thru={thru}
+        highlightHole={activeHole}
         playerRows={playerRows}
         summaryRow={summaryRow}
+        onSelectHole={onSelectHole}
       />
 
       {backNine.length > 0 && (
@@ -363,13 +391,14 @@ export function LeaderboardExpandedScorecard({
           title="Back nine"
           sectionHoles={backNine}
           allHoles={holes}
-          thru={thru}
+          highlightHole={activeHole}
           playerRows={playerRows}
           summaryRow={summaryRow}
+          onSelectHole={onSelectHole}
         />
       )}
 
-      <ScoreLegend />
+      {showLegend && <ScoreLegend />}
     </div>
   );
 }

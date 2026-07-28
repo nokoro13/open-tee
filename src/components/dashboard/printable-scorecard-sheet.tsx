@@ -485,12 +485,12 @@ export function PrintableScorecardSheet({
                 })}
               </tr>
             ))}
-            {scorecard.showTeamRow && scorecard.teamRowLabel && (
-              <tr className="scorecard-player-row">
-                <LabelCell fixedHeight>{scorecard.teamRowLabel}</LabelCell>
-                {renderDataCells("team", { playerRow: true })}
+            {scorecard.teamRows.map((label, index) => (
+              <tr key={`team-${index}`} className="scorecard-player-row">
+                <LabelCell fixedHeight>{label}</LabelCell>
+                {renderDataCells(`team-${index}`, { playerRow: true })}
               </tr>
-            )}
+            ))}
           </tbody>
         </table>
       </div>

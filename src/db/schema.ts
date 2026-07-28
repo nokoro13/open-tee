@@ -175,6 +175,7 @@ export const events = pgTable("events", {
   courseTotalYardage: integer("course_total_yardage"),
   nineSide: nineSideEnum("nine_side"),
   format: eventFormatEnum("format").notNull().default("scramble"),
+  teamSize: integer("team_size"),
   holes: holesEnum("holes").notNull().default("18"),
   maxPlayers: integer("max_players").notNull().default(72),
   entryFeeCents: integer("entry_fee_cents").notNull().default(0),

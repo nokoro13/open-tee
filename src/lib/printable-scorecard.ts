@@ -3,7 +3,12 @@ import { and, asc, eq, isNull } from "drizzle-orm";
 
 import { getDb } from "@/db";
 import { events, pairingGroups, registrations } from "@/db/schema";
-import { getEventFormatLabel, usesTeamLeaderboard } from "@/lib/event-formats";
+import {
+  deriveTeamUnits,
+  getEventFormatLabel,
+  getPairSideLabel,
+  usesTeamLeaderboard,
+} from "@/lib/event-formats";
 import { parseCourseHandicap, strokesReceivedOnHole } from "@/lib/handicap-strokes";
 import {
   buildMultiTeeHoleSnapshots,
@@ -30,8 +35,7 @@ export type PrintableScorecard = {
   scoringUrl: string;
   displayScoreUrl: string;
   players: PrintableScorecardPlayer[];
-  showTeamRow: boolean;
-  teamRowLabel: string | null;
+  teamRows: string[];
   minPlayerRows: number;
 };
 
@@ -107,6 +111,25 @@ function getTeamRowLabel(format: string): string | null {
     default:
       return "Team Score";
   }
+}
+
+function getTeamRowLabels(
+  format: string,
+  teamSize: number | null,
+  players: { teamSide: string | null }[]
+): string[] {
+  const base = getTeamRowLabel(format);
+  if (!base) return [];
+
+  const units = deriveTeamUnits(format, teamSize, players);
+  if (units.length <= 1) return [base];
+
+  // Two teams share this group — one score row per team.
+  return units.map((unit) =>
+    unit.side === "team"
+      ? base
+      : base.replace(/^Team/, getPairSideLabel(unit.side))
+  );
 }
 
 function buildPlayerStrokes(
@@ -229,12 +252,14 @@ function buildScorecard(
       name: string;
       handicap: string | null;
       paymentStatus: string;
+      teamSide: string | null;
     }[];
   },
   event: {
     slug: string;
     date: string;
     format: string;
+    teamSize: number | null;
     holes: "9" | "18";
     startFormat: "shotgun" | "tee_times";
     shotgunStartTime: string | null;
@@ -250,7 +275,12 @@ function buildScorecard(
     return null;
   }
 
-  const teamRowLabel = getTeamRowLabel(event.format);
+  const teamRows = getTeamRowLabels(event.format, event.teamSize, activePlayers);
+
+  // Keep teammates adjacent on the printed card when a group holds two teams.
+  const units = deriveTeamUnits(event.format, event.teamSize, activePlayers);
+  const orderedPlayers =
+    units.length > 1 ? units.flatMap((unit) => unit.players) : activePlayers;
 
   return {
     groupId: group.id,
@@ -259,7 +289,7 @@ function buildScorecard(
     scoringCode: group.scoringCode,
     scoringUrl: getGroupScorePageUrl(appUrl, event.slug, group.scoringCode),
     displayScoreUrl: displayScoreUrl(appUrl, event.slug),
-    players: activePlayers.map((player) => {
+    players: orderedPlayers.map((player) => {
       const courseHandicap = parseCourseHandicap(player.handicap);
       return {
         id: player.id,
@@ -269,8 +299,7 @@ function buildScorecard(
         strokesByHole: buildPlayerStrokes(courseHandicap, holeData),
       };
     }),
-    showTeamRow: teamRowLabel != null,
-    teamRowLabel,
+    teamRows,
     minPlayerRows: Math.max(activePlayers.length, 4),
   };
 }
@@ -333,6 +362,7 @@ export async function getPrintableScorecardBundle(
               name: soloPlayer.name,
               handicap: soloPlayer.handicap,
               paymentStatus: soloPlayer.paymentStatus,
+              teamSide: null,
             },
           ],
         },
@@ -376,6 +406,7 @@ export async function getPrintableScorecardBundle(
               name: player.name,
               handicap: player.handicap,
               paymentStatus: player.paymentStatus,
+              teamSide: null,
             },
           ],
         },

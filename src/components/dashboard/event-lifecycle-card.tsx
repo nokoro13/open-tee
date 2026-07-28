@@ -2,13 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { Archive, Lock, Unlock } from "lucide-react";
+import { Archive } from "lucide-react";
 
-import {
-  archiveEvent,
-  closeEventRegistration,
-  reopenEventRegistration,
-} from "@/actions/events";
+import { archiveEvent } from "@/actions/events";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,6 +24,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import type { Event } from "@/db/schema";
+import { isRegistrationOpen } from "@/lib/events";
 
 type EventLifecycleCardProps = {
   event: Event;
@@ -37,8 +34,11 @@ export function EventLifecycleCard({ event }: EventLifecycleCardProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [closeDialogOpen, setCloseDialogOpen] = useState(false);
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+
+  const scoringStarted =
+    event.scoringStatus === "open" || event.scoringStatus === "finalized";
+  const registrationOpen = isRegistrationOpen(event);
 
   function runAction(
     action: () => Promise<{ success: boolean; error?: string }>,
@@ -61,20 +61,21 @@ export function EventLifecycleCard({ event }: EventLifecycleCardProps) {
       <CardHeader>
         <CardTitle>Event lifecycle</CardTitle>
         <CardDescription>
-          Close online registration when you are ready, archive the event when it
-          is complete, and manage the public event status here.
+          Archive the event when it is complete. Registration is managed in
+          Registration features above.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="rounded-xl border border-border/70 bg-muted/10 px-4 py-3 text-sm">
           <p className="font-medium capitalize">{event.status.replace("_", " ")}</p>
           <p className="mt-1 text-muted-foreground">
-            {event.status === "published" &&
-              "Registration is open according to your registration window."}
-            {event.status === "closed" &&
-              "Registration is closed. Scoring and the public event page remain available."}
-            {event.status === "archived" &&
-              "This event is archived and kept for historical reference."}
+            {event.status === "archived"
+              ? "This event is archived and kept for historical reference."
+              : scoringStarted
+                ? "Registration is locked while scoring is active."
+                : registrationOpen
+                  ? "Registration is open."
+                  : "Registration is closed."}
           </p>
         </div>
 
@@ -84,96 +85,43 @@ export function EventLifecycleCard({ event }: EventLifecycleCardProps) {
           </p>
         )}
 
-        <div className="flex flex-wrap gap-2">
-          {event.status === "published" && (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                className="h-11"
-                disabled={isPending}
-                onClick={() => setCloseDialogOpen(true)}
-              >
-                <Lock />
-                Close registration
-              </Button>
-              <AlertDialog open={closeDialogOpen} onOpenChange={setCloseDialogOpen}>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Close registration?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Players will no longer be able to register. You can reopen
-                      registration later if scoring has not started.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={() =>
-                        runAction(() => closeEventRegistration(event.id), () =>
-                          setCloseDialogOpen(false)
-                        )
-                      }
-                    >
-                      Close registration
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            </>
-          )}
-
-          {event.status === "closed" && event.scoringStatus === "disabled" && (
+        {event.status !== "archived" && (
+          <div className="flex flex-wrap gap-2">
             <Button
               type="button"
               variant="outline"
               className="h-11"
               disabled={isPending}
-              onClick={() => runAction(() => reopenEventRegistration(event.id))}
+              onClick={() => setArchiveDialogOpen(true)}
             >
-              <Unlock />
-              Reopen registration
+              <Archive />
+              Archive event
             </Button>
-          )}
-
-          {event.status !== "archived" && (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                className="h-11"
-                disabled={isPending}
-                onClick={() => setArchiveDialogOpen(true)}
-              >
-                <Archive />
-                Archive event
-              </Button>
-              <AlertDialog open={archiveDialogOpen} onOpenChange={setArchiveDialogOpen}>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Archive this event?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Archived events stay visible for results and records, but
-                      registration stays closed. This cannot be undone.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={() =>
-                        runAction(() => archiveEvent(event.id), () =>
-                          setArchiveDialogOpen(false)
-                        )
-                      }
-                    >
-                      Archive event
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            </>
-          )}
-        </div>
+            <AlertDialog open={archiveDialogOpen} onOpenChange={setArchiveDialogOpen}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Archive this event?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Archived events stay visible for results and records, but
+                    registration stays closed. This cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() =>
+                      runAction(() => archiveEvent(event.id), () =>
+                        setArchiveDialogOpen(false)
+                      )
+                    }
+                  >
+                    Archive event
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

@@ -14,6 +14,7 @@ const MAX_SCORE = 20;
 
 type ScoreStepperProps = {
   label: string;
+  caption?: string;
   value: number;
   par?: number;
   disabled?: boolean;
@@ -138,6 +139,7 @@ function VerticalControls({
 
 export function ScoreStepper({
   label,
+  caption,
   value,
   par,
   disabled,
@@ -166,6 +168,11 @@ export function ScoreStepper({
     >
       <MobilePlayerAvatar name={label} index={playerIndex} />
       <div className="min-w-0 flex-1">
+        {caption ? (
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {caption}
+          </p>
+        ) : null}
         <p className="text-md font-semibold leading-snug text-foreground">{label}</p>
         {resultLabel ? (
           <span
@@ -196,6 +203,11 @@ export function ScoreStepper({
       )}
     >
       <div className="min-w-0 flex-1">
+        {caption ? (
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {caption}
+          </p>
+        ) : null}
         <p className="text-lg font-semibold leading-snug">{label}</p>
         {resultLabel ? (
           <p className="mt-0.5 text-sm font-medium text-muted-foreground">{resultLabel}</p>
@@ -213,6 +225,11 @@ export function ScoreStepper({
 
   const verticalColumn = (
     <div className={cn("flex flex-col items-center", className)}>
+      {caption ? (
+        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          {caption}
+        </p>
+      ) : null}
       <p
         className={cn(
           "mb-3 max-w-44 text-center font-semibold leading-tight",

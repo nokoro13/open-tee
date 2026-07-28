@@ -13,7 +13,7 @@ import { getDb } from "@/db";
 import { pairingGroups, registrations } from "@/db/schema";
 import { requireOrganization } from "@/lib/auth";
 import { assertEventSetupUnlocked } from "@/lib/event-setup-lock";
-import { suggestBestBallTeamSide } from "@/lib/event-formats";
+import { suggestTeamSide, usesPairSides, isTeamFormat } from "@/lib/event-formats";
 import { isPairingsFinalized } from "@/lib/event-workflow";
 import { isOperationalEventStatus } from "@/lib/events";
 import type { PairingGroupWithPlayers } from "@/lib/pairings";
@@ -248,35 +248,50 @@ export async function assignRegistrationToGroup(
     }
   }
 
-  const isBestBall = registration.event.format === "best_ball";
-  let teamSide: "a" | "b" | null =
-    registration.teamSide === "a" || registration.teamSide === "b"
-      ? registration.teamSide
-      : null;
+  const pairSides = usesPairSides(
+    registration.event.format,
+    registration.event.teamSize
+  );
 
-  if (isBestBall) {
-    if (pairingGroupId) {
-      if (requestedTeamSide === "a" || requestedTeamSide === "b") {
-        teamSide = requestedTeamSide;
-      } else {
-        const groupPlayers = await getDb().query.registrations.findMany({
-          where: eq(registrations.pairingGroupId, pairingGroupId),
-        });
-        const otherPlayers = groupPlayers.filter(
-          (player) => player.id !== registrationId
-        );
-        teamSide = suggestBestBallTeamSide(otherPlayers);
-      }
+  let teamSide: "a" | "b" | null = null;
+
+  if (!pairingGroupId) {
+    teamSide = null;
+  } else if (pairSides) {
+    if (requestedTeamSide === "a" || requestedTeamSide === "b") {
+      teamSide = requestedTeamSide;
     } else {
-      teamSide = null;
+      const groupPlayers = await getDb().query.registrations.findMany({
+        where: eq(registrations.pairingGroupId, pairingGroupId),
+      });
+      const otherPlayers = groupPlayers.filter(
+        (player) => player.id !== registrationId
+      );
+      teamSide = suggestTeamSide(otherPlayers);
     }
+  } else if (registration.event.format === "ryder_cup") {
+    if (requestedTeamSide === "a" || requestedTeamSide === "b") {
+      teamSide = requestedTeamSide;
+    } else if (
+      registration.teamSide === "a" ||
+      registration.teamSide === "b"
+    ) {
+      teamSide = registration.teamSide;
+    }
+  } else if (
+    isTeamFormat(registration.event.format) &&
+    (requestedTeamSide === "a" || requestedTeamSide === "b")
+  ) {
+    // Client is in teams-of-2 mode (e.g. team size just changed). Persist the
+    // side even if the stored teamSize hasn't caught up yet.
+    teamSide = requestedTeamSide;
   }
 
   await getDb()
     .update(registrations)
     .set({
       pairingGroupId,
-      ...(isBestBall ? { teamSide } : {}),
+      teamSide,
       updatedAt: new Date(),
     })
     .where(eq(registrations.id, registrationId));
@@ -308,9 +323,9 @@ export async function assignRegistrationTeamSide(
 
   if (
     registration.event.format !== "ryder_cup" &&
-    registration.event.format !== "best_ball"
+    !isTeamFormat(registration.event.format)
   ) {
-    return { success: false, error: "Team sides are not used for this format." };
+    return { success: false, error: "Team sides are not used for this event." };
   }
 
   const locked = assertSetupUnlocked(registration.event);

@@ -6,6 +6,7 @@ import {
   KeyboardSensor,
   PointerSensor,
   TouchSensor,
+  closestCenter,
   useDraggable,
   useDroppable,
   useSensor,
@@ -19,6 +20,7 @@ import {
   useState,
   useTransition,
 } from "react";
+import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   ChevronDown,
@@ -42,6 +44,7 @@ import {
   deletePairingGroup,
   updatePairingGroup,
 } from "@/actions/pairings";
+import { updateEventTeamSize } from "@/actions/events";
 import { autoAssignShotgunHoles } from "@/actions/start-format";
 import { CopyRegistrationLink } from "@/components/dashboard/copy-registration-link";
 import { SendScoringLinkButton } from "@/components/dashboard/send-scoring-link-button";
@@ -51,7 +54,6 @@ import { ButtonLink } from "@/components/ui/button-link";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -82,13 +84,22 @@ import {
   DEFAULT_TEAM_A_NAME,
   DEFAULT_TEAM_B_NAME,
   RYDER_MATCH_TYPES,
+  getEffectiveTeamSize,
   getEventFormat,
   getGroupSizeWarning,
+  getMaxGroupPlayers,
   getRyderMatchType,
+  getTeamGroupLayout,
+  getTeamSizeLabel,
+  isTeamFormat,
+  reorganizeGroupForTeamSize,
   requiresMatchType,
   requiresTeamSides,
-  suggestBestBallTeamSide,
+  suggestTeamSide,
+  TEAM_SIZE_OPTIONS,
   usesPairSides,
+  type TeamGroupLayout,
+  type TeamSizeOption,
 } from "@/lib/event-formats";
 import { isEventSetupLocked } from "@/lib/event-setup-lock";
 import type { EventPairings } from "@/lib/pairings";
@@ -142,9 +153,14 @@ function parseDropTarget(overId: string): DropTarget | null {
   }
 
   const groupId = rest.slice(0, separator);
-  const teamSide = rest.slice(separator + 1);
-  if (teamSide === "a" || teamSide === "b") {
-    return { groupId, teamSide };
+  const suffix = rest.slice(separator + 1);
+  if (suffix === "a" || suffix === "b") {
+    return { groupId, teamSide: suffix };
+  }
+  // Whole-group team zone (teams of 3/4) — avoid colliding with the
+  // disabled outer group droppable id (`group:${id}`).
+  if (suffix === "team") {
+    return { groupId };
   }
 
   return { groupId: rest };
@@ -168,6 +184,7 @@ type PairingsBuilderProps = {
   teeTimeIntervalMinutes: number | null;
   holes: "9" | "18";
   format: string;
+  teamSize?: number | null;
   teamAName?: string | null;
   teamBName?: string | null;
   pairings: EventPairings;
@@ -175,7 +192,8 @@ type PairingsBuilderProps = {
 
 function getGroupCapacity(
   format: string,
-  matchType: string | null
+  matchType: string | null,
+  teamSize: number | null
 ): { target: number; max: number } {
   if (format === "ryder_cup") {
     const type = getRyderMatchType(matchType);
@@ -183,6 +201,12 @@ function getGroupCapacity(
       return { target: type.maxPerSide * 2, max: type.maxPerSide * 2 };
     }
     return { target: 4, max: 4 };
+  }
+
+  const effectiveTeamSize = getEffectiveTeamSize(format, teamSize);
+  if (effectiveTeamSize != null) {
+    const max = getMaxGroupPlayers(format, effectiveTeamSize);
+    return { target: max, max };
   }
 
   const meta = getEventFormat(format);
@@ -196,6 +220,7 @@ function getGroupCapacity(
 }
 
 export function PairingsBuilder(props: PairingsBuilderProps) {
+  const router = useRouter();
   const {
     eventId,
     slug,
@@ -207,6 +232,7 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
     teeTimeIntervalMinutes,
     holes,
     format,
+    teamSize = null,
     teamAName,
     teamBName,
     pairings,
@@ -218,18 +244,28 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
   const [localPairings, setLocalPairings] = useState(pairings);
   const [activePlayerId, setActivePlayerId] = useState<string | null>(null);
   const [detailsGroupId, setDetailsGroupId] = useState<string | null>(null);
+  const [localTeamSize, setLocalTeamSize] = useState<number | null>(
+    teamSize ?? null
+  );
 
   useEffect(() => {
     setLocalPairings(pairings);
   }, [pairings]);
 
-  const sideALabel = usesPairSides(format)
+  useEffect(() => {
+    setLocalTeamSize(teamSize ?? null);
+  }, [teamSize]);
+
+  const effectiveTeamSize = getEffectiveTeamSize(format, localTeamSize);
+  const teamLayout = getTeamGroupLayout(format, localTeamSize);
+  const pairSides = usesPairSides(format, localTeamSize);
+  const sideALabel = pairSides
     ? DEFAULT_PAIR_A_LABEL
     : teamAName?.trim() || DEFAULT_TEAM_A_NAME;
-  const sideBLabel = usesPairSides(format)
+  const sideBLabel = pairSides
     ? DEFAULT_PAIR_B_LABEL
     : teamBName?.trim() || DEFAULT_TEAM_B_NAME;
-  const showTeamSides = requiresTeamSides(format);
+  const showTeamSides = requiresTeamSides(format, localTeamSize);
   const showMatchType = requiresMatchType(format);
   const setupLocked = isEventSetupLocked(scoringStatus);
   const controlsDisabled = isPending || setupLocked;
@@ -282,7 +318,8 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
 
   function runAction<T extends { success: boolean; error?: string }>(
     action: () => Promise<T>,
-    onSuccess?: (result: T) => void
+    onSuccess?: (result: T) => void,
+    onError?: () => void
   ) {
     setError(null);
     startTransition(async () => {
@@ -290,6 +327,7 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
       if (!result.success) {
         setError(result.error ?? "Something went wrong.");
         setLocalPairings(pairings);
+        onError?.();
         return;
       }
       onSuccess?.(result);
@@ -401,12 +439,12 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
         if (targetIndex === -1) return current;
         const targetGroup = groups[targetIndex];
         const assignedPlayer =
-          usesPairSides(format) && toTeamSide
+          pairSides && toTeamSide
             ? { ...player, teamSide: toTeamSide }
-            : usesPairSides(format)
+            : pairSides
               ? {
                   ...player,
-                  teamSide: suggestBestBallTeamSide(targetGroup.players),
+                  teamSide: suggestTeamSide(targetGroup.players),
                 }
               : player;
         groups[targetIndex] = {
@@ -418,7 +456,7 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
       }
 
       const unassignedPlayer =
-        toGroupId === null && usesPairSides(format)
+        toGroupId === null && pairSides
           ? { ...player, teamSide: null }
           : player;
 
@@ -471,18 +509,14 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
         : null;
 
     if (target.groupId === data.fromGroupId) {
-      if (usesPairSides(format)) {
+      if (pairSides) {
         if (!target.teamSide || target.teamSide === fromTeamSide) return;
       } else {
         return;
       }
     }
 
-    if (
-      usesPairSides(format) &&
-      target.groupId &&
-      target.teamSide
-    ) {
+    if (pairSides && target.groupId && target.teamSide) {
       const targetGroup = localPairings.groups.find(
         (group) => group.id === target.groupId
       );
@@ -495,80 +529,112 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
       if (pairCount >= 2) return;
     }
 
+    if (teamLayout === "single" && target.groupId && effectiveTeamSize) {
+      const targetGroup = localPairings.groups.find(
+        (group) => group.id === target.groupId
+      );
+      const teamCount =
+        targetGroup?.players.filter(
+          (player) => player.id !== data.registrationId
+        ).length ?? 0;
+      if (teamCount >= effectiveTeamSize) return;
+    }
+
     handleMovePlayer(data.registrationId, target.groupId, target.teamSide);
+  }
+
+  function handleTeamSizeChange(nextSize: TeamSizeOption) {
+    const previous = localTeamSize;
+    const previousPairings = localPairings;
+    setLocalTeamSize(nextSize);
+    setLocalPairings((current) => {
+      const overflowPlayers: EventPairings["unassigned"] = [];
+      const nextGroups = current.groups.map((group) => {
+        const { kept, overflow } = reorganizeGroupForTeamSize(
+          group.players,
+          nextSize
+        );
+        for (const player of overflow) {
+          overflowPlayers.push({
+            ...player,
+            teamSide: null,
+            scoringCode: null,
+          });
+        }
+        return { ...group, players: kept };
+      });
+
+      const nextUnassigned = [
+        ...current.unassigned.map((player) => ({
+          ...player,
+          teamSide: null,
+        })),
+        ...overflowPlayers,
+      ].sort((a, b) => a.name.localeCompare(b.name));
+
+      return { groups: nextGroups, unassigned: nextUnassigned };
+    });
+    runAction(
+      () => updateEventTeamSize(eventId, nextSize),
+      () => router.refresh(),
+      () => {
+        setLocalTeamSize(previous);
+        setLocalPairings(previousPairings);
+      }
+    );
   }
 
   function handleDragCancel() {
     setActivePlayerId(null);
   }
 
+  const pairingHint =
+    teamLayout === "split"
+      ? `Groups tee off together (max 4 players). Assign players to ${sideALabel} or ${sideBLabel}.`
+      : teamLayout === "single" && effectiveTeamSize
+        ? `Each group holds one team of ${effectiveTeamSize}. Drag players from the sidebar into a team slot.`
+        : showMatchType
+          ? `Build matches and assign ${sideALabel} / ${sideBLabel} sides for each player.`
+          : "Drag registrants from the sidebar into groups.";
+
+  const canPrintScorecards = localPairings.groups.some(
+    (group) => group.players.length > 0
+  );
+  const showAutoAssignHoles =
+    startFormat === "shotgun" &&
+    localPairings.groups.length > 0 &&
+    !setupLocked;
+
   return (
     <Card className="min-w-0 overflow-hidden">
-      <CardHeader className="flex flex-col gap-4 space-y-0 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 space-y-1">
-          <CardTitle className="flex items-center gap-2">
-            <Users className="size-4 shrink-0" />
-            Pairings
-          </CardTitle>
-          <CardDescription className="text-pretty">
-            {usesPairSides(format)
-              ? "Drag registrants into Pair 1 or Pair 2 in each group."
-              : showMatchType
-                ? `Drag players into matches and set ${sideALabel} / ${sideBLabel} sides.`
-                : "Drag registrants into groups."}{" "}
-            <span className="whitespace-nowrap">
-              {totalAssigned} assigned · {localPairings.unassigned.length}{" "}
-              unassigned
-            </span>
-            <span className="mt-1 block text-xs sm:text-sm">
-              {scheduleSummary}
-            </span>
-          </CardDescription>
-        </div>
-        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-col sm:items-stretch lg:items-end">
-          {localPairings.groups.some((group) => group.players.length > 0) && (
-            <ButtonLink
-              variant="outline"
-              size="sm"
-              className="col-span-2 h-10 w-full sm:col-span-1 sm:w-auto"
-              href={`/print/events/${eventId}/scorecards`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Printer />
-              <span className="truncate">Print scorecards</span>
-            </ButtonLink>
-          )}
-          {startFormat === "shotgun" &&
-            localPairings.groups.length > 0 &&
-            !setupLocked && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-10 w-full sm:w-auto"
-                disabled={controlsDisabled}
-                onClick={() => {
-                  autoAssignShotgunHolesLocally();
-                  runAction(() => autoAssignShotgunHoles(eventId));
-                }}
-              >
-                Auto-assign holes
-              </Button>
+      <CardHeader className="border-b border-border/70 pb-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0 space-y-1">
+            <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+              <Users className="size-4 shrink-0" />
+              Pairings
+            </CardTitle>
+            <p className="max-w-2xl text-pretty text-sm text-muted-foreground">
+              {pairingHint}
+            </p>
+            {scheduleSummary && (
+              <p className="text-xs text-muted-foreground">{scheduleSummary}</p>
             )}
-          {!setupLocked && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-10 w-full sm:w-auto"
-              disabled={controlsDisabled}
-              onClick={handleCreateGroup}
-            >
-              <Plus />
-              {showMatchType ? "Add match" : "Add group"}
-            </Button>
-          )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2 lg:shrink-0 lg:justify-end">
+            <Badge variant="secondary" className="tabular-nums font-normal">
+              {totalAssigned} assigned
+            </Badge>
+            <Badge variant="outline" className="tabular-nums font-normal">
+              {localPairings.unassigned.length} unassigned
+            </Badge>
+            {localPairings.groups.length > 0 && (
+              <Badge variant="outline" className="tabular-nums font-normal">
+                {localPairings.groups.length}{" "}
+                {showMatchType ? "matches" : "groups"}
+              </Badge>
+            )}
+          </div>
         </div>
       </CardHeader>
 
@@ -588,6 +654,7 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
           <DndContext
             id={`pairings-dnd-${eventId}`}
             sensors={sensors}
+            collisionDetection={closestCenter}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
             onDragCancel={handleDragCancel}
@@ -602,50 +669,50 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
               />
 
               <div className="min-w-0 w-full max-w-full flex-1 space-y-0">
-                {localPairings.groups.length > 0 && (
-                  <div className="mb-3 flex items-center justify-between lg:hidden">
-                    <h3 className="text-sm font-semibold">
-                      {showMatchType ? "Matches" : "Groups"}
-                    </h3>
-                    <p className="text-xs text-muted-foreground">
-                      {localPairings.groups.length} total
-                    </p>
-                  </div>
-                )}
-                <div className="mb-3 hidden space-y-1 lg:block">
+                <div className="mb-3 space-y-1">
                   <h3 className="text-sm font-semibold">
                     {showMatchType ? "Matches" : "Groups"}
                   </h3>
                   <p className="text-xs text-muted-foreground">
-                    {localPairings.groups.length} total · click a group for
-                    details
+                    {localPairings.groups.length} total
+                    {localPairings.groups.length > 0
+                      ? " · tap a row for details"
+                      : ""}
                   </p>
                 </div>
-                {/* Match registrants search field height so list tops align */}
-                <div className="mb-3 hidden h-10 lg:block" aria-hidden />
+
+                <PairingsGroupsToolbar
+                  format={format}
+                  effectiveTeamSize={effectiveTeamSize}
+                  showMatchType={showMatchType}
+                  controlsDisabled={controlsDisabled}
+                  setupLocked={setupLocked}
+                  showAutoAssignHoles={showAutoAssignHoles}
+                  canPrintScorecards={canPrintScorecards}
+                  eventId={eventId}
+                  onTeamSizeChange={handleTeamSizeChange}
+                  onAutoAssignHoles={() => {
+                    autoAssignShotgunHolesLocally();
+                    runAction(() => autoAssignShotgunHoles(eventId));
+                  }}
+                  onCreateGroup={handleCreateGroup}
+                />
+
                 {localPairings.groups.length === 0 ? (
-                  <div className="flex h-full min-h-64 flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/20 px-6 py-12 text-center">
-                    <p className="text-sm font-medium">
+                  <div className="flex min-h-64 flex-col items-center justify-center rounded-xl border border-dashed border-border/80 bg-muted/15 px-6 py-12 text-center">
+                    <div className="flex size-10 items-center justify-center rounded-full bg-muted">
+                      <Users className="size-4 text-muted-foreground" />
+                    </div>
+                    <p className="mt-3 text-sm font-medium">
                       {showMatchType ? "No matches yet" : "No groups yet"}
                     </p>
                     <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-                      {showMatchType
-                        ? "Add a match, then drag players from the sidebar into it."
-                        : "Add a group, then drag players from the sidebar into it."}
-                    </p>
-                    {!setupLocked && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="mt-4"
-                        disabled={controlsDisabled}
-                        onClick={handleCreateGroup}
-                      >
-                        <Plus />
+                      Click{" "}
+                      <span className="font-medium text-foreground">
                         {showMatchType ? "Add match" : "Add group"}
-                      </Button>
-                    )}
+                      </span>{" "}
+                      to create one, then drag players from the sidebar.
+                    </p>
                   </div>
                 ) : (
                   <div className="flex min-w-0 w-full max-w-full flex-col gap-2.5">
@@ -663,6 +730,7 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
                           matchType: group.matchType,
                           teamACount,
                           teamBCount,
+                          teamSize: localTeamSize,
                         }
                       );
 
@@ -671,6 +739,9 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
                           key={group.id}
                           group={group}
                           format={format}
+                          teamSize={localTeamSize}
+                          teamLayout={teamLayout}
+                          effectiveTeamSize={effectiveTeamSize}
                           startFormat={startFormat}
                           startingHoleOptions={startingHoleOptions}
                           showMatchType={showMatchType}
@@ -716,6 +787,7 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
           }}
           eventId={eventId}
           format={format}
+          teamSize={localTeamSize}
           startFormat={startFormat}
           startingHoleOptions={startingHoleOptions}
           showMatchType={showMatchType}
@@ -742,6 +814,121 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
         />
       </CardContent>
     </Card>
+  );
+}
+
+type PairingsGroupsToolbarProps = {
+  format: string;
+  effectiveTeamSize: number | null;
+  showMatchType: boolean;
+  controlsDisabled: boolean;
+  setupLocked: boolean;
+  showAutoAssignHoles: boolean;
+  canPrintScorecards: boolean;
+  eventId: string;
+  onTeamSizeChange: (size: TeamSizeOption) => void;
+  onAutoAssignHoles: () => void;
+  onCreateGroup: () => void;
+};
+
+function PairingsGroupsToolbar({
+  format,
+  effectiveTeamSize,
+  showMatchType,
+  controlsDisabled,
+  setupLocked,
+  showAutoAssignHoles,
+  canPrintScorecards,
+  eventId,
+  onTeamSizeChange,
+  onAutoAssignHoles,
+  onCreateGroup,
+}: PairingsGroupsToolbarProps) {
+  return (
+    <div className="mb-3 flex h-10 items-center justify-between gap-2">
+      <div className="flex min-w-0 items-center gap-2">
+        {isTeamFormat(format) && effectiveTeamSize ? (
+          <>
+            <span className="hidden shrink-0 text-xs font-medium text-muted-foreground sm:inline">
+              Team size
+            </span>
+            <Select
+              value={String(effectiveTeamSize)}
+              disabled={controlsDisabled}
+              onValueChange={(value) => {
+                if (value) {
+                  onTeamSizeChange(Number(value) as TeamSizeOption);
+                }
+              }}
+            >
+              <SelectTrigger
+                className="h-10 w-[8.75rem] shrink-0"
+                aria-label="Players per team"
+              >
+                <SelectValue>{effectiveTeamSize} per team</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {TEAM_SIZE_OPTIONS.map((size) => (
+                  <SelectItem key={size} value={String(size)}>
+                    {size} players per team
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <span className="hidden truncate text-xs text-muted-foreground xl:inline">
+              {getTeamSizeLabel(effectiveTeamSize)}
+            </span>
+          </>
+        ) : (
+          <span className="truncate text-xs text-muted-foreground">
+            {showMatchType
+              ? "Add matches and assign sides below."
+              : "Add groups and assign players below."}
+          </span>
+        )}
+      </div>
+
+      <div className="flex shrink-0 items-center gap-2">
+        {showAutoAssignHoles && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-10"
+            disabled={controlsDisabled}
+            onClick={onAutoAssignHoles}
+          >
+            Auto-assign holes
+          </Button>
+        )}
+        {canPrintScorecards && (
+          <ButtonLink
+            variant="outline"
+            size="sm"
+            className="h-10"
+            href={`/print/events/${eventId}/scorecards`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Printer />
+            <span className="hidden sm:inline">Print scorecards</span>
+            <span className="sm:hidden">Print</span>
+          </ButtonLink>
+        )}
+        {!setupLocked && (
+          <Button
+            type="button"
+            size="sm"
+            className="h-10"
+            disabled={controlsDisabled}
+            onClick={onCreateGroup}
+          >
+            <Plus />
+            {showMatchType ? "Add match" : "Add group"}
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -930,6 +1117,9 @@ function PaymentDot({ status }: { status: string }) {
 type GroupRowProps = {
   group: PairingGroup;
   format: string;
+  teamSize: number | null;
+  teamLayout: TeamGroupLayout | null;
+  effectiveTeamSize: number | null;
   startFormat: StartFormat;
   startingHoleOptions: number[];
   showMatchType: boolean;
@@ -947,6 +1137,9 @@ type GroupRowProps = {
 function GroupRow({
   group,
   format,
+  teamSize,
+  teamLayout,
+  effectiveTeamSize,
   startFormat,
   startingHoleOptions,
   showMatchType,
@@ -960,20 +1153,20 @@ function GroupRow({
   onTeamSide,
   onRemovePlayer,
 }: GroupRowProps) {
-  const usePairDropZones = usesPairSides(format);
+  const useTeamZones = teamLayout != null;
   const dropId = `group:${group.id}`;
   const { isOver, setNodeRef } = useDroppable({
     id: dropId,
-    disabled: disabled || usePairDropZones,
+    disabled: disabled || useTeamZones,
   });
 
-  const capacity = getGroupCapacity(format, group.matchType);
+  const capacity = getGroupCapacity(format, group.matchType, teamSize);
   const openSlots = Math.max(capacity.target - group.players.length, 0);
   const overCapacity = group.players.length > capacity.max;
   const isFull = group.players.length >= capacity.target && openSlots === 0;
-  const pairAPlayers = group.players.filter((player) => player.teamSide === "a");
-  const pairBPlayers = group.players.filter((player) => player.teamSide === "b");
-  const unassignedPlayers = usePairDropZones
+  const teamAPlayers = group.players.filter((player) => player.teamSide === "a");
+  const teamBPlayers = group.players.filter((player) => player.teamSide === "b");
+  const unassignedPlayers = teamLayout === "split"
     ? group.players.filter(
         (player) => player.teamSide !== "a" && player.teamSide !== "b"
       )
@@ -981,10 +1174,10 @@ function GroupRow({
 
   return (
     <div
-      ref={usePairDropZones ? undefined : setNodeRef}
+      ref={useTeamZones ? undefined : setNodeRef}
       className={cn(
         "grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 rounded-xl border bg-card px-3 py-2.5 transition-colors sm:gap-3 sm:px-3.5 sm:py-3",
-        !usePairDropZones && isOver
+        !useTeamZones && isOver
           ? "border-primary bg-primary/5 ring-2 ring-inset ring-primary/20"
           : "border-border",
         isFull && "bg-muted/15"
@@ -1051,39 +1244,66 @@ function GroupRow({
       <div
         className={cn(
           "min-w-0",
-          usePairDropZones
+          useTeamZones
             ? "grid grid-cols-1 gap-2 sm:grid-cols-2"
             : "flex items-center gap-1.5",
-          !usePairDropZones && group.players.length === 0 && "justify-start"
+          !useTeamZones && group.players.length === 0 && "justify-start"
         )}
       >
-        {usePairDropZones ? (
+        {teamLayout === "split" ? (
           <>
-            <PairDropZone
+            <TeamDropZone
               groupId={group.id}
-              teamSide="a"
+              zone="a"
               label={sideALabel}
-              players={pairAPlayers}
+              capacity={2}
+              players={teamAPlayers}
               disabled={disabled}
               onRemovePlayer={onRemovePlayer}
             />
-            <PairDropZone
+            <TeamDropZone
               groupId={group.id}
-              teamSide="b"
+              zone="b"
               label={sideBLabel}
-              players={pairBPlayers}
+              capacity={2}
+              players={teamBPlayers}
               disabled={disabled}
               onRemovePlayer={onRemovePlayer}
             />
             {unassignedPlayers.length > 0 && (
-              <p className="col-span-full text-xs text-amber-600">
-                {unassignedPlayers.length} player
-                {unassignedPlayers.length === 1 ? "" : "s"} need
-                {unassignedPlayers.length === 1 ? "s" : ""} a pair — drag into
-                Pair 1 or Pair 2.
-              </p>
+              <div className="col-span-full space-y-1.5 rounded-lg border border-amber-500/40 bg-amber-500/5 p-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                  Needs a team — drag into {sideALabel} or {sideBLabel}
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {unassignedPlayers.map((player) => (
+                    <GroupPlayerPill
+                      key={player.id}
+                      player={player}
+                      groupId={group.id}
+                      disabled={disabled}
+                      showTeamSides={false}
+                      sideALabel={sideALabel}
+                      sideBLabel={sideBLabel}
+                      onTeamSide={() => {}}
+                      onRemove={() => onRemovePlayer(player.id)}
+                    />
+                  ))}
+                </div>
+              </div>
             )}
           </>
+        ) : teamLayout === "single" && effectiveTeamSize ? (
+          <TeamDropZone
+            groupId={group.id}
+            zone="team"
+            label="Team"
+            capacity={effectiveTeamSize}
+            players={group.players}
+            disabled={disabled}
+            onRemovePlayer={onRemovePlayer}
+            className="sm:col-span-2"
+          />
         ) : group.players.length === 0 ? (
           <span className="truncate text-xs text-muted-foreground/70">
             Drop players here
@@ -1103,7 +1323,7 @@ function GroupRow({
             />
           ))
         )}
-        {!usePairDropZones &&
+        {!useTeamZones &&
           openSlots > 0 &&
           Array.from({ length: openSlots }).map((_, index) => (
             <span
@@ -1157,26 +1377,31 @@ function GroupRow({
   );
 }
 
-type PairDropZoneProps = {
+type TeamDropZoneProps = {
   groupId: string;
-  teamSide: "a" | "b";
+  /** Drop-target zone: a/b for split teams, team for one team per group. */
+  zone: "a" | "b" | "team";
   label: string;
+  capacity: number;
   players: PairingPlayer[];
   disabled: boolean;
   onRemovePlayer: (registrationId: string) => void;
+  className?: string;
 };
 
-function PairDropZone({
+function TeamDropZone({
   groupId,
-  teamSide,
+  zone,
   label,
+  capacity,
   players,
   disabled,
   onRemovePlayer,
-}: PairDropZoneProps) {
-  const dropId = `group:${groupId}:${teamSide}`;
-  const openSlots = Math.max(2 - players.length, 0);
-  const isFull = players.length >= 2;
+  className,
+}: TeamDropZoneProps) {
+  const dropId = `group:${groupId}:${zone}`;
+  const openSlots = Math.max(capacity - players.length, 0);
+  const isFull = players.length >= capacity;
   const { isOver, setNodeRef } = useDroppable({
     id: dropId,
     disabled: disabled || isFull,
@@ -1190,7 +1415,8 @@ function PairDropZone({
         isOver
           ? "border-primary bg-primary/5 ring-2 ring-inset ring-primary/20"
           : "border-border/70 bg-muted/15",
-        isFull && "bg-muted/25"
+        isFull && "bg-muted/25",
+        className
       )}
     >
       <div className="flex items-center justify-between gap-2 px-0.5">
@@ -1198,7 +1424,7 @@ function PairDropZone({
           {label}
         </span>
         <span className="text-[10px] tabular-nums text-muted-foreground">
-          {players.length}/2
+          {players.length}/{capacity}
         </span>
       </div>
       <div className="flex min-h-8 flex-wrap items-center gap-1.5">
@@ -1219,7 +1445,7 @@ function PairDropZone({
           Array.from({ length: openSlots }).map((_, index) => (
             <span
               key={index}
-              className="inline-flex h-8 min-w-14 flex-1 items-center justify-center rounded-md border border-dashed border-border/50 text-[11px] text-muted-foreground/50"
+              className="pointer-events-none inline-flex h-8 min-w-14 flex-1 items-center justify-center rounded-md border border-dashed border-border/50 text-[11px] text-muted-foreground/50"
             >
               {players.length === 0 && index === 0 ? "Drop here" : "Open"}
             </span>
@@ -1380,6 +1606,7 @@ type GroupDetailsSheetProps = {
   onOpenChange: (open: boolean) => void;
   eventId: string;
   format: string;
+  teamSize: number | null;
   startFormat: StartFormat;
   startingHoleOptions: number[];
   showMatchType: boolean;
@@ -1404,6 +1631,7 @@ function GroupDetailsSheet({
   onOpenChange,
   eventId,
   format,
+  teamSize,
   startFormat,
   startingHoleOptions,
   showMatchType,
@@ -1423,6 +1651,7 @@ function GroupDetailsSheet({
   onRemovePlayer,
 }: GroupDetailsSheetProps) {
   const [localLabel, setLocalLabel] = useState(group?.label ?? "");
+  const pairSides = usesPairSides(format, teamSize);
 
   useEffect(() => {
     setLocalLabel(group?.label ?? "");
@@ -1433,11 +1662,12 @@ function GroupDetailsSheet({
         matchType: group.matchType,
         teamACount: group.players.filter((p) => p.teamSide === "a").length,
         teamBCount: group.players.filter((p) => p.teamSide === "b").length,
+        teamSize,
       })
     : null;
 
   const detailPlayers = group
-    ? usesPairSides(format)
+    ? pairSides
       ? [...group.players].sort((a, b) => {
           const order = { a: 0, b: 1 };
           const aOrder = a.teamSide ? (order[a.teamSide as "a" | "b"] ?? 2) : 2;
@@ -1595,7 +1825,7 @@ function GroupDetailsSheet({
 
               <div className="space-y-2">
                 <h4 className="text-xs font-medium text-muted-foreground">
-                  {usesPairSides(format) ? "Pairs" : "Players"} (
+                  {pairSides ? "Teams" : "Players"} (
                   {group.players.length})
                 </h4>
                 {group.players.length === 0 ? (
@@ -1652,7 +1882,14 @@ function GroupDetailsSheet({
                           <div className="flex flex-wrap items-center gap-1.5">
                             {showTeamSides && (
                               <Select
-                                value={player.teamSide ?? "none"}
+                                value={
+                                  player.teamSide === "a" ||
+                                  player.teamSide === "b"
+                                    ? player.teamSide
+                                    : pairSides
+                                      ? undefined
+                                      : "none"
+                                }
                                 disabled={disabled}
                                 onValueChange={(value) => {
                                   if (value === "none")
@@ -1662,7 +1899,7 @@ function GroupDetailsSheet({
                                 }}
                               >
                                 <SelectTrigger className="h-8 w-32 text-xs">
-                                  <SelectValue placeholder="Team">
+                                  <SelectValue placeholder="Select team">
                                     {player.teamSide === "a"
                                       ? sideALabel
                                       : player.teamSide === "b"
@@ -1671,7 +1908,7 @@ function GroupDetailsSheet({
                                   </SelectValue>
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {!usesPairSides(format) && (
+                                  {!pairSides && (
                                     <SelectItem value="none">No team</SelectItem>
                                   )}
                                   <SelectItem value="a">

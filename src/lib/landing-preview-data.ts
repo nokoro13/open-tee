@@ -33,6 +33,7 @@ function baseEvent(overrides: Partial<Event> = {}): Event {
     courseTotalYardage: null,
     nineSide: null,
     format: "scramble",
+    teamSize: null,
     holes: "18",
     maxPlayers: 144,
     entryFeeCents: 12500,
@@ -431,7 +432,6 @@ export const previewPrintableScorecard: PrintableScorecard = {
       strokesByHole: [1, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0],
     },
   ],
-  showTeamRow: true,
-  teamRowLabel: "Team Scramble Score",
+  teamRows: ["Team Scramble Score"],
   minPlayerRows: 4,
 };

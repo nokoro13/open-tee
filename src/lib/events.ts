@@ -71,8 +71,6 @@ export function isOperationalEventStatus(status: string): boolean {
 export function isRegistrationOpen(event: {
   status: string;
   scoringStatus?: string;
-  registrationOpens: Date | null;
-  registrationCloses: Date | null;
   registrationFinalizedAt?: Date | null;
 }): boolean {
   if (event.status !== "published") return false;
@@ -81,24 +79,16 @@ export function isRegistrationOpen(event: {
     return false;
   }
 
-  const now = new Date();
-  if (event.registrationOpens && now < event.registrationOpens) return false;
-  if (event.registrationCloses && now > event.registrationCloses) return false;
-
   return true;
 }
 
 export function getPublicRegistrationMessage(event: {
   scoringStatus: string;
-  registrationOpens: Date | null;
-  registrationCloses: Date | null;
   status: string;
+  registrationFinalizedAt?: Date | null;
 }): string {
   if (event.status === "archived") {
     return "This event has ended.";
-  }
-  if (event.status === "closed") {
-    return "Registration is closed for this event.";
   }
   if (event.scoringStatus === "open") {
     return "Registration is closed — the tournament is underway.";
@@ -107,13 +97,7 @@ export function getPublicRegistrationMessage(event: {
     return "Registration is closed — this event has finished.";
   }
   if (!isRegistrationOpen(event)) {
-    const now = new Date();
-    if (event.registrationOpens && now < event.registrationOpens) {
-      return "Registration is not open yet.";
-    }
-    if (event.registrationCloses && now > event.registrationCloses) {
-      return "Registration is currently closed.";
-    }
+    return "Registration is currently closed.";
   }
   return "Complete the form below to secure your spot.";
 }

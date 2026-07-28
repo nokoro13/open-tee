@@ -107,7 +107,7 @@ export default async function ScorePage({ params, searchParams }: ScorePageProps
     );
   }
 
-  const initialScores = await buildEventScoresRecord(event.id, event.format);
+  const initialScores = await buildEventScoresRecord(event.id);
 
   const readOnly = !isScoringEditable(event.scoringStatus);
 
@@ -135,6 +135,7 @@ export default async function ScorePage({ params, searchParams }: ScorePageProps
       code={code}
       eventName={event.name}
       format={event.format}
+      teamSize={event.teamSize}
       holes={event.holes}
       holeNumbers={holeNumbers}
       parByHole={parByHole}

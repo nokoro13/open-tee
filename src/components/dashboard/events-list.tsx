@@ -77,6 +77,14 @@ function StatusIndicator({ event }: { event: Event }) {
     );
   }
 
+  if (event.status === "closed") {
+    return (
+      <span className="text-sm font-medium text-amber-800 dark:text-amber-300">
+        Closed
+      </span>
+    );
+  }
+
   if (getEventListFilter(event) === "past") {
     return (
       <span className="text-sm font-medium text-muted-foreground">Ended</span>

@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   Check,
@@ -32,7 +32,6 @@ import {
   ChangeScoresOverlay,
   MobileContextBar,
   MobileHoleHero,
-  MobileRoundDetailsSheet,
 } from "@/components/public/mobile-scoring-ui";
 import { GreenHeatmapModal } from "@/components/public/green-heatmap-modal";
 import { useLiveDistances } from "@/hooks/use-live-distances";
@@ -60,9 +59,11 @@ import {
 } from "@/lib/score-entry-utils";
 import {
   getEventFormatLabel,
+  getPairSideLabel,
   getScoreEntrySubtitle,
   isMatchPlayFormat,
   isTeamHoleScoring,
+  usesPairSides,
 } from "@/lib/event-formats";
 import {
   getScorePageHref,
@@ -82,6 +83,7 @@ type ScoreEntryFormProps = {
   code: string;
   eventName: string;
   format: string;
+  teamSize?: number | null;
   holes: "9" | "18";
   holeNumbers: number[];
   parByHole: Record<number, number>;
@@ -99,6 +101,13 @@ type ScoreEntryFormProps = {
   selectedTeeKey?: string | null;
   selectedTeeColor?: string | null;
   pollIntervalMs?: number;
+};
+
+type ScoreCardEntry = {
+  id: string;
+  label: string;
+  teamSide?: "a" | "b" | "team";
+  teamLabel?: string;
 };
 
 type SlideDirection = "forward" | "back";
@@ -293,6 +302,7 @@ export function ScoreEntryForm({
   code,
   eventName,
   format,
+  teamSize = null,
   holes,
   holeNumbers,
   parByHole,
@@ -319,7 +329,6 @@ export function ScoreEntryForm({
   const [justSaved, setJustSaved] = useState(false);
   const [changeScoresUnlocked, setChangeScoresUnlocked] = useState(false);
   const [showScorecard, setShowScorecard] = useState(false);
-  const [showRoundDetails, setShowRoundDetails] = useState(false);
   const [showHoleMap, setShowHoleMap] = useState(false);
   const [showGreenHeatmap, setShowGreenHeatmap] = useState(false);
   const puttingPromptedHolesRef = useRef<Set<number>>(new Set());
@@ -333,17 +342,74 @@ export function ScoreEntryForm({
   const [scores, setScores] = useState(initialScores);
 
   const selectedGroup = groups.find((g) => g.id === selectedGroupId);
+  const pairSides = usesPairSides(format, teamSize);
+  const teamHoleScoring =
+    selectedGroup != null && isTeamHoleScoring(format, selectedGroup.matchType);
 
-  const scoreEntries =
-    selectedGroup && isTeamHoleScoring(format, selectedGroup.matchType)
-      ? selectedGroup.entrySides.map((side) => ({
-          id: side.id,
-          label: side.label,
-        }))
-      : (selectedGroup?.players.map((player) => ({
-          id: player.id,
-          label: player.name,
-        })) ?? []);
+  const scoreEntries: ScoreCardEntry[] = useMemo(() => {
+    if (!selectedGroup) return [];
+
+    if (teamHoleScoring) {
+      return selectedGroup.entrySides.map((side) => ({
+        id: side.id,
+        label: side.label,
+        teamSide: side.teamSide,
+        teamLabel:
+          pairSides && (side.teamSide === "a" || side.teamSide === "b")
+            ? getPairSideLabel(side.teamSide)
+            : undefined,
+      }));
+    }
+
+    return selectedGroup.players.map((player) => ({
+      id: player.id,
+      label: player.name,
+      teamSide:
+        player.teamSide === "a" || player.teamSide === "b"
+          ? player.teamSide
+          : undefined,
+      teamLabel:
+        pairSides && (player.teamSide === "a" || player.teamSide === "b")
+          ? getPairSideLabel(player.teamSide)
+          : undefined,
+    }));
+  }, [selectedGroup, teamHoleScoring, pairSides]);
+
+  const scoreEntrySections = useMemo(() => {
+    if (!pairSides) {
+      return [{ teamLabel: null as string | null, entries: scoreEntries }];
+    }
+
+    // Team-hole formats already have one entry per team — keep each as its own section.
+    if (teamHoleScoring) {
+      return scoreEntries.map((entry) => ({
+        teamLabel: entry.teamLabel ?? null,
+        entries: [entry],
+      }));
+    }
+
+    // Individual scoring (e.g. best ball): group players under Team 1 / Team 2.
+    const sections: { teamLabel: string | null; entries: ScoreCardEntry[] }[] =
+      [];
+    for (const side of ["a", "b"] as const) {
+      const entries = scoreEntries.filter((entry) => entry.teamSide === side);
+      if (entries.length > 0) {
+        sections.push({
+          teamLabel: getPairSideLabel(side),
+          entries,
+        });
+      }
+    }
+    const unassigned = scoreEntries.filter(
+      (entry) => entry.teamSide !== "a" && entry.teamSide !== "b"
+    );
+    if (unassigned.length > 0) {
+      sections.push({ teamLabel: null, entries: unassigned });
+    }
+    return sections.length > 0
+      ? sections
+      : [{ teamLabel: null, entries: scoreEntries }];
+  }, [pairSides, teamHoleScoring, scoreEntries]);
 
   const entryIds = scoreEntries.map((e) => e.id);
 
@@ -732,6 +798,10 @@ export function ScoreEntryForm({
     holes: holeStatuses,
     readOnly,
     onSelectHole: handleSelectHole,
+    players: scoreEntries.map((entry) => ({
+      id: entry.id,
+      label: entry.label,
+    })),
   };
 
   const groupLabelBlock = (mobile = false) => (
@@ -783,7 +853,19 @@ export function ScoreEntryForm({
                 mobile ? "text-sm leading-snug" : "truncate text-xs"
               )}
             >
-              {selectedGroup.players.map((player) => player.name).join(", ")}
+              {pairSides
+                ? (["a", "b"] as const)
+                    .map((side) => {
+                      const names = selectedGroup.players
+                        .filter((player) => player.teamSide === side)
+                        .map((player) => player.name);
+                      if (names.length === 0) return null;
+                      return `${getPairSideLabel(side)}: ${names.join(", ")}`;
+                    })
+                    .filter(Boolean)
+                    .join(" · ") ||
+                  selectedGroup.players.map((player) => player.name).join(", ")
+                : selectedGroup.players.map((player) => player.name).join(", ")}
             </p>
           )}
         </div>
@@ -1023,22 +1105,17 @@ export function ScoreEntryForm({
         </aside>
 
         <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden lg:contents">
-          {/* Mobile context bar */}
-          <div className="shrink-0 lg:hidden">
-            <MobileContextBar
-              allowGroupSwitch={allowGroupSwitch}
-              selectedGroupId={selectedGroupId}
-              selectedGroup={selectedGroup}
-              groups={groups}
-              isPending={isPending}
-              onGroupChange={handleGroupChange}
-              matchRunningScore={matchRunningScore}
-              runningScores={runningScores}
-              completedHoles={completedHoles}
-              totalHoles={totalHoles}
-              onOpenDetails={() => setShowRoundDetails(true)}
-            />
-          </div>
+          {allowGroupSwitch ? (
+            <div className="shrink-0 lg:hidden">
+              <MobileContextBar
+                selectedGroupId={selectedGroupId}
+                selectedGroup={selectedGroup}
+                groups={groups}
+                isPending={isPending}
+                onGroupChange={handleGroupChange}
+              />
+            </div>
+          ) : null}
 
         {/* Hole entry */}
         <section
@@ -1106,7 +1183,6 @@ export function ScoreEntryForm({
                       par={activePar ?? getDefaultScoreForHole(parByHole, activeHole)}
                       yardage={activeYardage}
                       isAtGreen={isAtGreen}
-                      liveDistanceStatus={caddieEnabled ? liveDistanceStatus : "hidden"}
                       onOpenHoleMap={
                         holeFeaturesGeoJson?.[activeHole]
                           ? handleOpenHoleMap
@@ -1146,27 +1222,79 @@ export function ScoreEntryForm({
                     </p>
                   </div>
 
-                  <div className="relative flex min-h-0 flex-1 flex-col divide-y divide-border/40 overflow-y-auto overscroll-contain lg:mt-8 lg:min-h-0 lg:flex-none lg:flex-row lg:flex-wrap lg:items-start lg:justify-center lg:gap-12 lg:divide-y-0 lg:overflow-visible">
-                    {scoreEntries.map((entry, index) => (
-                      <ScoreStepper
-                        key={entry.id}
-                        label={entry.label}
-                        value={getEffectiveScore(entry.id, activeHole)}
-                        par={activePar}
-                        disabled={
-                          readOnly ||
-                          isPending ||
-                          showChangeScoresOverlay ||
-                          !canEnterScores
-                        }
-                        size="large"
-                        layout="responsive"
-                        playerIndex={index}
-                        onChange={(value) =>
-                          setScore(entry.id, activeHole, value)
-                        }
-                      />
-                    ))}
+                  <div className="relative flex min-h-0 flex-1 flex-col divide-y divide-border/40 overflow-y-auto overscroll-contain lg:mt-8 lg:min-h-0 lg:flex-none lg:flex-row lg:flex-wrap lg:items-start lg:justify-center lg:gap-10 lg:divide-y-0 lg:overflow-visible">
+                    {scoreEntrySections.map((section, sectionIndex) => {
+                      let playerOffset = 0;
+                      for (let i = 0; i < sectionIndex; i++) {
+                        playerOffset +=
+                          scoreEntrySections[i]?.entries.length ?? 0;
+                      }
+                      const showTeamHeader =
+                        pairSides && section.teamLabel != null && !teamHoleScoring;
+
+                      return (
+                        <div
+                          key={section.teamLabel ?? `section-${sectionIndex}`}
+                          className={cn(
+                            "flex min-h-0 flex-col",
+                            showTeamHeader &&
+                              "lg:rounded-2xl lg:border lg:border-border/60 lg:bg-muted/15 lg:px-5 lg:py-4",
+                            pairSides &&
+                              teamHoleScoring &&
+                              "lg:rounded-2xl lg:border lg:border-border/60 lg:bg-muted/15 lg:px-5 lg:py-4"
+                          )}
+                        >
+                          {showTeamHeader && (
+                            <div className="flex items-center gap-2 bg-muted/30 px-4 py-2 lg:mb-3 lg:justify-center lg:bg-transparent lg:px-0 lg:py-0">
+                              <Badge
+                                variant="secondary"
+                                className="text-[10px] font-semibold uppercase tracking-wide"
+                              >
+                                {section.teamLabel}
+                              </Badge>
+                              <span className="truncate text-xs text-muted-foreground">
+                                {section.entries.map((entry) => entry.label).join(" · ")}
+                              </span>
+                            </div>
+                          )}
+                          <div
+                            className={cn(
+                              "flex min-h-0 flex-col divide-y divide-border/40 lg:divide-y-0",
+                              section.entries.length > 1
+                                ? "lg:flex-row lg:items-start lg:gap-8"
+                                : "lg:items-center",
+                              section.entries.length > 1 && "lg:flex"
+                            )}
+                          >
+                            {section.entries.map((entry, index) => (
+                              <ScoreStepper
+                                key={entry.id}
+                                label={entry.label}
+                                caption={
+                                  teamHoleScoring && pairSides
+                                    ? entry.teamLabel
+                                    : undefined
+                                }
+                                value={getEffectiveScore(entry.id, activeHole)}
+                                par={activePar}
+                                disabled={
+                                  readOnly ||
+                                  isPending ||
+                                  showChangeScoresOverlay ||
+                                  !canEnterScores
+                                }
+                                size="large"
+                                layout="responsive"
+                                playerIndex={playerOffset + index}
+                                onChange={(value) =>
+                                  setScore(entry.id, activeHole, value)
+                                }
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
                     {showChangeScoresOverlay && (
                       <ChangeScoresOverlay
                         onUnlock={() => setChangeScoresUnlocked(true)}
@@ -1208,29 +1336,6 @@ export function ScoreEntryForm({
         onClose={() => setShowScorecard(false)}
         {...scorecardProps}
       />
-
-      <MobileRoundDetailsSheet
-        open={showRoundDetails}
-        onOpenChange={setShowRoundDetails}
-        title="Round details"
-        subtitle={`${selectedGroup?.label ?? "Group"} · ${getScoreEntrySubtitle(format, selectedGroup?.matchType)}`}
-      >
-        {groupLabelBlock()}
-        {matchRunningScore ? (
-          <MatchStatusCard match={matchRunningScore} />
-        ) : (
-          <div
-            className={cn(
-              "grid gap-3",
-              runningScores.length > 1 ? "grid-cols-2" : "grid-cols-1"
-            )}
-          >
-            {runningScores.map((running) => (
-              <RunningScoreCard key={running.id} running={running} />
-            ))}
-          </div>
-        )}
-      </MobileRoundDetailsSheet>
 
       <HoleMapModal
         open={showHoleMap}

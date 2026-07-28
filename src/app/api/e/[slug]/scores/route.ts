@@ -34,7 +34,7 @@ export async function GET(request: Request, { params }: ScoresRouteProps) {
     return NextResponse.json({ error: "Invalid scoring code" }, { status: 401 });
   }
 
-  const scores = await buildEventScoresRecord(event.id, event.format);
+  const scores = await buildEventScoresRecord(event.id);
 
   return NextResponse.json({
     scores,

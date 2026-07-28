@@ -15,6 +15,7 @@ type PairingsPanelProps = {
   teeTimeIntervalMinutes: number | null;
   holes: "9" | "18";
   format: string;
+  teamSize?: number | null;
   teamAName?: string | null;
   teamBName?: string | null;
   pairings: EventPairings;

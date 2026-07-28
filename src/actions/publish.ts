@@ -59,7 +59,6 @@ async function publishEventRecord(
       status: "published",
       platformTier: "pro",
       platformPaidAt: now,
-      registrationOpens: event.registrationOpens ?? now,
       stripePlatformSessionId: sessionId,
       updatedAt: now,
     })

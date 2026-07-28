@@ -74,7 +74,6 @@ export function getEventListFilter(event: Event): Exclude<EventListFilter, "all"
 
   const today = todayDateString();
   if (
-    event.status === "closed" ||
     event.status === "archived" ||
     event.scoringStatus === "finalized" ||
     event.date < today

@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { X } from "lucide-react";
 
+import { LeaderboardExpandedScorecard } from "@/components/public/leaderboard-expanded-scorecard";
 import { playerInitials } from "@/components/public/mobile-scoring-ui";
 import type { HoleScoreEntry, HoleScoreStatus } from "@/lib/score-entry-utils";
+import { buildLeaderboardScorecardFromHoleStatuses } from "@/lib/score-entry-utils";
 import { ScoreParMark } from "@/components/public/score-par-mark";
 import { cn } from "@/lib/utils";
 
@@ -14,6 +16,7 @@ type ScorecardGridProps = {
   activeHole: number;
   holes: HoleScoreStatus[];
   onSelectHole: (hole: number) => void;
+  players?: { id: string; label: string }[];
   readOnly?: boolean;
   className?: string;
   compact?: boolean;
@@ -385,12 +388,24 @@ type ScorecardOverlayProps = ScorecardGridProps & {
 export function ScorecardOverlay({
   open,
   onClose,
-  ...gridProps
+  activeHole,
+  holes,
+  onSelectHole,
+  players = [],
 }: ScorecardOverlayProps) {
+  const scorecard = useMemo(
+    () => buildLeaderboardScorecardFromHoleStatuses(holes, players),
+    [holes, players]
+  );
+
   if (!open) return null;
 
-  const multiPlayer = (gridProps.holes[0]?.entries?.length ?? 0) > 1;
-  const scoredCount = gridProps.holes.filter((h) => h.saved).length;
+  const scoredCount = holes.filter((h) => h.saved).length;
+
+  function handleSelectHole(hole: number) {
+    onSelectHole(hole);
+    onClose();
+  }
 
   return (
     <div className="fixed inset-0 z-50 lg:hidden">
@@ -400,15 +415,14 @@ export function ScorecardOverlay({
         className="absolute inset-0 bg-background/80 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="absolute inset-x-0 bottom-0 flex h-[92dvh] max-h-[92dvh] flex-col overflow-hidden rounded-t-3xl border border-border bg-background shadow-2xl animate-in slide-in-from-bottom duration-300">
+      <div className="absolute inset-x-0 bottom-0 flex max-h-[92dvh] flex-col overflow-hidden rounded-t-3xl border border-border bg-background shadow-2xl animate-in slide-in-from-bottom duration-300">
         <div className="shrink-0">
           <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-muted" />
           <div className="flex items-center justify-between px-4 pb-2 pt-3">
             <div>
-              <h2 className="text-lg font-semibold">Scorecard</h2>
+              <h2 className="font-heading text-lg font-semibold">Scorecard</h2>
               <p className="text-xs text-muted-foreground">
-                {scoredCount} of {gridProps.holes.length} holes saved
-                {multiPlayer ? " · tap a player to filter" : ""}
+                {scoredCount} of {holes.length} holes saved · tap a hole to jump
               </p>
             </div>
             <button
@@ -422,14 +436,12 @@ export function ScorecardOverlay({
           </div>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[max(2rem,env(safe-area-inset-bottom))]">
-          <ScorecardGrid
-            {...gridProps}
-            showHeader={false}
-            showPlayerLegend={multiPlayer}
+          <LeaderboardExpandedScorecard
+            scorecard={scorecard}
+            thru={0}
+            highlightHole={activeHole}
+            onSelectHole={handleSelectHole}
           />
-          <p className="mt-4 pb-2 text-center text-xs text-muted-foreground">
-            Tap a hole to jump and edit
-          </p>
         </div>
       </div>
     </div>

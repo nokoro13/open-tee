@@ -233,6 +233,7 @@ export default async function EventDetailPage({
         event,
         eventId: event.id,
         format: event.format,
+        teamSize: event.teamSize,
         registrationCount,
         pairings,
       })
@@ -503,6 +504,7 @@ export default async function EventDetailPage({
                         teeTimeIntervalMinutes={event.teeTimeIntervalMinutes}
                         holes={event.holes}
                         format={event.format}
+                        teamSize={event.teamSize}
                         teamAName={event.teamAName}
                         teamBName={event.teamBName}
                         pairings={pairings}

@@ -48,19 +48,21 @@ import {
   DEFAULT_TEAM_B_NAME,
   EVENT_FORMATS,
   FORMAT_CATEGORIES,
+  TEAM_SIZE_OPTIONS,
+  getDefaultTeamSize,
+  getEffectiveTeamSize,
   getEventFormat,
   getEventFormatLabel,
+  getTeamSizeLabel,
+  isTeamFormat,
   type EventFormat,
+  type TeamSizeOption,
 } from "@/lib/event-formats";
 import {
   defaultStartFormatFieldValues,
   StartFormatFields,
   type StartFormatFieldValues,
 } from "@/components/dashboard/start-format-fields";
-import {
-  draftRegistrationWindowValues,
-  RegistrationWindowFields,
-} from "@/components/dashboard/registration-window-fields";
 
 type EventFormProps = {
   event?: Event & { eventHoles?: EventHole[] };
@@ -75,6 +77,7 @@ const defaultValues: Omit<EventFormInput, keyof CourseSelection> & CourseSelecti
     date: "",
     ...emptyCourseSelection(),
     format: "scramble",
+  teamSize: 4,
   holes: "18",
   maxPlayers: 72,
   entryFeeDollars: 0,
@@ -97,16 +100,14 @@ export function EventForm({ event, defaultFormat }: EventFormProps) {
     () => defaultStartFormatFieldValues(event)
   );
 
-  const [registrationWindow, setRegistrationWindow] = useState(() =>
-    draftRegistrationWindowValues(event)
-  );
-
   const [form, setForm] = useState(() =>
     event
       ? {
           name: event.name,
           date: event.date,
           format: event.format,
+          teamSize:
+            getEffectiveTeamSize(event.format, event.teamSize) ?? 4,
           holes: event.holes,
           maxPlayers: event.maxPlayers,
           entryFeeDollars: event.entryFeeCents / 100,
@@ -118,6 +119,8 @@ export function EventForm({ event, defaultFormat }: EventFormProps) {
           name: defaultValues.name,
           date: defaultValues.date,
           format: defaultFormat ?? defaultValues.format,
+          teamSize:
+            getDefaultTeamSize(defaultFormat ?? defaultValues.format) ?? 4,
           holes: defaultValues.holes,
           maxPlayers: defaultValues.maxPlayers,
           entryFeeDollars: defaultValues.entryFeeDollars,
@@ -132,10 +135,7 @@ export function EventForm({ event, defaultFormat }: EventFormProps) {
       ...form,
       ...startFormatValues,
       ...courseSelection,
-      opensDate: registrationWindow.opensDate,
-      opensTime: registrationWindow.opensTime,
-      closesDate: registrationWindow.closesDate,
-      closesTime: registrationWindow.closesTime,
+      teamSize: isTeamFormat(form.format) ? form.teamSize : null,
       ...(form.format === "ryder_cup"
         ? {
             teamAName: form.teamAName,
@@ -150,6 +150,14 @@ export function EventForm({ event, defaultFormat }: EventFormProps) {
     value: (typeof form)[K]
   ) {
     setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function handleFormatChange(format: EventFormat) {
+    setForm((prev) => ({
+      ...prev,
+      format,
+      teamSize: getDefaultTeamSize(format) ?? prev.teamSize,
+    }));
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -217,7 +225,7 @@ export function EventForm({ event, defaultFormat }: EventFormProps) {
             <Select
               value={form.format}
               onValueChange={(value) => {
-                if (value) updateField("format", value as EventFormat);
+                if (value) handleFormatChange(value as EventFormat);
               }}
             >
               <SelectTrigger className="h-11 w-full">
@@ -265,6 +273,34 @@ export function EventForm({ event, defaultFormat }: EventFormProps) {
             </Select>
           </Field>
         </div>
+
+        {isTeamFormat(form.format) && (
+          <Field>
+            <FieldLabel>Team size</FieldLabel>
+            <Select
+              value={String(form.teamSize)}
+              onValueChange={(value) => {
+                if (value) {
+                  updateField("teamSize", Number(value) as TeamSizeOption);
+                }
+              }}
+            >
+              <SelectTrigger className="h-11 w-full">
+                <SelectValue placeholder="Select team size">
+                  {form.teamSize} players per team
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {TEAM_SIZE_OPTIONS.map((size) => (
+                  <SelectItem key={size} value={String(size)}>
+                    {size} players per team
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <FieldDescription>{getTeamSizeLabel(form.teamSize)}</FieldDescription>
+          </Field>
+        )}
 
         <div className="rounded-xl border border-border/70 bg-muted/10 p-4 sm:p-5">
           <div className="mb-4">
@@ -344,21 +380,6 @@ export function EventForm({ event, defaultFormat }: EventFormProps) {
             />
             <FieldDescription>Use 0 for free events.</FieldDescription>
           </Field>
-        </div>
-
-        <div className="rounded-xl border border-border/70 bg-muted/10 p-4 sm:p-5">
-          <div className="mb-4">
-            <h3 className="text-sm font-semibold">Registration window</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Optional. Control when players can sign up after you publish.
-            </p>
-          </div>
-          <RegistrationWindowFields
-            opensAt={event?.registrationOpens ?? null}
-            closesAt={event?.registrationCloses ?? null}
-            draftValues={registrationWindow}
-            onDraftChange={setRegistrationWindow}
-          />
         </div>
 
         <Field>

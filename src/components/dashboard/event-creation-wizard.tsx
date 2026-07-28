@@ -50,9 +50,14 @@ import {
   DEFAULT_TEAM_B_NAME,
   EVENT_FORMATS,
   FORMAT_CATEGORIES,
+  TEAM_SIZE_OPTIONS,
+  getDefaultTeamSize,
   getEventFormat,
   getEventFormatLabel,
+  getTeamSizeLabel,
+  isTeamFormat,
   type EventFormat,
+  type TeamSizeOption,
 } from "@/lib/event-formats";
 import { formatEventDate, formatFee, todayDateString, validateEventDateNotPast } from "@/lib/events";
 import {
@@ -140,10 +145,13 @@ export function EventCreationWizard({
     () =>
       initialValues?.startFormatValues ?? defaultStartFormatFieldValues()
   );
+  const initialFormat =
+    initialValues?.format ?? defaultFormat ?? ("scramble" as EventFormat);
   const [form, setForm] = useState({
     name: initialValues?.name ?? "",
     date: initialValues?.date ?? "",
-    format: initialValues?.format ?? defaultFormat ?? ("scramble" as EventFormat),
+    format: initialFormat,
+    teamSize: getDefaultTeamSize(initialFormat) ?? 4,
     holes: initialValues?.holes ?? ("18" as EventFormInput["holes"]),
     maxPlayers: initialValues?.maxPlayers ?? 72,
     entryFeeDollars: initialValues?.entryFeeDollars ?? 0,
@@ -174,6 +182,7 @@ export function EventCreationWizard({
       ...form,
       ...startFormatValues,
       ...courseSelection,
+      teamSize: isTeamFormat(form.format) ? form.teamSize : null,
       ...(form.format === "ryder_cup"
         ? {
             teamAName: form.teamAName,
@@ -287,6 +296,15 @@ export function EventCreationWizard({
         value: `${form.holes} holes`,
         stepIndex: 2,
       },
+      ...(isTeamFormat(form.format)
+        ? [
+            {
+              label: "Team size",
+              value: `${form.teamSize} players`,
+              stepIndex: 2,
+            },
+          ]
+        : []),
       ...(form.format === "ryder_cup"
         ? [
             { label: "Team A", value: form.teamAName, stepIndex: 2 },
@@ -394,7 +412,14 @@ export function EventCreationWizard({
                 <Select
                   value={form.format}
                   onValueChange={(value) => {
-                    if (value) updateField("format", value as EventFormat);
+                    if (!value) return;
+                    const format = value as EventFormat;
+                    setForm((prev) => ({
+                      ...prev,
+                      format,
+                      teamSize: getDefaultTeamSize(format) ?? prev.teamSize,
+                    }));
+                    setError(null);
                   }}
                 >
                   <SelectTrigger className="h-11 w-full">
@@ -442,6 +467,36 @@ export function EventCreationWizard({
                 </Select>
               </Field>
             </div>
+
+            {isTeamFormat(form.format) && (
+              <Field>
+                <FieldLabel>Team size</FieldLabel>
+                <Select
+                  value={String(form.teamSize)}
+                  onValueChange={(value) => {
+                    if (value) {
+                      updateField("teamSize", Number(value) as TeamSizeOption);
+                    }
+                  }}
+                >
+                  <SelectTrigger className="h-11 w-full">
+                    <SelectValue placeholder="Select team size">
+                      {form.teamSize} players per team
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TEAM_SIZE_OPTIONS.map((size) => (
+                      <SelectItem key={size} value={String(size)}>
+                        {size} players per team
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FieldDescription>
+                  {getTeamSizeLabel(form.teamSize)}
+                </FieldDescription>
+              </Field>
+            )}
 
             {form.format === "ryder_cup" && (
               <div className="grid gap-5 sm:grid-cols-2">
