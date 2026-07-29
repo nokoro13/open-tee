@@ -328,8 +328,8 @@ export function LandingPage({ stats = defaultStats }: LandingPageProps) {
             </div>
 
             <div className="grid items-center gap-8 lg:grid-cols-2 lg:gap-16">
-              <RegistrationPreview />
-              <div>
+              <RegistrationPreview className="order-2 lg:order-1" />
+              <div className="order-1 lg:order-2">
                 <Badge variant="secondary" className="mb-4">
                   Registration
                 </Badge>

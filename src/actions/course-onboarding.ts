@@ -212,6 +212,7 @@ export async function updateCourseOnboardingDetails(
     longitude: number;
     holeCount: 9 | 18;
     backNineMirrorsFront?: boolean;
+    externalCourseId?: string | null;
   }
 ): Promise<OnboardingActionResult> {
   const allowVerifiedEdit = await canEditVerifiedCourse(courseId);
@@ -247,6 +248,11 @@ export async function updateCourseOnboardingDetails(
   const enablingMirroredBackNine =
     backNineMirrorsFront && !course.backNineMirrorsFront;
 
+  const externalCourseIdUpdate =
+    input.externalCourseId !== undefined
+      ? input.externalCourseId?.trim() || null
+      : undefined;
+
   await getDb()
     .update(golfCourses)
     .set({
@@ -259,6 +265,9 @@ export async function updateCourseOnboardingDetails(
       longitude: String(input.longitude),
       holeCount: input.holeCount,
       backNineMirrorsFront,
+      ...(externalCourseIdUpdate !== undefined
+        ? { externalCourseId: externalCourseIdUpdate }
+        : {}),
       updatedAt: new Date(),
     })
     .where(eq(golfCourses.id, courseId));

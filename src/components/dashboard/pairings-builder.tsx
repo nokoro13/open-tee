@@ -111,6 +111,7 @@ import {
   type StartFormat,
 } from "@/lib/start-format";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const UNASSIGNED_DROP_ID = "unassigned";
 
@@ -1650,6 +1651,7 @@ function GroupDetailsSheet({
   onTeamSide,
   onRemovePlayer,
 }: GroupDetailsSheetProps) {
+  const isMobile = useIsMobile();
   const [localLabel, setLocalLabel] = useState(group?.label ?? "");
   const pairSides = usesPairSides(format, teamSize);
 
@@ -1685,11 +1687,36 @@ function GroupDetailsSheet({
 
   return (
     <Sheet open={group != null} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full gap-0 sm:max-w-md">
+      <SheetContent
+        side={isMobile ? "bottom" : "right"}
+        className={cn(
+          "gap-0",
+          isMobile
+            ? "max-h-[88dvh] rounded-t-3xl p-0"
+            : "w-full sm:max-w-md"
+        )}
+      >
         {group && (
           <>
-            <SheetHeader className="border-b border-border pr-12">
-              <SheetTitle>{group.label}</SheetTitle>
+            {isMobile && (
+              <div
+                className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-muted"
+                aria-hidden
+              />
+            )}
+            <SheetHeader
+              className={cn(
+                "shrink-0 border-b border-border",
+                isMobile
+                  ? "border-border/50 px-5 pb-4 pt-3 text-left"
+                  : "pr-12"
+              )}
+            >
+              <SheetTitle
+                className={cn(isMobile && "text-xl font-semibold")}
+              >
+                {group.label}
+              </SheetTitle>
               <SheetDescription>
                 {startFormat === "shotgun"
                   ? group.startingHole != null
@@ -1702,7 +1729,12 @@ function GroupDetailsSheet({
               </SheetDescription>
             </SheetHeader>
 
-            <div className="flex-1 space-y-6 overflow-y-auto p-4">
+            <div
+              className={cn(
+                "min-h-0 flex-1 space-y-6 overflow-y-auto",
+                isMobile ? "px-5 py-4" : "p-4"
+              )}
+            >
               {warning && (
                 <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 sm:text-sm dark:text-amber-100">
                   <AlertTriangle className="mt-0.5 size-4 shrink-0" />
@@ -1966,7 +1998,13 @@ function GroupDetailsSheet({
             </div>
 
             {!setupLocked && (
-              <SheetFooter className="border-t border-border">
+              <SheetFooter
+                className={cn(
+                  "shrink-0 border-t border-border",
+                  isMobile &&
+                    "px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-4"
+                )}
+              >
                 <Button
                   type="button"
                   variant="destructive"

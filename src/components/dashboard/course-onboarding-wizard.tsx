@@ -13,6 +13,7 @@ import {
   submitCourseForVerification,
   updateCourseOnboardingDetails,
 } from "@/actions/course-onboarding";
+import { CourseGooglePlaceSearch } from "@/components/dashboard/course-google-place-search";
 import { CourseHolePinMap } from "@/components/dashboard/course-hole-pin-map";
 import { HoleStrip } from "@/components/dashboard/hole-strip";
 import { compressScorecardImage } from "@/lib/compress-scorecard-image";
@@ -425,6 +426,9 @@ export function CourseOnboardingWizard({
   const [backNineMirrorsFront, setBackNineMirrorsFront] = useState(
     course.backNineMirrorsFront
   );
+  const [externalCourseId, setExternalCourseId] = useState(
+    course.externalCourseId ?? null
+  );
   const [scorecardImageUrl, setScorecardImageUrl] = useState(
     course.scorecardImageUrl ?? ""
   );
@@ -492,6 +496,7 @@ export function CourseOnboardingWizard({
     setLongitude(parseCoordinate(course.longitude)?.toString() ?? "");
     setHoleCount(course.holeCount === 9 ? "9" : "18");
     setBackNineMirrorsFront(course.backNineMirrorsFront);
+    setExternalCourseId(course.externalCourseId ?? null);
   }, [
     step,
     course.id,
@@ -504,6 +509,7 @@ export function CourseOnboardingWizard({
     course.longitude,
     course.holeCount,
     course.backNineMirrorsFront,
+    course.externalCourseId,
   ]);
 
   const mappingLayout = useMemo(
@@ -825,6 +831,19 @@ export function CourseOnboardingWizard({
 
       {step === "details" && (
         <div className="grid gap-4 rounded-lg border p-4 sm:grid-cols-2">
+          <CourseGooglePlaceSearch
+            id="courseGooglePlaceSearch"
+            onPlaceSelect={(selection) => {
+              setName(selection.name);
+              setAddress(selection.address);
+              setCountry(selection.country);
+              setCity(selection.city);
+              setState(selection.state);
+              setLatitude(String(selection.latitude));
+              setLongitude(String(selection.longitude));
+              setExternalCourseId(selection.externalCourseId);
+            }}
+          />
           <Field className="sm:col-span-2">
             <FieldLabel htmlFor="courseName">Course name</FieldLabel>
             <Input
@@ -894,6 +913,9 @@ export function CourseOnboardingWizard({
               onChange={(event) => setLongitude(event.target.value)}
               placeholder="-121.9490"
             />
+            <FieldDescription>
+              Auto-filled from search when available. Edit if needed.
+            </FieldDescription>
           </Field>
           <Field>
             <FieldLabel>Hole count</FieldLabel>
@@ -971,6 +993,7 @@ export function CourseOnboardingWizard({
                     holeCount: holeCount === "9" ? 9 : 18,
                     backNineMirrorsFront:
                       holeCount === "18" ? backNineMirrorsFront : false,
+                    externalCourseId,
                   });
                   if (result.success) setStep("scorecard");
                   return result;

@@ -1,6 +1,9 @@
 export const GOOGLE_MAPS_API_KEY =
   process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
 
+/** Loaded for course onboarding place search. */
+export const GOOGLE_MAPS_PLACES_LIBRARIES: string[] = ["places"];
+
 /** Required for AdvancedMarkerElement. Use DEMO_MAP_ID in dev or set in Google Cloud Console. */
 export const GOOGLE_MAPS_MAP_ID =
   process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID ?? "DEMO_MAP_ID";

@@ -6,13 +6,23 @@ import {
   PHONE_NATIVE_WIDTH,
   SHOWCASE_SCORE_NATIVE_HEIGHT,
 } from "@/lib/showcase-stroke-data";
+import { cn } from "@/lib/utils";
 
-export function RegistrationPreview() {
+type RegistrationPreviewProps = {
+  className?: string;
+};
+
+export function RegistrationPreview({ className }: RegistrationPreviewProps) {
   const { event, organization, registrationCount, spotsLeft, soldOut, registrationClosed } =
     previewRegistrationEvent;
 
   return (
-    <PreviewPhoneFrame className="mx-auto w-[15rem] sm:w-[16.5rem] lg:mr-auto lg:w-[18rem]">
+    <PreviewPhoneFrame
+      className={cn(
+        "mx-auto w-[15rem] sm:w-[16.5rem] lg:mr-auto lg:w-[18rem]",
+        className
+      )}
+    >
       <PreviewScale
         nativeWidth={PHONE_NATIVE_WIDTH}
         nativeHeight={SHOWCASE_SCORE_NATIVE_HEIGHT}

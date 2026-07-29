@@ -223,3 +223,8 @@
   height: 100%;
   background: #1a3828;
 }
+
+/* Google Places Autocomplete dropdown */
+.pac-container {
+  z-index: 9999;
+}

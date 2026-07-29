@@ -8,6 +8,7 @@ import {
   CourseDuplicateWarning,
   useCourseDuplicateCheck,
 } from "@/components/dashboard/course-duplicate-warning";
+import { CourseGooglePlaceSearch } from "@/components/dashboard/course-google-place-search";
 import { CourseRegionSelect, clearRegionIfInvalid } from "@/components/dashboard/course-region-select";
 import { Button } from "@/components/ui/button";
 import {
@@ -42,6 +43,7 @@ export function NewCourseOnboardingForm() {
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
   const [holeCount, setHoleCount] = useState<"9" | "18">("18");
+  const [externalCourseId, setExternalCourseId] = useState<string | null>(null);
 
   const duplicateCheck = useCourseDuplicateCheck({
     name,
@@ -66,6 +68,7 @@ export function NewCourseOnboardingForm() {
             latitude: Number(latitude),
             longitude: Number(longitude),
             holeCount: holeCount === "9" ? 9 : 18,
+            externalCourseId,
           });
           if (!result.success) {
             setError(result.error ?? "Could not create course.");
@@ -79,6 +82,19 @@ export function NewCourseOnboardingForm() {
         });
       }}
     >
+      <CourseGooglePlaceSearch
+        id="newCourseGooglePlaceSearch"
+        onPlaceSelect={(selection) => {
+          setName(selection.name);
+          setAddress(selection.address);
+          setCountry(selection.country);
+          setCity(selection.city);
+          setState(selection.state);
+          setLatitude(String(selection.latitude));
+          setLongitude(String(selection.longitude));
+          setExternalCourseId(selection.externalCourseId);
+        }}
+      />
       <Field className="sm:col-span-2">
         <FieldLabel htmlFor="newCourseName">Course name</FieldLabel>
         <Input
@@ -150,7 +166,7 @@ export function NewCourseOnboardingForm() {
           required
         />
         <FieldDescription>
-          Use Google Maps to find the course center coordinates.
+          Auto-filled from search when available. Edit if needed.
         </FieldDescription>
       </Field>
       <Field>
