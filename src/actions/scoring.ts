@@ -221,7 +221,7 @@ export async function syncEventScoringCodes(eventId: string): Promise<void> {
     where: eq(events.id, eventId),
   });
 
-  if (!event || event.scoringStatus === "disabled") return;
+  if (!event || event.scoringStatus === "finalized") return;
 
   const groups = await getDb().query.pairingGroups.findMany({
     where: eq(pairingGroups.eventId, eventId),
@@ -267,7 +267,7 @@ export async function ensurePairingGroupScoringCode(groupId: string): Promise<vo
     with: { event: true },
   });
 
-  if (!group || group.event.scoringStatus === "disabled" || group.scoringCode) {
+  if (!group || group.scoringCode || group.event.scoringStatus === "finalized") {
     return;
   }
 
@@ -288,7 +288,7 @@ export async function syncRegistrationScoringCode(
     with: { event: true },
   });
 
-  if (!registration || registration.event.scoringStatus === "disabled") {
+  if (!registration || registration.event.scoringStatus === "finalized") {
     return;
   }
 
@@ -299,6 +299,7 @@ export async function syncRegistrationScoringCode(
         .set({ scoringCode: null, updatedAt: new Date() })
         .where(eq(registrations.id, registrationId));
     }
+    await ensurePairingGroupScoringCode(registration.pairingGroupId);
     return;
   }
 

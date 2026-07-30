@@ -148,7 +148,6 @@ export default async function ScorePage({ params, searchParams }: ScorePageProps
       golfCourseId={caddieContext?.courseId ?? null}
       greenTargetsByHole={caddieContext?.greenTargetsByHole}
       holeFeaturesGeoJson={caddieContext?.holeFeaturesByHole}
-      hasHeatmapByHole={caddieContext?.hasHeatmapByHole}
       selectedTeeKey={event.selectedTeeKey}
       selectedTeeColor={caddieContext?.selectedTeeColor ?? null}
     />

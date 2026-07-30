@@ -4,11 +4,9 @@ import { getDb } from "@/db";
 import {
   courseTees,
   golfCourses,
-  greenElevationGrids,
   greenTargets,
   holeFeatures,
   type GolfCourse,
-  type GreenElevationGrid,
   type GreenTarget,
   type HoleFeature,
 } from "@/db/schema";
@@ -21,18 +19,12 @@ import {
   type GreenTargets,
   type GreenTargetsByEventHole,
 } from "@/lib/green-distance";
-import { fetchElevationGridForGreen } from "@/lib/elevation-seed";
 import {
   assignOsmFeaturesToHoles,
   osmFeatureTypeToHoleFeatureType,
 } from "@/lib/hole-spatial-features";
 import { fetchOsmGolfFeaturesNear, type OsmGolfFeature } from "@/lib/overpass-golf";
 import { unstable_cache } from "next/cache";
-
-type PolygonGeometry = {
-  type: "Polygon";
-  coordinates: [number, number][][];
-};
 
 function latLngFromTarget(target: GreenTarget) {
   const lat = parseCoordinate(target.latitude);
@@ -104,9 +96,6 @@ export async function getGolfCourseWithDetails(courseId: string) {
       },
       greenTargets: {
         orderBy: [asc(greenTargets.holeNumber)],
-      },
-      greenElevationGrids: {
-        orderBy: [asc(greenElevationGrids.holeNumber)],
       },
     },
   });
@@ -342,90 +331,6 @@ export async function getHoleFeaturesForEvent(event: {
   return result;
 }
 
-export async function getGreenElevationGrid(
-  courseId: string,
-  holeNumber: number
-): Promise<GreenElevationGrid | null> {
-  const resolved = await resolveCourseHoleGeometry(courseId, holeNumber);
-  if (!resolved) return null;
-
-  return (
-    (await getDb().query.greenElevationGrids.findFirst({
-      where: and(
-        eq(greenElevationGrids.courseId, resolved.courseId),
-        eq(greenElevationGrids.holeNumber, resolved.physicalHole)
-      ),
-    })) ?? null
-  );
-}
-
-export async function seedElevationForCourse(courseId: string, holeNumbers: number[]) {
-  const db = getDb();
-  let elevationCount = 0;
-
-  for (const holeNumber of holeNumbers) {
-    const greenFeature = await db.query.holeFeatures.findFirst({
-      where: and(
-        eq(holeFeatures.courseId, courseId),
-        eq(holeFeatures.holeNumber, holeNumber),
-        eq(holeFeatures.featureType, "green")
-      ),
-    });
-
-    if (!greenFeature?.geometry) continue;
-
-    const grid = await fetchElevationGridForGreen(
-      greenFeature.geometry as PolygonGeometry
-    );
-    if (!grid) continue;
-
-    elevationCount += 1;
-
-    const existing = await db.query.greenElevationGrids.findFirst({
-      where: and(
-        eq(greenElevationGrids.courseId, courseId),
-        eq(greenElevationGrids.holeNumber, holeNumber)
-      ),
-    });
-
-    const values = {
-      gridWidth: grid.gridWidth,
-      gridHeight: grid.gridHeight,
-      boundsGeoJson: grid.boundsGeoJson,
-      elevationData: grid.elevationData,
-      slopeData: grid.slopeData,
-      resolutionM: grid.resolutionM,
-      source: grid.source,
-      updatedAt: new Date(),
-    };
-
-    if (existing) {
-      await db
-        .update(greenElevationGrids)
-        .set(values)
-        .where(eq(greenElevationGrids.id, existing.id));
-    } else {
-      await db.insert(greenElevationGrids).values({
-        courseId,
-        holeNumber,
-        ...values,
-      });
-    }
-  }
-
-  if (elevationCount > 0) {
-    await db
-      .update(golfCourses)
-      .set({
-        dataQuality: "full",
-        updatedAt: new Date(),
-      })
-      .where(eq(golfCourses.id, courseId));
-  }
-
-  return elevationCount;
-}
-
 export type CaddieContextForEvent = {
   courseId: string;
   dataQuality: GolfCourse["dataQuality"];
@@ -435,7 +340,6 @@ export type CaddieContextForEvent = {
     number,
     Awaited<ReturnType<typeof getHoleFeatureCollection>> | null
   >;
-  hasHeatmapByHole: Record<number, boolean>;
   selectedTeeColor: string | null;
 };
 
@@ -455,11 +359,6 @@ export async function getCaddieContextForEvent(event: {
   if (!greenTargetsByHole) return null;
 
   const holeFeaturesByHole: CaddieContextForEvent["holeFeaturesByHole"] = {};
-  const hasHeatmapByHole: Record<number, boolean> = {};
-
-  const elevationGrids = await getDb().query.greenElevationGrids.findMany({
-    where: eq(greenElevationGrids.courseId, course.id),
-  });
 
   const courseTeeRows = await getDb().query.courseTees.findMany({
     where: eq(courseTees.courseId, course.id),
@@ -482,9 +381,6 @@ export async function getCaddieContextForEvent(event: {
       course.id,
       physicalHole
     );
-    hasHeatmapByHole[eventHole] = elevationGrids.some(
-      (grid) => grid.holeNumber === physicalHole
-    );
   }
 
   return {
@@ -493,7 +389,6 @@ export async function getCaddieContextForEvent(event: {
     mappedHoleCount: course.mappedHoleCount,
     greenTargetsByHole,
     holeFeaturesByHole,
-    hasHeatmapByHole,
     selectedTeeColor,
   };
 }

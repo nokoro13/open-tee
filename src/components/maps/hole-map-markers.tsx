@@ -1,11 +1,59 @@
 "use client";
 
+import { useEffect } from "react";
 import {
   AdvancedMarker,
   AdvancedMarkerAnchorPoint,
+  useAdvancedMarkerRef,
 } from "@vis.gl/react-google-maps";
 
 import type { LatLng } from "@/lib/green-distance";
+
+const SUPPRESS_MARKER_FOCUS_CLASS = "suppress-gmp-marker-focus";
+
+function collectMarkerFocusElements(
+  marker: google.maps.marker.AdvancedMarkerElement
+): HTMLElement[] {
+  const elements: HTMLElement[] = [];
+  const content = marker.content;
+  if (!(content instanceof HTMLElement)) return elements;
+
+  let el: HTMLElement | null = content;
+  while (el) {
+    elements.push(el);
+    if (el.tagName.toLowerCase() === "gmp-advanced-marker") break;
+    el = el.parentElement;
+  }
+
+  return elements;
+}
+
+function useSuppressAdvancedMarkerDragFocus(
+  marker: google.maps.marker.AdvancedMarkerElement | null
+) {
+  useEffect(() => {
+    if (!marker) return;
+
+    const elements = collectMarkerFocusElements(marker);
+    if (elements.length === 0) return;
+
+    const preventMouseFocus = (event: Event) => {
+      event.preventDefault();
+    };
+
+    for (const node of elements) {
+      node.classList.add(SUPPRESS_MARKER_FOCUS_CLASS);
+      node.addEventListener("mousedown", preventMouseFocus);
+    }
+
+    return () => {
+      for (const node of elements) {
+        node.classList.remove(SUPPRESS_MARKER_FOCUS_CLASS);
+        node.removeEventListener("mousedown", preventMouseFocus);
+      }
+    };
+  }, [marker]);
+}
 
 function latLngFromDragEvent(
   event: google.maps.MapMouseEvent
@@ -134,26 +182,45 @@ export function BreakAnchorMarker({
   onDrag?: (point: LatLng) => void;
   onDragEnd?: (point: LatLng) => void;
 }) {
+  const [markerRef, marker] = useAdvancedMarkerRef();
+  useSuppressAdvancedMarkerDragFocus(marker);
+
   return (
     <AdvancedMarker
+      ref={markerRef}
       position={position}
       draggable={draggable}
       clickable={clickable}
       zIndex={zIndex}
       title={title}
-      anchorPoint={AdvancedMarkerAnchorPoint.CENTER}
+      anchorLeft="-50%"
+      anchorTop="-50%"
+      className={SUPPRESS_MARKER_FOCUS_CLASS}
       onClick={onClick}
-      onDragStart={onDragStart}
+      onDragStart={() => {
+        if (marker) {
+          for (const node of collectMarkerFocusElements(marker)) {
+            node.blur();
+          }
+        }
+        (document.activeElement as HTMLElement | null)?.blur?.();
+        onDragStart?.();
+      }}
       onDrag={(event) => {
+        (document.activeElement as HTMLElement | null)?.blur?.();
         const point = latLngFromDragEvent(event);
         if (point) onDrag?.(point);
       }}
       onDragEnd={(event) => {
         const point = latLngFromDragEvent(event);
         if (point) onDragEnd?.(point);
+        (document.activeElement as HTMLElement | null)?.blur?.();
       }}
     >
-      <div className="flex size-[30px] cursor-grab items-center justify-center rounded-full border-[2.5px] border-white shadow-md active:cursor-grabbing">
+      <div
+        className="flex size-[30px] cursor-grab items-center justify-center rounded-full border-[2.5px] border-white shadow-md outline-none active:cursor-grabbing"
+        onMouseDown={(event) => event.preventDefault()}
+      >
         <div className="size-[5px] rounded-full bg-white" />
       </div>
     </AdvancedMarker>

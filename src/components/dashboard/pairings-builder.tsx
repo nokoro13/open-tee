@@ -479,8 +479,9 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
     toTeamSide?: "a" | "b"
   ) {
     movePlayerLocally(registrationId, toGroupId, toTeamSide);
-    runAction(() =>
-      assignRegistrationToGroup(registrationId, toGroupId, toTeamSide)
+    runAction(
+      () => assignRegistrationToGroup(registrationId, toGroupId, toTeamSide),
+      () => router.refresh()
     );
   }
 
@@ -599,7 +600,7 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
           : "Drag registrants from the sidebar into groups.";
 
   const canPrintScorecards = localPairings.groups.some(
-    (group) => group.players.length > 0
+    (group) => group.players.length > 0 && group.scoringCode != null
   );
   const showAutoAssignHoles =
     startFormat === "shotgun" &&
@@ -1968,33 +1969,34 @@ function GroupDetailsSheet({
                 )}
               </div>
 
-              {showScoringLinks &&
-                group.players.length > 0 &&
-                group.scoringCode != null &&
-                scoringUrl && (
-                  <div className="space-y-2 border-t border-border pt-4">
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <h4 className="text-xs font-medium text-muted-foreground">
-                        Scoring link
-                      </h4>
-                      <span className="font-mono text-[11px] tracking-wider">
-                        {group.scoringCode}
-                      </span>
-                    </div>
-                    <ButtonLink
-                      variant="outline"
-                      size="sm"
-                      className="h-9 w-full"
-                      href={`/print/events/${eventId}/scorecards/${group.id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <Printer />
-                      <span className="truncate">Print scorecard</span>
-                    </ButtonLink>
-                    <CopyRegistrationLink url={scoringUrl} />
-                  </div>
-                )}
+              {group.players.length > 0 && group.scoringCode != null && (
+                <div className="space-y-2 border-t border-border pt-4">
+                  <ButtonLink
+                    variant="outline"
+                    size="sm"
+                    className="h-9 w-full"
+                    href={`/print/events/${eventId}/scorecards/${group.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Printer />
+                    <span className="truncate">Print scorecard</span>
+                  </ButtonLink>
+                  {showScoringLinks && scoringUrl && (
+                    <>
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <h4 className="text-xs font-medium text-muted-foreground">
+                          Scoring link
+                        </h4>
+                        <span className="font-mono text-[11px] tracking-wider">
+                          {group.scoringCode}
+                        </span>
+                      </div>
+                      <CopyRegistrationLink url={scoringUrl} />
+                    </>
+                  )}
+                </div>
+              )}
             </div>
 
             {!setupLocked && (

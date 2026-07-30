@@ -169,6 +169,19 @@ export function EventCreationWizard({
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [preview, stepIndex]);
 
+  useEffect(() => {
+    if (preview || initialValues?.format) return;
+    const nextFormat = defaultFormat ?? ("scramble" as EventFormat);
+    setForm((prev) => {
+      if (prev.format === nextFormat) return prev;
+      return {
+        ...prev,
+        format: nextFormat,
+        teamSize: getDefaultTeamSize(nextFormat) ?? prev.teamSize,
+      };
+    });
+  }, [defaultFormat, initialValues?.format, preview]);
+
   function updateField<K extends keyof typeof form>(
     key: K,
     value: (typeof form)[K]

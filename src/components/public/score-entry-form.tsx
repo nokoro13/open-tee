@@ -33,7 +33,6 @@ import {
   MobileContextBar,
   MobileHoleHero,
 } from "@/components/public/mobile-scoring-ui";
-import { GreenHeatmapModal } from "@/components/public/green-heatmap-modal";
 import { useLiveDistances } from "@/hooks/use-live-distances";
 import type { GreenTargetsByEventHole } from "@/lib/green-distance";
 import type { GeoJsonFeatureCollection } from "@/lib/geojson";
@@ -97,7 +96,6 @@ type ScoreEntryFormProps = {
   golfCourseId?: string | null;
   greenTargetsByHole?: GreenTargetsByEventHole;
   holeFeaturesGeoJson?: Record<number, GeoJsonFeatureCollection | null>;
-  hasHeatmapByHole?: Record<number, boolean>;
   selectedTeeKey?: string | null;
   selectedTeeColor?: string | null;
   pollIntervalMs?: number;
@@ -316,7 +314,6 @@ export function ScoreEntryForm({
   golfCourseId = null,
   greenTargetsByHole,
   holeFeaturesGeoJson,
-  hasHeatmapByHole = {},
   selectedTeeKey = null,
   selectedTeeColor = null,
   pollIntervalMs = 1000,
@@ -330,8 +327,6 @@ export function ScoreEntryForm({
   const [changeScoresUnlocked, setChangeScoresUnlocked] = useState(false);
   const [showScorecard, setShowScorecard] = useState(false);
   const [showHoleMap, setShowHoleMap] = useState(false);
-  const [showGreenHeatmap, setShowGreenHeatmap] = useState(false);
-  const puttingPromptedHolesRef = useRef<Set<number>>(new Set());
   const [slideDirection, setSlideDirection] = useState<SlideDirection>("forward");
 
   const defaultGroupId =
@@ -517,26 +512,6 @@ export function ScoreEntryForm({
   const caddieEnabled = Boolean(greenTargetsByHole);
   const { position, distances, status: liveDistanceStatus, targets } =
     useLiveDistances(activeHole, greenTargetsByHole, caddieEnabled);
-  const isAtGreen = liveDistanceStatus === "at-green";
-  const hasPuttingRead = Boolean(hasHeatmapByHole[activeHole]);
-
-  useEffect(() => {
-    puttingPromptedHolesRef.current.delete(activeHole);
-  }, [activeHole]);
-
-  useEffect(() => {
-    if (!isAtGreen || !hasPuttingRead || showGreenHeatmap) return;
-    if (puttingPromptedHolesRef.current.has(activeHole)) return;
-
-    puttingPromptedHolesRef.current.add(activeHole);
-    const timer = window.setTimeout(() => {
-      setShowGreenHeatmap(true);
-    }, 600);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [activeHole, hasPuttingRead, isAtGreen, showGreenHeatmap]);
 
   const totalHoles = holeNumbers.length;
   const completedHoles = countCompletedHoles(holeNumbers, entryIds, scores);
@@ -1182,18 +1157,11 @@ export function ScoreEntryForm({
                       totalHoles={totalHoles}
                       par={activePar ?? getDefaultScoreForHole(parByHole, activeHole)}
                       yardage={activeYardage}
-                      isAtGreen={isAtGreen}
                       onOpenHoleMap={
                         holeFeaturesGeoJson?.[activeHole]
                           ? handleOpenHoleMap
                           : undefined
                       }
-                      onOpenGreenHeatmap={
-                        golfCourseId && hasPuttingRead
-                          ? () => setShowGreenHeatmap(true)
-                          : undefined
-                      }
-                      hasHeatmap={hasPuttingRead}
                     />
                   </div>
 
@@ -1359,14 +1327,6 @@ export function ScoreEntryForm({
         onNextHole={() => navigateToIndex(activeHoleIndex + 1, "forward")}
       />
 
-      <GreenHeatmapModal
-        open={showGreenHeatmap}
-        onOpenChange={setShowGreenHeatmap}
-        holeNumber={activeHole}
-        courseId={golfCourseId}
-        features={holeFeaturesGeoJson?.[activeHole] ?? null}
-        targets={targets}
-      />
     </div>
   );
 }

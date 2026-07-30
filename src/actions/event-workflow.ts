@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 import { getEventById } from "@/actions/events";
+import { syncEventScoringCodes } from "@/actions/scoring";
 import { getDb } from "@/db";
 import { events } from "@/db/schema";
 import { requireOrganization } from "@/lib/auth";
@@ -154,6 +155,8 @@ export async function finalizePairings(eventId: string): Promise<ActionResult> {
       updatedAt: now,
     })
     .where(eq(events.id, eventId));
+
+  await syncEventScoringCodes(eventId);
 
   revalidatePaths(eventId, event.slug);
   return { success: true };

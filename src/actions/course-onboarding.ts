@@ -704,13 +704,6 @@ export async function verifySubmittedCourse(
     return { success: false, error: "Course has no mapped holes." };
   }
 
-  const holeNumbers = Array.from(
-    { length: physicalHoleCount(course) },
-    (_, index) => index + 1
-  );
-  const { seedElevationForCourse } = await import("@/lib/golf-courses");
-  await seedElevationForCourse(courseId, holeNumbers);
-
   await getDb()
     .update(golfCourses)
     .set({

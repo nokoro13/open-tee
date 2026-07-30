@@ -39,15 +39,11 @@ export async function GET(_request: Request, { params }: CourseRouteProps) {
         const targets = course.greenTargets.filter(
           (target) => target.holeNumber === holeNumber
         );
-        const hasHeatmap = course.greenElevationGrids.some(
-          (grid) => grid.holeNumber === holeNumber
-        );
 
         return {
           holeNumber,
           featureTypes: features.map((feature) => feature.featureType),
           hasTargets: targets.length >= 3,
-          hasHeatmap,
         };
       }),
     },

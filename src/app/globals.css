@@ -228,3 +228,16 @@
 .pac-container {
   z-index: 9999;
 }
+
+/* Google Advanced Marker focus ring shows during mouse drag — hide it */
+.suppress-gmp-marker-focus,
+.suppress-gmp-marker-focus:focus,
+.suppress-gmp-marker-focus:focus-visible,
+gmp-advanced-marker:focus,
+gmp-advanced-marker:focus-visible,
+gmp-advanced-marker:focus-within,
+gmp-advanced-marker [class*="marker-view"]:focus,
+gmp-advanced-marker [class*="marker-view"]:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}

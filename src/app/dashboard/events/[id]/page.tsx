@@ -206,7 +206,7 @@ export default async function EventDetailPage({
         getRegistrationCount(event.id),
         getRegistrationsForEvent(event.id, org.id),
         (async () => {
-          if (event.scoringStatus !== "disabled") {
+          if (event.scoringStatus !== "finalized") {
             await syncEventScoringCodes(event.id);
           }
           if (event.startFormat === "tee_times") {

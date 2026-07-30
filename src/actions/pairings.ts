@@ -112,6 +112,7 @@ export async function createPairingGroup(
   }
 
   revalidatePath(`/dashboard/events/${eventId}`);
+  revalidatePath(`/print/events/${eventId}/scorecards`);
   return {
     success: true,
     group: {
@@ -299,6 +300,7 @@ export async function assignRegistrationToGroup(
   await syncRegistrationScoringCode(registrationId);
 
   revalidatePath(`/dashboard/events/${registration.eventId}`);
+  revalidatePath(`/print/events/${registration.eventId}/scorecards`);
   return { success: true };
 }
 

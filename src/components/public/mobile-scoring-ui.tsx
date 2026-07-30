@@ -1,7 +1,5 @@
 "use client";
 
-import { Waves } from "lucide-react";
-
 import { runWithGeolocationUserGesture } from "@/lib/geolocation-controller";
 import type { ScoreEntryGroup } from "@/lib/scoring";
 import {
@@ -94,9 +92,6 @@ type MobileHoleHeroProps = {
   par: number;
   yardage?: number | null;
   onOpenHoleMap?: () => void;
-  onOpenGreenHeatmap?: () => void;
-  hasHeatmap?: boolean;
-  isAtGreen?: boolean;
 };
 
 const GPS_BUTTON_SIZE = "size-[4.5rem]";
@@ -135,12 +130,7 @@ export function MobileHoleHero({
   par,
   yardage,
   onOpenHoleMap,
-  onOpenGreenHeatmap,
-  hasHeatmap = false,
-  isAtGreen = false,
 }: MobileHoleHeroProps) {
-  const showPuttingRead = onOpenGreenHeatmap && hasHeatmap;
-
   return (
     <div className="relative shrink-0 overflow-hidden rounded-t-2xl bg-linear-to-br from-primary/8 via-primary/4 to-transparent px-5 py-4">
       <div className="absolute -right-6 -top-6 size-24 rounded-full bg-primary/5" />
@@ -161,21 +151,6 @@ export function MobileHoleHero({
             {yardage != null && <HoleStatPill label="Yds" value={yardage} />}
             <HoleStatPill label="Par" value={par} emphasized />
           </div>
-          {showPuttingRead && (
-            <button
-              type="button"
-              onClick={onOpenGreenHeatmap}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium shadow-sm",
-                isAtGreen
-                  ? "border-primary/50 bg-primary/15 text-primary"
-                  : "border-border/70 bg-background/80 text-foreground"
-              )}
-            >
-              <Waves className="size-3.5" />
-              {isAtGreen ? "Read putt" : "Putting read"}
-            </button>
-          )}
         </div>
         {onOpenHoleMap && (
           <button
