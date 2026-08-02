@@ -126,7 +126,7 @@ function ScoreShowcaseContent() {
               yardage={activeYardage}
             />
 
-            <div className="relative flex min-h-0 flex-1 flex-col justify-center divide-y divide-border/40 overflow-hidden">
+            <div className="relative flex min-h-0 flex-1 flex-col divide-y divide-border/40 overflow-y-auto overscroll-contain">
               {scoreEntries.map((entry, index) => (
                 <ScoreStepper
                   key={entry.id}
@@ -136,7 +136,6 @@ function ScoreShowcaseContent() {
                   size="large"
                   layout="responsive"
                   forceMobileLayout
-                  playerIndex={index}
                   onChange={(value) => setScore(entry.id, value)}
                 />
               ))}

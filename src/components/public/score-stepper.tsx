@@ -3,7 +3,6 @@
 import { Minus, Plus } from "lucide-react";
 
 import {
-  MobilePlayerAvatar,
   scoreResultLabel,
   scoreResultTone,
 } from "@/components/public/mobile-scoring-ui";
@@ -22,7 +21,6 @@ type ScoreStepperProps = {
   size?: "default" | "large";
   layout?: "vertical" | "horizontal" | "responsive";
   forceMobileLayout?: boolean;
-  playerIndex?: number;
   className?: string;
 };
 
@@ -147,7 +145,6 @@ export function ScoreStepper({
   size = "default",
   layout = "vertical",
   forceMobileLayout = false,
-  playerIndex = 0,
   className,
 }: ScoreStepperProps) {
   const large = size === "large";
@@ -159,25 +156,44 @@ export function ScoreStepper({
     onChange(Math.min(MAX_SCORE, Math.max(MIN_SCORE, value + delta)));
   }
 
+  const teamMemberNames =
+    caption && label.includes(" & ") ? label.split(" & ").filter(Boolean) : null;
+
+  const nameBlock = teamMemberNames ? (
+    <div className="space-y-0.5">
+      {teamMemberNames.map((name) => (
+        <p
+          key={name}
+          className="text-sm font-semibold leading-snug break-words text-foreground"
+        >
+          {name}
+        </p>
+      ))}
+    </div>
+  ) : (
+    <p className="text-sm font-semibold leading-snug break-words text-foreground sm:text-base">
+      {label}
+    </p>
+  );
+
   const mobileRow = (
     <div
       className={cn(
-        "flex min-h-[4.5rem] max-h-[6rem] flex-1 items-center gap-3 px-4 py-3",
+        "flex w-full shrink-0 items-start gap-3 px-4 py-3.5",
         className
       )}
     >
-      <MobilePlayerAvatar name={label} index={playerIndex} />
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 space-y-1">
         {caption ? (
           <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
             {caption}
           </p>
         ) : null}
-        <p className="text-md font-semibold leading-snug text-foreground">{label}</p>
+        {nameBlock}
         {resultLabel ? (
           <span
             className={cn(
-              "mt-1 inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold",
+              "inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold",
               resultTone
             )}
           >
@@ -185,41 +201,45 @@ export function ScoreStepper({
           </span>
         ) : null}
       </div>
-      <HorizontalControls
-        label={label}
-        value={value}
-        disabled={disabled}
-        large={large}
-        onAdjust={adjust}
-      />
+      <div className="shrink-0 self-center">
+        <HorizontalControls
+          label={label}
+          value={value}
+          disabled={disabled}
+          large={large}
+          onAdjust={adjust}
+        />
+      </div>
     </div>
   );
 
   const horizontalRow = (
     <div
       className={cn(
-        "flex w-full shrink-0 items-center gap-3 rounded-xl border border-border/70 bg-muted/25 px-4 py-2.5",
+        "flex w-full shrink-0 items-start gap-3 rounded-xl border border-border/70 bg-muted/25 px-4 py-3",
         className
       )}
     >
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 space-y-1">
         {caption ? (
           <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
             {caption}
           </p>
         ) : null}
-        <p className="text-lg font-semibold leading-snug">{label}</p>
+        {nameBlock}
         {resultLabel ? (
-          <p className="mt-0.5 text-sm font-medium text-muted-foreground">{resultLabel}</p>
+          <p className="text-sm font-medium text-muted-foreground">{resultLabel}</p>
         ) : null}
       </div>
-      <HorizontalControls
-        label={label}
-        value={value}
-        disabled={disabled}
-        large={large}
-        onAdjust={adjust}
-      />
+      <div className="shrink-0 self-center">
+        <HorizontalControls
+          label={label}
+          value={value}
+          disabled={disabled}
+          large={large}
+          onAdjust={adjust}
+        />
+      </div>
     </div>
   );
 
@@ -230,14 +250,30 @@ export function ScoreStepper({
           {caption}
         </p>
       ) : null}
-      <p
-        className={cn(
-          "mb-3 max-w-44 text-center font-semibold leading-tight",
-          large ? "text-sm sm:text-base" : "text-sm"
-        )}
-      >
-        {label}
-      </p>
+      {teamMemberNames ? (
+        <div className="mb-3 max-w-48 space-y-0.5 text-center">
+          {teamMemberNames.map((name) => (
+            <p
+              key={name}
+              className={cn(
+                "font-semibold leading-snug break-words",
+                large ? "text-sm sm:text-base" : "text-sm"
+              )}
+            >
+              {name}
+            </p>
+          ))}
+        </div>
+      ) : (
+        <p
+          className={cn(
+            "mb-3 max-w-44 text-center font-semibold leading-tight break-words",
+            large ? "text-sm sm:text-base" : "text-sm"
+          )}
+        >
+          {label}
+        </p>
+      )}
       <VerticalControls
         label={label}
         value={value}
@@ -254,7 +290,7 @@ export function ScoreStepper({
     }
     return (
       <>
-        <div className="flex w-full min-h-0 flex-1 lg:hidden">{mobileRow}</div>
+        <div className="w-full shrink-0 lg:hidden">{mobileRow}</div>
         <div className="hidden lg:block">{verticalColumn}</div>
       </>
     );

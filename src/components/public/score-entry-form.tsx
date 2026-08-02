@@ -1189,11 +1189,6 @@ export function ScoreEntryForm({
 
                   <div className="relative flex min-h-0 flex-1 flex-col divide-y divide-border/40 overflow-y-auto overscroll-contain lg:mt-8 lg:min-h-0 lg:flex-none lg:flex-row lg:flex-wrap lg:items-start lg:justify-center lg:gap-10 lg:divide-y-0 lg:overflow-visible">
                     {scoreEntrySections.map((section, sectionIndex) => {
-                      let playerOffset = 0;
-                      for (let i = 0; i < sectionIndex; i++) {
-                        playerOffset +=
-                          scoreEntrySections[i]?.entries.length ?? 0;
-                      }
                       const showTeamHeader =
                         pairSides && section.teamLabel != null && !teamHoleScoring;
 
@@ -1231,7 +1226,7 @@ export function ScoreEntryForm({
                               section.entries.length > 1 && "lg:flex"
                             )}
                           >
-                            {section.entries.map((entry, index) => (
+                            {section.entries.map((entry) => (
                               <ScoreStepper
                                 key={entry.id}
                                 label={entry.label}
@@ -1250,7 +1245,6 @@ export function ScoreEntryForm({
                                 }
                                 size="large"
                                 layout="responsive"
-                                playerIndex={playerOffset + index}
                                 onChange={(value) =>
                                   setScore(entry.id, activeHole, value)
                                 }

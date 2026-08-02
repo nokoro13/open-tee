@@ -33,6 +33,7 @@ import {
   Search,
   Trash2,
   UserMinus,
+  UserPlus,
   Users,
   X,
 } from "lucide-react";
@@ -167,6 +168,59 @@ function parseDropTarget(overId: string): DropTarget | null {
   return { groupId: rest };
 }
 
+function canAssignToGroup(
+  pairings: EventPairings,
+  registrationId: string,
+  targetGroupId: string | null,
+  targetTeamSide: "a" | "b" | undefined,
+  format: string,
+  teamLayout: TeamGroupLayout | null,
+  effectiveTeamSize: number | null,
+  pairSides: boolean
+): boolean {
+  if (targetGroupId === null) return true;
+
+  const found = findPlayer(pairings, registrationId);
+  if (!found) return false;
+
+  const fromTeamSide =
+    found.player.teamSide === "a" || found.player.teamSide === "b"
+      ? found.player.teamSide
+      : null;
+
+  if (targetGroupId === found.fromGroupId) {
+    if (pairSides) {
+      if (!targetTeamSide || targetTeamSide === fromTeamSide) return false;
+    } else {
+      return false;
+    }
+  }
+
+  if (pairSides && targetTeamSide) {
+    const targetGroup = pairings.groups.find(
+      (group) => group.id === targetGroupId
+    );
+    const pairCount =
+      targetGroup?.players.filter(
+        (player) =>
+          player.teamSide === targetTeamSide && player.id !== registrationId
+      ).length ?? 0;
+    if (pairCount >= 2) return false;
+  }
+
+  if (teamLayout === "single" && effectiveTeamSize) {
+    const targetGroup = pairings.groups.find(
+      (group) => group.id === targetGroupId
+    );
+    const teamCount =
+      targetGroup?.players.filter((player) => player.id !== registrationId)
+        .length ?? 0;
+    if (teamCount >= effectiveTeamSize) return false;
+  }
+
+  return true;
+}
+
 type GroupUpdateInput = {
   label?: string;
   teeTime?: string | null;
@@ -248,6 +302,12 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
   const [localTeamSize, setLocalTeamSize] = useState<number | null>(
     teamSize ?? null
   );
+  const isMobile = useIsMobile();
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
+  const [playerPicker, setPlayerPicker] = useState<{
+    open: boolean;
+    groupId: string | null;
+  }>({ open: false, groupId: null });
 
   useEffect(() => {
     setLocalPairings(pairings);
@@ -299,6 +359,11 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
     if (!activePlayerId) return null;
     return findPlayer(localPairings, activePlayerId)?.player ?? null;
   }, [activePlayerId, localPairings]);
+
+  const selectedPlayer = useMemo(() => {
+    if (!selectedPlayerId) return null;
+    return findPlayer(localPairings, selectedPlayerId)?.player ?? null;
+  }, [selectedPlayerId, localPairings]);
 
   const detailsGroup = useMemo(
     () =>
@@ -479,10 +544,61 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
     toTeamSide?: "a" | "b"
   ) {
     movePlayerLocally(registrationId, toGroupId, toTeamSide);
+    setSelectedPlayerId((current) =>
+      current === registrationId ? null : current
+    );
     runAction(
       () => assignRegistrationToGroup(registrationId, toGroupId, toTeamSide),
       () => router.refresh()
     );
+  }
+
+  function resolveAssignTeamSide(
+    groupId: string,
+    explicitSide?: "a" | "b"
+  ): "a" | "b" | undefined {
+    if (explicitSide) return explicitSide;
+    if (!pairSides) return undefined;
+    const group = localPairings.groups.find((entry) => entry.id === groupId);
+    if (!group) return undefined;
+    return suggestTeamSide(group.players);
+  }
+
+  function handleAssignToGroup(
+    registrationId: string,
+    groupId: string,
+    teamSide?: "a" | "b"
+  ) {
+    const resolvedSide = resolveAssignTeamSide(groupId, teamSide);
+    if (
+      !canAssignToGroup(
+        localPairings,
+        registrationId,
+        groupId,
+        resolvedSide,
+        format,
+        teamLayout,
+        effectiveTeamSize,
+        pairSides
+      )
+    ) {
+      return;
+    }
+    handleMovePlayer(registrationId, groupId, resolvedSide);
+  }
+
+  function handlePlayerPickerSelect(playerId: string) {
+    if (playerPicker.groupId) {
+      handleAssignToGroup(playerId, playerPicker.groupId);
+      setPlayerPicker({ open: false, groupId: null });
+      return;
+    }
+    setSelectedPlayerId(playerId);
+    setPlayerPicker({ open: false, groupId: null });
+  }
+
+  function openPlayerPicker(groupId: string | null) {
+    setPlayerPicker({ open: true, groupId });
   }
 
   function handleDragStart(event: DragStartEvent) {
@@ -590,8 +706,15 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
     setActivePlayerId(null);
   }
 
-  const pairingHint =
-    teamLayout === "split"
+  const pairingHint = isMobile
+    ? teamLayout === "split"
+      ? `Tap a group to assign players to ${sideALabel} or ${sideBLabel}.`
+      : teamLayout === "single" && effectiveTeamSize
+        ? `Tap Add player on a group, or select a player then tap a group.`
+        : showMatchType
+          ? `Tap Add player on a match to assign sides.`
+          : "Tap Add player on a group, or select a player then tap a group."
+    : teamLayout === "split"
       ? `Groups tee off together (max 4 players). Assign players to ${sideALabel} or ${sideBLabel}.`
       : teamLayout === "single" && effectiveTeamSize
         ? `Each group holds one team of ${effectiveTeamSize}. Drag players from the sidebar into a team slot.`
@@ -640,7 +763,7 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
         </div>
       </CardHeader>
 
-      <CardContent className="min-w-0 space-y-4">
+      <CardContent className="min-w-0 space-y-4 pb-24 lg:pb-4">
         {error && (
           <p className="text-sm text-destructive" role="alert">
             {error}
@@ -662,15 +785,7 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
             onDragCancel={handleDragCancel}
           >
             <div className="flex min-w-0 flex-col gap-4 overflow-x-hidden lg:min-h-130 lg:flex-row lg:gap-6">
-              <RegistrantsSidebar
-                players={filteredUnassigned}
-                totalCount={localPairings.unassigned.length}
-                search={search}
-                onSearchChange={setSearch}
-                disabled={controlsDisabled}
-              />
-
-              <div className="min-w-0 w-full max-w-full flex-1 space-y-0">
+              <div className="order-1 min-w-0 w-full max-w-full flex-1 space-y-0 lg:order-2">
                 <div className="mb-3 space-y-1">
                   <h3 className="text-sm font-semibold">
                     {showMatchType ? "Matches" : "Groups"}
@@ -678,7 +793,9 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
                   <p className="text-xs text-muted-foreground">
                     {localPairings.groups.length} total
                     {localPairings.groups.length > 0
-                      ? " · tap a row for details"
+                      ? isMobile
+                        ? " · tap Add player or open details"
+                        : " · tap a row for details"
                       : ""}
                   </p>
                 </div>
@@ -692,6 +809,7 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
                   showAutoAssignHoles={showAutoAssignHoles}
                   canPrintScorecards={canPrintScorecards}
                   eventId={eventId}
+                  isMobile={isMobile}
                   onTeamSizeChange={handleTeamSizeChange}
                   onAutoAssignHoles={() => {
                     autoAssignShotgunHolesLocally();
@@ -709,11 +827,23 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
                       {showMatchType ? "No matches yet" : "No groups yet"}
                     </p>
                     <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-                      Click{" "}
-                      <span className="font-medium text-foreground">
-                        {showMatchType ? "Add match" : "Add group"}
-                      </span>{" "}
-                      to create one, then drag players from the sidebar.
+                      {isMobile ? (
+                        <>
+                          Tap{" "}
+                          <span className="font-medium text-foreground">
+                            {showMatchType ? "Add match" : "Add group"}
+                          </span>{" "}
+                          below, then assign players from the unassigned list.
+                        </>
+                      ) : (
+                        <>
+                          Click{" "}
+                          <span className="font-medium text-foreground">
+                            {showMatchType ? "Add match" : "Add group"}
+                          </span>{" "}
+                          to create one, then drag players from the sidebar.
+                        </>
+                      )}
                     </p>
                   </div>
                 ) : (
@@ -735,6 +865,18 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
                           teamSize: localTeamSize,
                         }
                       );
+                      const canAssignHere =
+                        selectedPlayerId != null &&
+                        canAssignToGroup(
+                          localPairings,
+                          selectedPlayerId,
+                          group.id,
+                          resolveAssignTeamSide(group.id),
+                          format,
+                          teamLayout,
+                          effectiveTeamSize,
+                          pairSides
+                        );
 
                       return (
                         <GroupRow
@@ -752,10 +894,20 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
                           sideBLabel={sideBLabel}
                           warning={warning}
                           disabled={controlsDisabled}
+                          isMobile={isMobile}
+                          assignMode={canAssignHere}
+                          selectedPlayerId={selectedPlayerId}
                           onUpdate={(input) =>
                             handleUpdateGroup(group.id, input)
                           }
                           onOpenDetails={() => setDetailsGroupId(group.id)}
+                          onAddPlayer={() => openPlayerPicker(group.id)}
+                          onAssignHere={() => {
+                            if (selectedPlayerId) {
+                              handleAssignToGroup(selectedPlayerId, group.id);
+                            }
+                          }}
+                          onSelectPlayer={setSelectedPlayerId}
                           onTeamSide={handleTeamSide}
                           onRemovePlayer={(registrationId) =>
                             handleMovePlayer(registrationId, null)
@@ -766,7 +918,47 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
                   </div>
                 )}
               </div>
+
+              <RegistrantsSidebar
+                players={filteredUnassigned}
+                totalCount={localPairings.unassigned.length}
+                search={search}
+                onSearchChange={setSearch}
+                disabled={controlsDisabled}
+                isMobile={isMobile}
+                selectedPlayerId={selectedPlayerId}
+                onSelectPlayer={setSelectedPlayerId}
+              />
             </div>
+
+            {isMobile && !setupLocked && (
+              <MobileAssignBar
+                unassignedCount={localPairings.unassigned.length}
+                selectedPlayer={selectedPlayer}
+                onOpenPicker={() => openPlayerPicker(null)}
+                onClearSelection={() => setSelectedPlayerId(null)}
+              />
+            )}
+
+            <PlayerPickerSheet
+              open={playerPicker.open}
+              onOpenChange={(open) => {
+                if (!open) setPlayerPicker({ open: false, groupId: null });
+              }}
+              players={filteredUnassigned}
+              search={search}
+              onSearchChange={setSearch}
+              targetGroup={
+                playerPicker.groupId
+                  ? (localPairings.groups.find(
+                      (group) => group.id === playerPicker.groupId
+                    ) ?? null)
+                  : null
+              }
+              showMatchType={showMatchType}
+              disabled={controlsDisabled}
+              onSelectPlayer={handlePlayerPickerSelect}
+            />
 
             <DragOverlay dropAnimation={null}>
               {activePlayer ? (
@@ -803,6 +995,13 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
           canEmailPlayers={canEmailPlayers}
           appUrl={appUrl}
           slug={slug}
+          unassignedCount={localPairings.unassigned.length}
+          onAddPlayers={() => {
+            if (detailsGroup) {
+              openPlayerPicker(detailsGroup.id);
+              setDetailsGroupId(null);
+            }
+          }}
           onUpdate={(input) => {
             if (detailsGroup) handleUpdateGroup(detailsGroup.id, input);
           }}
@@ -828,6 +1027,7 @@ type PairingsGroupsToolbarProps = {
   showAutoAssignHoles: boolean;
   canPrintScorecards: boolean;
   eventId: string;
+  isMobile: boolean;
   onTeamSizeChange: (size: TeamSizeOption) => void;
   onAutoAssignHoles: () => void;
   onCreateGroup: () => void;
@@ -842,12 +1042,20 @@ function PairingsGroupsToolbar({
   showAutoAssignHoles,
   canPrintScorecards,
   eventId,
+  isMobile,
   onTeamSizeChange,
   onAutoAssignHoles,
   onCreateGroup,
 }: PairingsGroupsToolbarProps) {
   return (
-    <div className="mb-3 flex h-10 items-center justify-between gap-2">
+    <div
+      className={cn(
+        "mb-3 flex gap-2",
+        isMobile
+          ? "flex-col"
+          : "h-10 items-center justify-between"
+      )}
+    >
       <div className="flex min-w-0 items-center gap-2">
         {isTeamFormat(format) && effectiveTeamSize ? (
           <>
@@ -864,7 +1072,10 @@ function PairingsGroupsToolbar({
               }}
             >
               <SelectTrigger
-                className="h-10 w-[8.75rem] shrink-0"
+                className={cn(
+                  "h-10 shrink-0",
+                  isMobile ? "w-full" : "w-[8.75rem]"
+                )}
                 aria-label="Players per team"
               >
                 <SelectValue>{effectiveTeamSize} per team</SelectValue>
@@ -882,21 +1093,28 @@ function PairingsGroupsToolbar({
             </span>
           </>
         ) : (
-          <span className="truncate text-xs text-muted-foreground">
-            {showMatchType
-              ? "Add matches and assign sides below."
-              : "Add groups and assign players below."}
-          </span>
+          !isMobile && (
+            <span className="truncate text-xs text-muted-foreground">
+              {showMatchType
+                ? "Add matches and assign sides below."
+                : "Add groups and assign players below."}
+            </span>
+          )
         )}
       </div>
 
-      <div className="flex shrink-0 items-center gap-2">
+      <div
+        className={cn(
+          "flex shrink-0 items-center gap-2",
+          isMobile && "flex-wrap"
+        )}
+      >
         {showAutoAssignHoles && (
           <Button
             type="button"
             variant="outline"
             size="sm"
-            className="h-10"
+            className={cn("h-10", isMobile && "flex-1")}
             disabled={controlsDisabled}
             onClick={onAutoAssignHoles}
           >
@@ -907,7 +1125,7 @@ function PairingsGroupsToolbar({
           <ButtonLink
             variant="outline"
             size="sm"
-            className="h-10"
+            className={cn("h-10", isMobile && "flex-1")}
             href={`/print/events/${eventId}/scorecards`}
             target="_blank"
             rel="noopener noreferrer"
@@ -921,7 +1139,7 @@ function PairingsGroupsToolbar({
           <Button
             type="button"
             size="sm"
-            className="h-10"
+            className={cn("h-10", isMobile && "w-full")}
             disabled={controlsDisabled}
             onClick={onCreateGroup}
           >
@@ -940,6 +1158,9 @@ type RegistrantsSidebarProps = {
   search: string;
   onSearchChange: (value: string) => void;
   disabled: boolean;
+  isMobile: boolean;
+  selectedPlayerId: string | null;
+  onSelectPlayer: (playerId: string | null) => void;
 };
 
 function RegistrantsSidebar({
@@ -948,6 +1169,9 @@ function RegistrantsSidebar({
   search,
   onSearchChange,
   disabled,
+  isMobile,
+  selectedPlayerId,
+  onSelectPlayer,
 }: RegistrantsSidebarProps) {
   const [mobileExpanded, setMobileExpanded] = useState(totalCount > 0);
 
@@ -962,8 +1186,12 @@ function RegistrantsSidebar({
     disabled,
   });
 
+  if (isMobile) {
+    return null;
+  }
+
   return (
-    <aside className="flex w-full min-w-0 shrink-0 flex-col overflow-x-hidden lg:w-64 xl:w-72">
+    <aside className="order-2 flex w-full min-w-0 shrink-0 flex-col overflow-x-hidden lg:order-1 lg:w-64 xl:w-72">
       <div
         ref={setNodeRef}
         className={cn(
@@ -1038,6 +1266,13 @@ function RegistrantsSidebar({
                   key={player.id}
                   player={player}
                   disabled={disabled}
+                  isMobile={false}
+                  isSelected={selectedPlayerId === player.id}
+                  onSelect={() =>
+                    onSelectPlayer(
+                      selectedPlayerId === player.id ? null : player.id
+                    )
+                  }
                 />
               ))
             )}
@@ -1051,12 +1286,21 @@ function RegistrantsSidebar({
 type SidebarPlayerCardProps = {
   player: PairingPlayer;
   disabled: boolean;
+  isMobile: boolean;
+  isSelected: boolean;
+  onSelect: () => void;
 };
 
-function SidebarPlayerCard({ player, disabled }: SidebarPlayerCardProps) {
+function SidebarPlayerCard({
+  player,
+  disabled,
+  isMobile,
+  isSelected,
+  onSelect,
+}: SidebarPlayerCardProps) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: player.id,
-    disabled,
+    disabled: disabled || isMobile,
     data: {
       registrationId: player.id,
       fromGroupId: null,
@@ -1066,18 +1310,29 @@ function SidebarPlayerCard({ player, disabled }: SidebarPlayerCardProps) {
   return (
     <div
       ref={setNodeRef}
-      {...attributes}
-      {...listeners}
+      {...(!isMobile ? attributes : {})}
+      {...(!isMobile ? listeners : {})}
+      onClick={isMobile ? onSelect : undefined}
       className={cn(
-        "flex touch-none select-none items-center gap-2 rounded-lg border border-border bg-background px-2.5 py-2 shadow-xs",
-        disabled
-          ? "cursor-not-allowed opacity-70"
-          : "cursor-grab active:cursor-grabbing",
+        "flex select-none items-center gap-2 rounded-lg border bg-background px-2.5 py-2 shadow-xs",
+        isMobile ? "min-h-11 touch-manipulation py-2.5" : "touch-none",
+        isMobile ? "cursor-pointer" : "border-border",
+        !isMobile &&
+          (disabled
+            ? "cursor-not-allowed opacity-70"
+            : "cursor-grab border-border active:cursor-grabbing"),
+        isSelected && "border-primary bg-primary/5 ring-2 ring-primary/20",
+        !isSelected && isMobile && "border-border",
         isDragging && "opacity-40"
       )}
-      aria-label={`Drag ${player.name}`}
+      aria-label={
+        isMobile ? `Select ${player.name} to assign` : `Drag ${player.name}`
+      }
+      aria-pressed={isMobile ? isSelected : undefined}
     >
-      <GripVertical className="size-3.5 shrink-0 text-muted-foreground/70" />
+      {!isMobile && (
+        <GripVertical className="size-3.5 shrink-0 text-muted-foreground/70" />
+      )}
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">{player.name}</p>
         <p className="truncate text-xs text-muted-foreground">
@@ -1130,8 +1385,14 @@ type GroupRowProps = {
   sideBLabel: string;
   warning: string | null;
   disabled: boolean;
+  isMobile: boolean;
+  assignMode: boolean;
+  selectedPlayerId: string | null;
   onUpdate: (input: GroupUpdateInput) => void;
   onOpenDetails: () => void;
+  onAddPlayer: () => void;
+  onAssignHere: () => void;
+  onSelectPlayer: (playerId: string | null) => void;
   onTeamSide: (registrationId: string, teamSide: "a" | "b" | null) => void;
   onRemovePlayer: (registrationId: string) => void;
 };
@@ -1150,8 +1411,14 @@ function GroupRow({
   sideBLabel,
   warning,
   disabled,
+  isMobile,
+  assignMode,
+  selectedPlayerId,
   onUpdate,
   onOpenDetails,
+  onAddPlayer,
+  onAssignHere,
+  onSelectPlayer,
   onTeamSide,
   onRemovePlayer,
 }: GroupRowProps) {
@@ -1159,7 +1426,7 @@ function GroupRow({
   const dropId = `group:${group.id}`;
   const { isOver, setNodeRef } = useDroppable({
     id: dropId,
-    disabled: disabled || useTeamZones,
+    disabled: disabled || useTeamZones || (isMobile && !assignMode),
   });
 
   const capacity = getGroupCapacity(format, group.matchType, teamSize);
@@ -1174,83 +1441,174 @@ function GroupRow({
       )
     : [];
 
+  function handleRowClick() {
+    if (assignMode) {
+      onAssignHere();
+    }
+  }
+
   return (
     <div
       ref={useTeamZones ? undefined : setNodeRef}
+      role={assignMode ? "button" : undefined}
+      tabIndex={assignMode ? 0 : undefined}
+      onClick={assignMode ? handleRowClick : undefined}
+      onKeyDown={
+        assignMode
+          ? (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onAssignHere();
+              }
+            }
+          : undefined
+      }
       className={cn(
-        "grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 rounded-xl border bg-card px-3 py-2.5 transition-colors sm:gap-3 sm:px-3.5 sm:py-3",
-        !useTeamZones && isOver
-          ? "border-primary bg-primary/5 ring-2 ring-inset ring-primary/20"
-          : "border-border",
-        isFull && "bg-muted/15"
+        "min-w-0 rounded-xl border bg-card transition-colors",
+        isMobile
+          ? "flex flex-col gap-3 px-3 py-3"
+          : "grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 px-3 py-2.5 sm:gap-3 sm:px-3.5 sm:py-3",
+        assignMode
+          ? "cursor-pointer border-primary bg-primary/5 ring-2 ring-primary/25"
+          : !useTeamZones && isOver
+            ? "border-primary bg-primary/5 ring-2 ring-inset ring-primary/20"
+            : "border-border",
+        isFull && !assignMode && "bg-muted/15"
       )}
     >
-      <div className="flex min-w-0 max-w-40 shrink-0 items-center gap-2 sm:max-w-48">
-        {startFormat === "shotgun" ? (
-          <Select
-            value={group.startingHole != null ? String(group.startingHole) : ""}
-            disabled={disabled}
-            onValueChange={(value) => {
-              if (!value) return;
-              onUpdate({ startingHole: Number(value) });
-            }}
-          >
-            <SelectTrigger
-              className="h-8 w-22 shrink-0 px-2.5 text-xs sm:w-24"
-              aria-label={`Starting hole for ${group.label}`}
-            >
-              <Flag className="size-3.5 shrink-0 text-muted-foreground" />
-              <SelectValue placeholder="Hole">
-                {group.startingHole != null
-                  ? `H${group.startingHole}`
-                  : undefined}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {startingHoleOptions.map((hole) => (
-                <SelectItem key={hole} value={String(hole)}>
-                  Hole {hole}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ) : (
-          <span className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 text-xs font-medium tabular-nums">
-            <Clock className="size-3.5 text-muted-foreground" />
-            {formatTimeDisplay(group.teeTime)}
-          </span>
+      <div
+        className={cn(
+          "flex min-w-0 items-center gap-2",
+          isMobile ? "justify-between" : "max-w-40 shrink-0 sm:max-w-48"
         )}
+      >
+        <div className="flex min-w-0 items-center gap-2">
+          {startFormat === "shotgun" ? (
+            <Select
+              value={group.startingHole != null ? String(group.startingHole) : ""}
+              disabled={disabled}
+              onValueChange={(value) => {
+                if (!value) return;
+                onUpdate({ startingHole: Number(value) });
+              }}
+            >
+              <SelectTrigger
+                className="h-9 w-22 shrink-0 px-2.5 text-xs sm:h-8 sm:w-24"
+                aria-label={`Starting hole for ${group.label}`}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <Flag className="size-3.5 shrink-0 text-muted-foreground" />
+                <SelectValue placeholder="Hole">
+                  {group.startingHole != null
+                    ? `H${group.startingHole}`
+                    : undefined}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {startingHoleOptions.map((hole) => (
+                  <SelectItem key={hole} value={String(hole)}>
+                    Hole {hole}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <span className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 text-xs font-medium tabular-nums sm:h-8">
+              <Clock className="size-3.5 text-muted-foreground" />
+              {formatTimeDisplay(group.teeTime)}
+            </span>
+          )}
 
-        <button
-          type="button"
-          className="min-w-0 truncate text-left text-sm font-semibold hover:underline"
-          onClick={onOpenDetails}
-          title={group.label}
-        >
-          {group.label}
-        </button>
-
-        {showMatchType && (
-          <Badge
-            variant="outline"
-            className={cn(
-              "hidden shrink-0 text-[10px] sm:inline-flex",
-              !group.matchType && "border-amber-500/50 text-amber-600"
-            )}
+          <button
+            type="button"
+            className="min-w-0 truncate text-left text-sm font-semibold hover:underline"
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenDetails();
+            }}
+            title={group.label}
           >
-            {getRyderMatchType(group.matchType)?.label ?? "No type"}
-          </Badge>
+            {group.label}
+          </button>
+
+          {showMatchType && (
+            <Badge
+              variant="outline"
+              className={cn(
+                "shrink-0 text-[10px]",
+                !isMobile && "hidden sm:inline-flex",
+                !group.matchType && "border-amber-500/50 text-amber-600"
+              )}
+            >
+              {getRyderMatchType(group.matchType)?.label ?? "No type"}
+            </Badge>
+          )}
+        </div>
+
+        {isMobile && (
+          <div className="flex shrink-0 items-center gap-0.5">
+            {warning && (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      className="rounded-md p-1 text-amber-600 hover:bg-amber-500/10"
+                      aria-label={`Warning: ${warning}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onOpenDetails();
+                      }}
+                    />
+                  }
+                >
+                  <AlertTriangle className="size-3.5" />
+                </TooltipTrigger>
+                <TooltipContent>{warning}</TooltipContent>
+              </Tooltip>
+            )}
+            <span
+              className={cn(
+                "px-1 text-xs tabular-nums text-muted-foreground",
+                isFull && "font-medium text-foreground/70",
+                overCapacity && "font-semibold text-amber-600"
+              )}
+            >
+              {group.players.length}/{capacity.max}
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="size-9"
+              aria-label={`Open details for ${group.label}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                onOpenDetails();
+              }}
+            >
+              <Ellipsis className="size-4" />
+            </Button>
+          </div>
         )}
       </div>
+
+      {assignMode && (
+        <p className="text-xs font-medium text-primary">
+          Tap to assign here
+        </p>
+      )}
 
       <div
         className={cn(
           "min-w-0",
+          isMobile ? "w-full" : undefined,
           useTeamZones
             ? "grid grid-cols-1 gap-2 sm:grid-cols-2"
-            : "flex items-center gap-1.5",
+            : "flex flex-wrap items-center gap-1.5",
           !useTeamZones && group.players.length === 0 && "justify-start"
         )}
+        onClick={(event) => event.stopPropagation()}
       >
         {teamLayout === "split" ? (
           <>
@@ -1261,6 +1619,9 @@ function GroupRow({
               capacity={2}
               players={teamAPlayers}
               disabled={disabled}
+              isMobile={isMobile}
+              selectedPlayerId={selectedPlayerId}
+              onSelectPlayer={onSelectPlayer}
               onRemovePlayer={onRemovePlayer}
             />
             <TeamDropZone
@@ -1270,12 +1631,15 @@ function GroupRow({
               capacity={2}
               players={teamBPlayers}
               disabled={disabled}
+              isMobile={isMobile}
+              selectedPlayerId={selectedPlayerId}
+              onSelectPlayer={onSelectPlayer}
               onRemovePlayer={onRemovePlayer}
             />
             {unassignedPlayers.length > 0 && (
               <div className="col-span-full space-y-1.5 rounded-lg border border-amber-500/40 bg-amber-500/5 p-2">
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
-                  Needs a team — drag into {sideALabel} or {sideBLabel}
+                  Needs a team — {isMobile ? "assign side in details" : `drag into ${sideALabel} or ${sideBLabel}`}
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {unassignedPlayers.map((player) => (
@@ -1284,10 +1648,17 @@ function GroupRow({
                       player={player}
                       groupId={group.id}
                       disabled={disabled}
+                      isMobile={isMobile}
+                      isSelected={selectedPlayerId === player.id}
                       showTeamSides={false}
                       sideALabel={sideALabel}
                       sideBLabel={sideBLabel}
                       onTeamSide={() => {}}
+                      onSelect={() =>
+                        onSelectPlayer(
+                          selectedPlayerId === player.id ? null : player.id
+                        )
+                      }
                       onRemove={() => onRemovePlayer(player.id)}
                     />
                   ))}
@@ -1303,12 +1674,15 @@ function GroupRow({
             capacity={effectiveTeamSize}
             players={group.players}
             disabled={disabled}
+            isMobile={isMobile}
+            selectedPlayerId={selectedPlayerId}
+            onSelectPlayer={onSelectPlayer}
             onRemovePlayer={onRemovePlayer}
             className="sm:col-span-2"
           />
         ) : group.players.length === 0 ? (
           <span className="truncate text-xs text-muted-foreground/70">
-            Drop players here
+            {isMobile ? "No players yet" : "Drop players here"}
           </span>
         ) : (
           group.players.map((player) => (
@@ -1317,64 +1691,92 @@ function GroupRow({
               player={player}
               groupId={group.id}
               disabled={disabled}
+              isMobile={isMobile}
+              isSelected={selectedPlayerId === player.id}
               showTeamSides={showTeamSides}
               sideALabel={sideALabel}
               sideBLabel={sideBLabel}
               onTeamSide={onTeamSide}
+              onSelect={() =>
+                onSelectPlayer(
+                  selectedPlayerId === player.id ? null : player.id
+                )
+              }
               onRemove={() => onRemovePlayer(player.id)}
             />
           ))
         )}
         {!useTeamZones &&
           openSlots > 0 &&
-          Array.from({ length: openSlots }).map((_, index) => (
+          Array.from({ length: isMobile ? 1 : openSlots }).map((_, index) => (
             <span
               key={index}
-              className="hidden h-8 min-w-14 flex-1 items-center justify-center rounded-md border border-dashed border-border/60 text-xs text-muted-foreground/45 sm:inline-flex"
+              className={cn(
+                "inline-flex h-8 min-w-14 flex-1 items-center justify-center rounded-md border border-dashed border-border/60 text-xs text-muted-foreground/45",
+                !isMobile && index > 0 && "hidden sm:inline-flex"
+              )}
             >
               Open
             </span>
           ))}
       </div>
 
-      <div className="flex shrink-0 items-center gap-0.5">
-        {warning && (
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <button
-                  type="button"
-                  className="rounded-md p-1 text-amber-600 hover:bg-amber-500/10"
-                  aria-label={`Warning: ${warning}`}
-                  onClick={onOpenDetails}
-                />
-              }
-            >
-              <AlertTriangle className="size-3.5" />
-            </TooltipTrigger>
-            <TooltipContent>{warning}</TooltipContent>
-          </Tooltip>
-        )}
-        <span
-          className={cn(
-            "px-1 text-xs tabular-nums text-muted-foreground",
-            isFull && "font-medium text-foreground/70",
-            overCapacity && "font-semibold text-amber-600"
-          )}
-        >
-          {group.players.length}/{capacity.max}
-        </span>
+      {isMobile && !disabled && !isFull && (
         <Button
           type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="size-8"
-          aria-label={`Open details for ${group.label}`}
-          onClick={onOpenDetails}
+          variant="outline"
+          size="sm"
+          className="h-10 w-full touch-manipulation"
+          onClick={(event) => {
+            event.stopPropagation();
+            onAddPlayer();
+          }}
         >
-          <Ellipsis className="size-4" />
+          <UserPlus />
+          Add player
         </Button>
-      </div>
+      )}
+
+      {!isMobile && (
+        <div className="flex shrink-0 items-center gap-0.5">
+          {warning && (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    className="rounded-md p-1 text-amber-600 hover:bg-amber-500/10"
+                    aria-label={`Warning: ${warning}`}
+                    onClick={onOpenDetails}
+                  />
+                }
+              >
+                <AlertTriangle className="size-3.5" />
+              </TooltipTrigger>
+              <TooltipContent>{warning}</TooltipContent>
+            </Tooltip>
+          )}
+          <span
+            className={cn(
+              "px-1 text-xs tabular-nums text-muted-foreground",
+              isFull && "font-medium text-foreground/70",
+              overCapacity && "font-semibold text-amber-600"
+            )}
+          >
+            {group.players.length}/{capacity.max}
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="size-8"
+            aria-label={`Open details for ${group.label}`}
+            onClick={onOpenDetails}
+          >
+            <Ellipsis className="size-4" />
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1387,6 +1789,9 @@ type TeamDropZoneProps = {
   capacity: number;
   players: PairingPlayer[];
   disabled: boolean;
+  isMobile: boolean;
+  selectedPlayerId: string | null;
+  onSelectPlayer: (playerId: string | null) => void;
   onRemovePlayer: (registrationId: string) => void;
   className?: string;
 };
@@ -1398,6 +1803,9 @@ function TeamDropZone({
   capacity,
   players,
   disabled,
+  isMobile,
+  selectedPlayerId,
+  onSelectPlayer,
   onRemovePlayer,
   className,
 }: TeamDropZoneProps) {
@@ -1436,10 +1844,17 @@ function TeamDropZone({
             player={player}
             groupId={groupId}
             disabled={disabled}
+            isMobile={isMobile}
+            isSelected={selectedPlayerId === player.id}
             showTeamSides={false}
             sideALabel={label}
             sideBLabel={label}
             onTeamSide={() => {}}
+            onSelect={() =>
+              onSelectPlayer(
+                selectedPlayerId === player.id ? null : player.id
+              )
+            }
             onRemove={() => onRemovePlayer(player.id)}
           />
         ))}
@@ -1461,10 +1876,13 @@ type GroupPlayerPillProps = {
   player: PairingPlayer;
   groupId: string;
   disabled: boolean;
+  isMobile: boolean;
+  isSelected: boolean;
   showTeamSides: boolean;
   sideALabel: string;
   sideBLabel: string;
   onTeamSide: (registrationId: string, teamSide: "a" | "b" | null) => void;
+  onSelect: () => void;
   onRemove: () => void;
 };
 
@@ -1480,15 +1898,18 @@ function GroupPlayerPill({
   player,
   groupId,
   disabled,
+  isMobile,
+  isSelected,
   showTeamSides,
   sideALabel,
   sideBLabel,
   onTeamSide,
+  onSelect,
   onRemove,
 }: GroupPlayerPillProps) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: player.id,
-    disabled,
+    disabled: disabled || isMobile,
     data: {
       registrationId: player.id,
       fromGroupId: groupId,
@@ -1506,17 +1927,35 @@ function GroupPlayerPill({
   return (
     <div
       ref={setNodeRef}
-      {...attributes}
-      {...listeners}
+      {...(!isMobile ? attributes : {})}
+      {...(!isMobile ? listeners : {})}
+      onClick={
+        isMobile && !disabled
+          ? (event) => {
+              event.stopPropagation();
+              onSelect();
+            }
+          : undefined
+      }
       title={`${player.name}${player.handicap ? ` · HCP ${player.handicap}` : ""} · ${player.email}`}
       className={cn(
-        "inline-flex h-8 min-w-0 flex-1 touch-none select-none items-center gap-1.5 rounded-md border border-border/80 bg-background px-2 text-xs shadow-xs sm:gap-2 sm:px-2.5 sm:text-sm",
-        disabled
-          ? "cursor-default opacity-70"
-          : "cursor-grab active:cursor-grabbing",
+        "inline-flex h-9 min-w-0 flex-1 items-center gap-1.5 rounded-md border bg-background px-2 text-xs shadow-xs sm:h-8 sm:gap-2 sm:px-2.5 sm:text-sm",
+        isMobile ? "touch-manipulation" : "touch-none select-none",
+        isMobile ? "cursor-pointer" : "border-border/80",
+        !isMobile &&
+          (disabled
+            ? "cursor-default opacity-70"
+            : "cursor-grab border-border/80 active:cursor-grabbing"),
+        isSelected && "border-primary bg-primary/5 ring-2 ring-primary/20",
+        !isSelected && isMobile && "border-border/80",
         isDragging && "opacity-40"
       )}
-      aria-label={`Drag ${player.name}`}
+      aria-label={
+        isMobile
+          ? `Select ${player.name} to move`
+          : `Drag ${player.name}`
+      }
+      aria-pressed={isMobile ? isSelected : undefined}
     >
       {showTeamSides && (
         <button
@@ -1622,6 +2061,8 @@ type GroupDetailsSheetProps = {
   canEmailPlayers: boolean;
   appUrl: string;
   slug: string;
+  unassignedCount: number;
+  onAddPlayers: () => void;
   onUpdate: (input: GroupUpdateInput) => void;
   onDelete: () => void;
   onTeamSide: (registrationId: string, teamSide: "a" | "b" | null) => void;
@@ -1647,6 +2088,8 @@ function GroupDetailsSheet({
   canEmailPlayers,
   appUrl,
   slug,
+  unassignedCount,
+  onAddPlayers,
   onUpdate,
   onDelete,
   onTeamSide,
@@ -1857,15 +2300,45 @@ function GroupDetailsSheet({
               </div>
 
               <div className="space-y-2">
-                <h4 className="text-xs font-medium text-muted-foreground">
-                  {pairSides ? "Teams" : "Players"} (
-                  {group.players.length})
-                </h4>
+                <div className="flex items-center justify-between gap-2">
+                  <h4 className="text-xs font-medium text-muted-foreground">
+                    {pairSides ? "Teams" : "Players"} (
+                    {group.players.length})
+                  </h4>
+                  {isMobile && !setupLocked && unassignedCount > 0 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8"
+                      disabled={disabled}
+                      onClick={onAddPlayers}
+                    >
+                      <UserPlus />
+                      Add
+                    </Button>
+                  )}
+                </div>
                 {group.players.length === 0 ? (
-                  <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-sm text-muted-foreground">
-                    No players yet. Drag registrants into this{" "}
-                    {showMatchType ? "match" : "group"}.
-                  </p>
+                  <div className="space-y-3 rounded-lg border border-dashed border-border px-3 py-4 text-center">
+                    <p className="text-sm text-muted-foreground">
+                      {isMobile
+                        ? "No players yet."
+                        : `No players yet. Drag registrants into this ${showMatchType ? "match" : "group"}.`}
+                    </p>
+                    {isMobile && !setupLocked && unassignedCount > 0 && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-10 w-full"
+                        disabled={disabled}
+                        onClick={onAddPlayers}
+                      >
+                        <UserPlus />
+                        Add player
+                      </Button>
+                    )}
+                  </div>
                 ) : (
                   <ul className="space-y-2">
                     {detailPlayers.map((player) => (
@@ -2025,6 +2498,155 @@ function GroupDetailsSheet({
             )}
           </>
         )}
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+type MobileAssignBarProps = {
+  unassignedCount: number;
+  selectedPlayer: PairingPlayer | null;
+  onOpenPicker: () => void;
+  onClearSelection: () => void;
+};
+
+function MobileAssignBar({
+  unassignedCount,
+  selectedPlayer,
+  onOpenPicker,
+  onClearSelection,
+}: MobileAssignBarProps) {
+  if (unassignedCount === 0 && !selectedPlayer) {
+    return null;
+  }
+
+  return (
+    <div className="sticky bottom-0 z-10 -mx-4 mt-2 border-t border-border bg-background/95 px-4 py-3 backdrop-blur-sm supports-[backdrop-filter]:bg-background/80 lg:hidden">
+      {selectedPlayer ? (
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">
+              Assigning {selectedPlayer.name}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Tap a group below to place them
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-10 shrink-0 touch-manipulation"
+            onClick={onClearSelection}
+          >
+            Cancel
+          </Button>
+        </div>
+      ) : (
+        <Button
+          type="button"
+          className="h-11 w-full touch-manipulation"
+          onClick={onOpenPicker}
+        >
+          <UserPlus />
+          {unassignedCount} unassigned — assign players
+        </Button>
+      )}
+    </div>
+  );
+}
+
+type PlayerPickerSheetProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  players: PairingPlayer[];
+  search: string;
+  onSearchChange: (value: string) => void;
+  targetGroup: PairingGroup | null;
+  showMatchType: boolean;
+  disabled: boolean;
+  onSelectPlayer: (playerId: string) => void;
+};
+
+function PlayerPickerSheet({
+  open,
+  onOpenChange,
+  players,
+  search,
+  onSearchChange,
+  targetGroup,
+  showMatchType,
+  disabled,
+  onSelectPlayer,
+}: PlayerPickerSheetProps) {
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="bottom"
+        className="max-h-[85dvh] gap-0 rounded-t-3xl p-0 lg:hidden"
+      >
+        <div
+          className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-muted"
+          aria-hidden
+        />
+        <SheetHeader className="border-b border-border/50 px-5 pb-4 pt-3 text-left">
+          <SheetTitle className="text-lg font-semibold">
+            {targetGroup
+              ? `Add to ${targetGroup.label}`
+              : "Select a player"}
+          </SheetTitle>
+          <SheetDescription>
+            {targetGroup
+              ? `Choose a registrant to add to this ${showMatchType ? "match" : "group"}.`
+              : "Pick a player, then tap a group to assign them."}
+          </SheetDescription>
+        </SheetHeader>
+
+        <div className="flex min-h-0 flex-1 flex-col px-5 py-4 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+          <div className="relative mb-3 shrink-0">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder="Search name or email"
+              className="h-11 pl-9"
+              aria-label="Search registrants"
+            />
+          </div>
+
+          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
+            {players.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                {search.trim()
+                  ? "No registrants match your search."
+                  : "All players are assigned."}
+              </p>
+            ) : (
+              players.map((player) => (
+                <button
+                  key={player.id}
+                  type="button"
+                  disabled={disabled}
+                  className="flex min-h-12 w-full touch-manipulation items-center gap-3 rounded-xl border border-border bg-background px-3 py-2.5 text-left transition-colors hover:bg-muted/40 active:bg-muted/60 disabled:opacity-60"
+                  onClick={() => onSelectPlayer(player.id)}
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{player.name}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {player.email}
+                    </p>
+                  </div>
+                  {player.handicap && (
+                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                      HCP {player.handicap}
+                    </span>
+                  )}
+                  <PaymentDot status={player.paymentStatus} />
+                </button>
+              ))
+            )}
+          </div>
+        </div>
       </SheetContent>
     </Sheet>
   );

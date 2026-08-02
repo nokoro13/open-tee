@@ -42,12 +42,6 @@ export function scoreResultTone(strokes: number, par: number): string {
   return "bg-destructive/10 text-destructive border-destructive/20";
 }
 
-const AVATAR_TONES = [
-  "bg-primary/15 text-primary",
-  "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
-  "bg-sky-500/15 text-sky-700 dark:text-sky-400",
-  "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-];
 
 type MobileContextBarProps = {
   selectedGroupId: string;
@@ -174,24 +168,6 @@ export function MobileHoleHero({
   );
 }
 
-type MobilePlayerAvatarProps = {
-  name: string;
-  index: number;
-};
-
-export function MobilePlayerAvatar({ name, index }: MobilePlayerAvatarProps) {
-  return (
-    <div
-      className={cn(
-        "flex size-11 shrink-0 items-center justify-center rounded-full text-sm font-bold",
-        AVATAR_TONES[index % AVATAR_TONES.length]
-      )}
-      aria-hidden
-    >
-      {playerInitials(name)}
-    </div>
-  );
-}
 
 type ChangeScoresOverlayProps = {
   onUnlock: () => void;
