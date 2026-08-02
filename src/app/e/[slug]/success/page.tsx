@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CheckCircle2, Flag } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 
 import { verifyRegistrationSession } from "@/actions/registrations";
+import { OpenRoundMark } from "@/components/brand/openround-mark";
 import { getPublishedEventBySlug } from "@/lib/events";
 import { ButtonLink } from "@/components/ui/button-link";
 import {
@@ -56,9 +57,7 @@ export default async function RegistrationSuccessPage({
       <header className="border-b border-border bg-background">
         <div className="mx-auto flex h-14 max-w-lg items-center gap-2 px-4">
           <Link href="/" className="flex items-center gap-2">
-            <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <Flag className="size-4" />
-            </div>
+            <OpenRoundMark />
             <span className="font-heading text-base font-semibold">OpenRound</span>
           </Link>
         </div>

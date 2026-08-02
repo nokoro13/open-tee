@@ -212,9 +212,9 @@ export function LandingPage({ stats = defaultStats }: LandingPageProps) {
 
       <main className="flex-1">
         {/* Hero */}
-        <section className="relative overflow-hidden">
+        <section className="relative overflow-hidden md:-mt-18">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_-20%,var(--hero-glow),transparent)]" />
-          <div className="mx-auto max-w-6xl px-4 pb-16 pt-12 sm:px-6 sm:pb-20 sm:pt-16 lg:pb-28 lg:pt-24">
+          <div className="mx-auto max-w-6xl px-4 pb-16 pt-12 sm:px-6 sm:pb-20 sm:pt-16 md:pt-24 lg:pb-28 lg:pt-28">
             <div className="mx-auto max-w-3xl text-center">
               <Badge variant="secondary" className="mb-4 sm:mb-6">
                 Golf tournament management, simplified

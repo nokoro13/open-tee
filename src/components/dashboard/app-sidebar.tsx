@@ -5,6 +5,8 @@ import { Flag } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 
+import { OpenRoundMark } from "@/components/brand/openround-mark";
+
 import {
   ADMIN_DASHBOARD_NAV_ITEMS,
   CREATE_FORMAT_SHORTCUTS,
@@ -55,9 +57,7 @@ export function AppSidebar({ showAdminNav = false }: { showAdminNav?: boolean })
               render={<Link href="/dashboard" onClick={closeMobileSidebar} />}
               className="data-active:bg-transparent"
             >
-              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <Flag className="size-4" />
-              </div>
+              <OpenRoundMark size="sm" />
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-heading font-semibold tracking-tight">
                   OpenRound

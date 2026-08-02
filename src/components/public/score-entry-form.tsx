@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 
 import { saveHoleScores } from "@/actions/scoring";
+import { OpenRoundMark } from "@/components/brand/openround-mark";
 import { Button } from "@/components/ui/button";
 import { ButtonLink } from "@/components/ui/button-link";
 import { Input } from "@/components/ui/input";
@@ -944,9 +945,7 @@ export function ScoreEntryForm({
         <div className="mx-auto flex h-12 max-w-6xl items-center gap-2 px-4 lg:h-14 sm:gap-3 sm:px-6">
           {demoMode ? (
             <div className="flex items-center gap-2">
-              <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
-                <Flag className="size-4" />
-              </div>
+              <OpenRoundMark />
               <span className="hidden font-heading text-sm font-semibold sm:inline">
                 OpenRound
               </span>
@@ -956,9 +955,7 @@ export function ScoreEntryForm({
               href="/"
               className="flex items-center gap-2 rounded-lg transition-opacity hover:opacity-80"
             >
-              <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
-                <Flag className="size-4" />
-              </div>
+              <OpenRoundMark />
               <span className="hidden font-heading text-sm font-semibold sm:inline">
                 OpenRound
               </span>
@@ -1382,9 +1379,7 @@ export function ScoringPageHeader({ slug }: { slug: string }) {
     <header className="border-b border-border bg-background/95 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-lg items-center gap-2 px-4 sm:h-16 lg:max-w-2xl">
         <Link href="/" className="flex items-center gap-2">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <Flag className="size-4" />
-          </div>
+          <OpenRoundMark />
           <span className="font-heading text-base font-semibold">OpenRound</span>
         </Link>
         <span className="text-sm text-muted-foreground">· Scoring</span>

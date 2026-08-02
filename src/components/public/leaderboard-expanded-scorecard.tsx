@@ -46,7 +46,7 @@ function StrokeDots({ count }: { count: number }) {
       {Array.from({ length: Math.min(count, 3) }, (_, index) => (
         <span
           key={index}
-          className="block size-[2px] rounded-full bg-slate-800/80"
+          className="block size-[2px] rounded-full bg-foreground/80"
         />
       ))}
     </span>
@@ -91,7 +91,7 @@ function ScoreValue({
   emphasized?: boolean;
 }) {
   if (strokes == null) {
-    return <span className="text-slate-300">·</span>;
+    return <span className="text-muted-foreground/40">·</span>;
   }
 
   if (par == null) {
@@ -133,10 +133,10 @@ function ScoreCell({
     <td
       onClick={onSelectHole}
       className={cn(
-        "relative h-7 border-b border-r border-slate-200/80 p-0 text-center",
+        "relative h-7 border-b border-r border-border/70 p-0 text-center",
         scoreCellBackground(strokes, par),
         isCurrentHole && "ring-1 ring-inset ring-primary/40",
-        onSelectHole && "cursor-pointer transition-colors hover:bg-slate-100/80 active:bg-slate-200/60"
+        onSelectHole && "cursor-pointer transition-colors hover:bg-muted/50 active:bg-muted/70"
       )}
     >
       <StrokeDots count={strokeDots} />
@@ -160,11 +160,11 @@ function HoleHeaderCell({
     <th
       onClick={onSelectHole}
       className={cn(
-        "h-6 border-b border-r border-slate-200/80 p-0 text-center text-[10px] font-semibold leading-none tabular-nums",
+        "h-6 border-b border-r border-border/70 p-0 text-center text-[10px] font-semibold leading-none tabular-nums",
         isCurrentHole
           ? "bg-primary text-primary-foreground"
-          : "bg-slate-100/80 text-slate-600",
-        onSelectHole && "cursor-pointer transition-colors hover:bg-slate-200/80 active:bg-slate-300/60"
+          : "bg-muted/50 text-muted-foreground",
+        onSelectHole && "cursor-pointer transition-colors hover:bg-muted/60 active:bg-muted/80"
       )}
     >
       {holeNumber}
@@ -196,10 +196,10 @@ function ScorecardHalf({
 
   return (
     <div className="w-full min-w-0">
-      <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+      <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
         {title}
       </p>
-      <div className="w-full overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+      <div className="w-full overflow-hidden rounded-md border border-border bg-white shadow-sm">
         <table className="w-full table-fixed border-collapse">
           <colgroup>
             <col className="w-[26%]" />
@@ -210,7 +210,7 @@ function ScorecardHalf({
           </colgroup>
           <thead>
             <tr>
-              <th className="h-6 border-b border-r border-slate-200/80 bg-slate-100/90" />
+              <th className="h-6 border-b border-r border-border/70 bg-muted/60" />
               {sectionHoles.map((hole) => (
                 <HoleHeaderCell
                   key={hole.holeNumber}
@@ -221,25 +221,25 @@ function ScorecardHalf({
                   }
                 />
               ))}
-              <th className="h-6 border-b border-slate-200/80 bg-slate-100/80 p-0 text-center text-[9px] font-semibold leading-none text-slate-600">
+              <th className="h-6 border-b border-border/70 bg-muted/50 p-0 text-center text-[9px] font-semibold leading-none text-muted-foreground">
                 Tot
               </th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td className="h-7 truncate border-b border-r border-slate-200/80 bg-white px-1 text-left text-[10px] font-medium text-slate-600">
+              <td className="h-7 truncate border-b border-r border-border/70 bg-white px-1 text-left text-[10px] font-medium text-muted-foreground">
                 Par
               </td>
               {sectionHoles.map((hole) => (
                 <td
                   key={`par-${hole.holeNumber}`}
-                  className="h-7 border-b border-r border-slate-200/80 bg-white p-0 text-center text-[10px] tabular-nums text-slate-600"
+                  className="h-7 border-b border-r border-border/70 bg-white p-0 text-center text-[10px] tabular-nums text-muted-foreground"
                 >
                   {hole.par}
                 </td>
               ))}
-              <td className="h-7 border-b border-slate-200/80 bg-white p-0 text-center text-[10px] font-semibold tabular-nums text-slate-800">
+              <td className="h-7 border-b border-border/70 bg-white p-0 text-center text-[10px] font-semibold tabular-nums text-foreground/85">
                 {parTotal}
               </td>
             </tr>
@@ -247,7 +247,7 @@ function ScorecardHalf({
             {playerRows.map((player) => (
               <tr key={player.id}>
                 <td
-                  className="h-7 truncate border-b border-r border-slate-200/80 bg-white px-1 text-left text-[9px] font-medium text-slate-800"
+                  className="h-7 truncate border-b border-r border-border/70 bg-white px-1 text-left text-[9px] font-medium text-foreground/85"
                   title={playerLabel(player.name, player.handicapDisplay)}
                 >
                   {playerLabel(player.name, player.handicapDisplay)}
@@ -267,7 +267,7 @@ function ScorecardHalf({
                     />
                   );
                 })}
-                <td className="h-7 border-b border-slate-200/80 bg-white p-0 text-center text-[10px] font-semibold tabular-nums text-slate-900">
+                <td className="h-7 border-b border-border/70 bg-white p-0 text-center text-[10px] font-semibold tabular-nums text-foreground">
                   {sectionTotal(allHoles, sectionHoles, player.grossScores) ??
                     "·"}
                 </td>
@@ -276,7 +276,7 @@ function ScorecardHalf({
 
             {summaryRow && (
               <tr>
-                <td className="h-7 truncate border-r border-slate-200/80 bg-slate-50 px-1 text-left text-[10px] font-semibold text-slate-800">
+                <td className="h-7 truncate border-r border-border/70 bg-muted/40 px-1 text-left text-[10px] font-semibold text-foreground/85">
                   {summaryRow.label}
                 </td>
                 {sectionHoles.map((hole) => {
@@ -294,7 +294,7 @@ function ScorecardHalf({
                     />
                   );
                 })}
-                <td className="h-7 bg-slate-50 p-0 text-center text-[10px] font-bold tabular-nums text-slate-900">
+                <td className="h-7 bg-muted/40 p-0 text-center text-[10px] font-bold tabular-nums text-foreground">
                   {sectionTotal(allHoles, sectionHoles, summaryRow.scores) ??
                     "·"}
                 </td>
@@ -316,11 +316,11 @@ function ScoreLegend() {
   ] as const;
 
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-200/80 pt-3">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border/70 pt-3">
       {items.map((item) => (
         <span
           key={item.label}
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600"
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
         >
           <ScoreParMark
             strokes={item.strokes}
@@ -357,7 +357,7 @@ export function LeaderboardExpandedScorecard({
 
   if (holes.length === 0) {
     return (
-      <p className="rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500">
+      <p className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
         No scorecard data available yet.
       </p>
     );

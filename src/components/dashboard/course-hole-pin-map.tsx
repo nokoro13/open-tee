@@ -518,15 +518,15 @@ export function CourseHolePinMap({
     setLineBreak(initialLineBreak);
     setHasDogleg(initialLineBreak != null);
     setDragPreview(null);
-    const nextMode = nextPinMode(sortedTees, initialGreen, initialTees);
-    setMode(nextMode);
-    setFocusedTeeKey(
-      nextMode.kind === "tee"
-        ? nextMode.teeKey
-        : (sortedTees[0]?.teeKey ?? null)
-    );
 
     if (holeChanged) {
+      const nextMode = nextPinMode(sortedTees, initialGreen, initialTees);
+      setMode(nextMode);
+      setFocusedTeeKey(
+        nextMode.kind === "tee"
+          ? nextMode.teeKey
+          : (sortedTees[0]?.teeKey ?? null)
+      );
       setIsEditing(!isHoleMapped(initialGreen, initialTees, sortedTees));
     }
   }, [holeNumber, initialGreen, initialLineBreak, initialTees, sortedTees]);
@@ -657,19 +657,14 @@ export function CourseHolePinMap({
 
       if (mode.kind === "green") {
         setGreen(point);
-        const next = nextPinMode(sortedTees, point, tees);
-        setMode(next);
         void onSavePin({ kind: "green", ...point });
         return;
       }
 
-      const nextTees = { ...tees, [mode.teeKey]: point };
-      setTees(nextTees);
-      const nextMode = nextPinMode(sortedTees, green, nextTees);
-      setMode(nextMode);
+      setTees((current) => ({ ...current, [mode.teeKey]: point }));
       void onSavePin({ kind: "tee", teeKey: mode.teeKey, ...point });
     },
-    [green, isLocked, isSaving, mode, onSavePin, sortedTees, tees]
+    [isLocked, isSaving, mode, onSavePin]
   );
 
   const doglegTeeLines = useMemo(

@@ -4,12 +4,12 @@ import { useMemo, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
-  Flag,
   LayoutGrid,
   Trophy,
 } from "lucide-react";
 
 import { MobileHoleHero } from "@/components/public/mobile-scoring-ui";
+import { OpenRoundMark } from "@/components/brand/openround-mark";
 import {
   getDefaultScoreForHole,
   ScoreStepper,
@@ -84,9 +84,7 @@ function ScoreShowcaseContent() {
       <header className="z-30 shrink-0 border-b border-border/80 bg-background/95 backdrop-blur-md">
         <div className="flex h-12 items-center gap-2 px-4">
           <div className="flex items-center gap-2">
-            <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
-              <Flag className="size-4" />
-            </div>
+            <OpenRoundMark />
           </div>
 
           <div className="min-w-0 flex-1">

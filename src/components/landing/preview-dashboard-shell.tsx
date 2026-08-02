@@ -1,6 +1,6 @@
 "use client";
 
-import { Flag } from "lucide-react";
+import { OpenRoundMark } from "@/components/brand/openround-mark";
 
 import {
   CREATE_FORMAT_SHORTCUTS,
@@ -53,9 +53,7 @@ export function PreviewDashboardShell({
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton size="lg" className="data-active:bg-transparent">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                  <Flag className="size-4" />
-                </div>
+                <OpenRoundMark size="sm" />
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-heading font-semibold tracking-tight">
                     OpenRound

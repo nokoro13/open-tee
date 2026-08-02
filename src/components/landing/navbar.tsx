@@ -1,8 +1,10 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { Flag, Menu } from "lucide-react";
+import { Menu } from "lucide-react";
 import Link from "next/link";
+
+import { OpenRoundMark } from "@/components/brand/openround-mark";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { ButtonLink } from "@/components/ui/button-link";
@@ -35,12 +37,10 @@ export function Navbar() {
   const { isLoaded, isSignedIn } = useAuth();
 
   return (
-    <header className="sticky top-0 z-50 border-b border-border/60 bg-background/85 backdrop-blur-md supports-backdrop-filter:bg-background/70">
-      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:h-16 sm:px-6">
-        <Link href="/" className="flex items-center gap-2">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <Flag className="size-4" />
-          </div>
+    <header className="sticky top-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-xl supports-backdrop-filter:bg-background/65 md:border-b-0 md:bg-transparent md:pt-4 md:backdrop-blur-none md:supports-backdrop-filter:bg-transparent">
+      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:h-16 sm:px-6 md:h-14 md:rounded-2xl md:border md:border-border/60 md:bg-background/80 md:px-5 md:shadow-[0_8px_30px_-12px_rgba(0,0,0,0.12)] md:backdrop-blur-xl md:supports-backdrop-filter:bg-background/70 lg:px-6">
+        <Link href="/" className="flex items-center gap-2.5">
+          <OpenRoundMark />
           <span className="font-heading text-base font-semibold tracking-tight sm:text-lg">
             OpenRound
           </span>
@@ -109,9 +109,7 @@ export function Navbar() {
             <SheetContent side="right" className="w-full max-w-xs px-0">
               <SheetHeader className="border-b border-border px-4 pb-4">
                 <SheetTitle className="flex items-center gap-2">
-                  <div className="flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
-                    <Flag className="size-3.5" />
-                  </div>
+                  <OpenRoundMark size="sm" />
                   OpenRound
                 </SheetTitle>
               </SheetHeader>
@@ -146,7 +144,10 @@ export function Navbar() {
                   <>
                     <Link
                       href="/sign-in"
-                      className={cn(buttonVariants({ variant: "outline" }), "w-full")}
+                      className={cn(
+                        buttonVariants({ variant: "outline" }),
+                        "w-full"
+                      )}
                     >
                       Sign in
                     </Link>

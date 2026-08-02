@@ -2,9 +2,10 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ClipboardList, ChevronDown, Flag, RefreshCw } from "lucide-react";
+import { ClipboardList, ChevronDown, RefreshCw } from "lucide-react";
 
 import { LeaderboardExpandedScorecard } from "@/components/public/leaderboard-expanded-scorecard";
+import { OpenRoundMark } from "@/components/brand/openround-mark";
 import type { LeaderboardEntry, RyderCupSummary } from "@/lib/scoring";
 import { formatRyderCupScore } from "@/lib/scoring";
 import {
@@ -55,7 +56,7 @@ function MatchEntryNames({ entry }: { entry: LeaderboardEntry }) {
   const match = entry.matchPlayers;
 
   if (!match) {
-    return <p className="font-medium text-slate-900">{entry.name}</p>;
+    return <p className="font-medium text-foreground">{entry.name}</p>;
   }
 
   if (match.leader === "a") {
@@ -79,7 +80,7 @@ function MatchEntryNames({ entry }: { entry: LeaderboardEntry }) {
   }
 
   return (
-    <p className="font-medium text-slate-900">
+    <p className="font-medium text-foreground">
       <span>{match.playerAName}</span>
       <span className="text-muted-foreground"> vs </span>
       <span>{match.playerBName}</span>
@@ -188,22 +189,18 @@ export function LeaderboardView({
   ).length;
 
   return (
-    <div className="min-h-full bg-muted/20">
-      <header className="border-b border-border bg-background">
+    <div className="min-h-full bg-background">
+      <header className="border-b border-border/50 bg-background/80 backdrop-blur-xl">
         <div className="mx-auto flex h-14 max-w-lg items-center justify-between gap-2 px-4 sm:h-16">
           {embed ? (
             <div className="flex items-center gap-2">
-              <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <Flag className="size-4" />
-              </div>
-              <span className="font-heading text-base font-semibold">OpenRound</span>
+              <OpenRoundMark />
+              <span className="text-base font-semibold tracking-tight">OpenRound</span>
             </div>
           ) : (
             <Link href="/" className="flex items-center gap-2">
-              <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <Flag className="size-4" />
-              </div>
-              <span className="font-heading text-base font-semibold">OpenRound</span>
+              <OpenRoundMark />
+              <span className="text-base font-semibold tracking-tight">OpenRound</span>
             </Link>
           )}
           <div className="flex items-center gap-2">
@@ -339,7 +336,7 @@ export function LeaderboardView({
             ) : (
               <table className="w-full table-fixed text-sm">
                   <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50/50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    <tr className="border-b border-border bg-muted/40 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                       <th className="w-[10%] px-2 py-2.5 font-semibold">Pos.</th>
                       <th className="px-1 py-2.5 font-semibold">{entityLabel}</th>
                       <th className="w-[14%] px-1 py-2.5 text-right font-semibold">
@@ -372,10 +369,10 @@ export function LeaderboardView({
                         <Fragment key={entry.id}>
                           <tr
                             className={cn(
-                              "group border-b border-slate-200/80 transition-colors",
-                              isExpanded && "border-l-2 border-l-emerald-600 bg-emerald-50/40",
-                              !isExpanded && canExpand && "hover:bg-slate-50/80",
-                              canExpand && "cursor-pointer active:bg-slate-100/80"
+                              "group border-b border-border/70 transition-colors",
+                              isExpanded && "border-l-2 border-l-foreground bg-muted/50",
+                              !isExpanded && canExpand && "hover:bg-muted/50",
+                              canExpand && "cursor-pointer active:bg-muted/60"
                             )}
                             onClick={toggleExpanded}
                             onKeyDown={(keyboardEvent) => {
@@ -397,13 +394,13 @@ export function LeaderboardView({
                                 : undefined
                             }
                           >
-                            <td className="px-2 py-3.5 tabular-nums text-slate-500">
+                            <td className="px-2 py-3.5 tabular-nums text-muted-foreground">
                               {formatRank(entry, tiedRanks)}
                             </td>
                             <td className="truncate px-1 py-3.5">
                               <MatchEntryNames entry={entry} />
                               {entry.subtitle && !isExpanded && (
-                                <p className="mt-0.5 line-clamp-1 text-xs text-slate-500">
+                                <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
                                   {entry.subtitle}
                                 </p>
                               )}
@@ -414,28 +411,28 @@ export function LeaderboardView({
                                 entry.toPar != null && entry.toPar < 0
                                   ? "text-red-600"
                                   : entry.toPar != null && entry.toPar > 0
-                                    ? "text-slate-600"
-                                    : "text-slate-900"
+                                    ? "text-muted-foreground"
+                                    : "text-foreground"
                               )}
                             >
                               {scoreDisplay}
                             </td>
-                            <td className="px-1 py-3.5 text-center tabular-nums text-slate-700">
+                            <td className="px-1 py-3.5 text-center tabular-nums text-foreground/75">
                               {entry.thru || "—"}
                             </td>
                             <td className="px-1 py-3.5 text-right">
                               {canExpand ? (
                                 <ChevronDown
                                   className={cn(
-                                    "ml-auto size-4 text-slate-400 transition-transform duration-200 group-hover:text-slate-600",
-                                    isExpanded && "rotate-180 text-emerald-700"
+                                    "ml-auto size-4 text-muted-foreground transition-transform duration-200 group-hover:text-muted-foreground",
+                                    isExpanded && "rotate-180 text-foreground"
                                   )}
                                   aria-hidden
                                 />
                               ) : null}
                             </td>
                           </tr>
-                          <tr className="border-b border-slate-200/80 bg-slate-50/30">
+                          <tr className="border-b border-border/70 bg-muted/20">
                             <td colSpan={columnCount} className="p-0">
                               <div
                                 className={cn(
@@ -444,7 +441,7 @@ export function LeaderboardView({
                                 )}
                               >
                                 <div className="overflow-hidden">
-                                  <div className="border-t border-slate-200/80 px-2 py-3 sm:px-3">
+                                  <div className="border-t border-border/70 px-2 py-3 sm:px-3">
                                     {entry.scorecard ? (
                                       <LeaderboardExpandedScorecard
                                         key={`${entry.id}-${entry.thru}`}
@@ -452,7 +449,7 @@ export function LeaderboardView({
                                         thru={entry.thru}
                                       />
                                     ) : (
-                                      <p className="rounded-lg border border-dashed border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-500">
+                                      <p className="rounded-lg border border-dashed border-border bg-white px-4 py-6 text-center text-sm text-muted-foreground">
                                         Scorecard details are not available for
                                         this entry yet.
                                       </p>

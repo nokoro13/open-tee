@@ -1,9 +1,10 @@
 import Link from "next/link";
 import Image from "next/image";
 import { notFound } from "next/navigation";
-import { Calendar, Clock, Flag, MapPin, Trophy } from "lucide-react";
+import { Calendar, Clock, MapPin, Trophy } from "lucide-react";
 
 import { getSponsorPackagesForEvent } from "@/actions/sponsors";
+import { OpenRoundMark } from "@/components/brand/openround-mark";
 import { GroupRegistrationForm } from "@/components/public/group-registration-form";
 import { SponsorPackagesPublic } from "@/components/public/sponsor-packages-public";
 import {
@@ -87,16 +88,7 @@ export default async function PublicEventPage({
                 className="size-8 rounded-lg object-contain"
               />
             ) : (
-              <div
-                className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground"
-                style={
-                  branding?.primaryColor
-                    ? { backgroundColor: branding.primaryColor }
-                    : undefined
-                }
-              >
-                <Flag className="size-4" />
-              </div>
+              <OpenRoundMark />
             )}
             <span className="font-heading text-base font-semibold">
               {branding ? event.organization.name : "OpenRound"}

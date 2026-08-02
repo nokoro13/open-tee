@@ -1,4 +1,6 @@
-import { Calendar, Clock, Flag, MapPin, Trophy } from "lucide-react";
+import { Calendar, Clock, MapPin, Trophy } from "lucide-react";
+
+import { OpenRoundMark } from "@/components/brand/openround-mark";
 
 import { RegistrationForm } from "@/components/public/registration-form";
 import { Badge } from "@/components/ui/badge";
@@ -41,9 +43,7 @@ export function PublicEventView({
       <header className="border-b border-border bg-background">
         <div className="mx-auto flex h-14 max-w-lg items-center gap-2 px-4 sm:h-16">
           <div className="flex items-center gap-2">
-            <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <Flag className="size-4" />
-            </div>
+            <OpenRoundMark />
             <span className="font-heading text-base font-semibold">OpenRound</span>
           </div>
         </div>

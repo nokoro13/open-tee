@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { Flag } from "lucide-react";
+
+import { OpenRoundMark } from "@/components/brand/openround-mark";
 
 import type { LegalSection } from "@/lib/legal-content";
 import { LEGAL_LAST_UPDATED } from "@/lib/legal-content";
@@ -20,9 +21,7 @@ export function LegalDocument({
       <header className="border-b border-border bg-background">
         <div className="mx-auto flex h-14 max-w-3xl items-center gap-2 px-4 sm:h-16">
           <Link href="/" className="flex items-center gap-2">
-            <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <Flag className="size-4" />
-            </div>
+            <OpenRoundMark />
             <span className="font-heading text-base font-semibold">OpenRound</span>
           </Link>
         </div>
