@@ -66,7 +66,7 @@ export function MapSurfaceHoleLine({
         zIndex: 13,
         map,
       });
-      hitLine.addListener("click", (event) => {
+      hitLine.addListener("click", (event: google.maps.MapMouseEvent) => {
         onClickRef.current?.(event);
       });
       hitLineRef.current = hitLine;
