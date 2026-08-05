@@ -39,10 +39,24 @@ export type HoleMapCamera = {
   center: Point;
   zoom: number;
   heading: number;
+  tilt: number;
 };
 
+/** Angled satellite view — tee toward camera, green ahead (Google Maps max 67.5). */
+export const HOLE_MAP_CAMERA_TILT = 55;
+/** Max zoom-out below the auto-fit level (lower zoom = farther out). */
+export const HOLE_MAP_MAX_ZOOM_OUT = 0.5;
+export const HOLE_MAP_MAX_ZOOM = 21;
+
+export function holeMapMinZoom(fitZoom: number): number {
+  return Math.max(fitZoom - HOLE_MAP_MAX_ZOOM_OUT, 0);
+}
+
 const EDGE_PADDING_YARDS = 35;
-const MAX_PLAYER_INCLUDE_YARDS = 700;
+/** Zoom in slightly when tilted — top-down fit reads too wide at an angle. */
+const TILT_ZOOM_BOOST = 0.75;
+/** Shift center toward the tee when tilted so the green stays visible. */
+const TILT_CENTER_SHIFT_YARDS = 12;
 
 type LineStringGeometry = {
   type: "LineString";
@@ -404,8 +418,9 @@ export function computeHoleMapCamera(options: {
   mapWidth: number;
   mapHeight: number;
   padding: HoleMapCameraPadding;
+  tilt?: number;
 }): HoleMapCamera {
-  const { view, mapWidth, mapHeight, padding } = options;
+  const { view, mapWidth, mapHeight, padding, tilt = HOLE_MAP_CAMERA_TILT } = options;
   const { tee, green, orientationTee, bearing, extentPoints } = view;
 
   const axisTee = orientationTee ?? tee;
@@ -439,7 +454,11 @@ export function computeHoleMapCamera(options: {
 
   const zoomX = Math.log2((innerWidth * metersPerPixelAtZoom0) / spanX);
   const zoomY = Math.log2((innerHeight * metersPerPixelAtZoom0) / spanY);
-  const zoom = Math.max(Math.min(zoomX, zoomY, 21), 14);
+  let zoom = Math.max(Math.min(zoomX, zoomY, 21), 14);
+
+  if (tilt > 0) {
+    zoom = Math.min(zoom + TILT_ZOOM_BOOST, 21);
+  }
 
   const metersPerPixel = metersPerPixelAtZoom0 / 2 ** zoom;
   const padShiftPx = (padding.top - padding.bottom) / 2;
@@ -453,10 +472,19 @@ export function computeHoleMapCamera(options: {
     );
   }
 
+  if (tilt > 0 && axisTee && green) {
+    adjustedCenter = shiftPointByBearing(
+      adjustedCenter,
+      (bearing + 180) % 360,
+      TILT_CENTER_SHIFT_YARDS * 0.9144
+    );
+  }
+
   return {
     center: adjustedCenter,
     zoom,
     heading: bearing,
+    tilt,
   };
 }
 
@@ -496,23 +524,13 @@ export function computeHoleMapView(options: {
 
   let bounds = expandBounds(rawBounds, EDGE_PADDING_YARDS);
 
-  if (playerPosition && (usePlayerAsAnchor || tee)) {
-    const includePlayer =
-      usePlayerAsAnchor ||
-      (tee != null &&
-        yardsBetween(
-          { lat: playerPosition.lat, lng: playerPosition.lng },
-          tee
-        ) <= MAX_PLAYER_INCLUDE_YARDS);
-
-    if (includePlayer) {
-      const withPlayer = boundsFromPoints([
-        ...extentPoints,
-        { lat: playerPosition.lat, lng: playerPosition.lng },
-      ]);
-      if (withPlayer) {
-        bounds = expandBounds(withPlayer, EDGE_PADDING_YARDS);
-      }
+  if (playerPosition && usePlayerAsAnchor) {
+    const withPlayer = boundsFromPoints([
+      ...extentPoints,
+      { lat: playerPosition.lat, lng: playerPosition.lng },
+    ]);
+    if (withPlayer) {
+      bounds = expandBounds(withPlayer, EDGE_PADDING_YARDS);
     }
   }
 

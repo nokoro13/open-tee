@@ -203,6 +203,7 @@ export function HoleMapModal({
     useState<GeoJsonFeatureCollection | null>(features);
   const [loadingFeatures, setLoadingFeatures] = useState(false);
   const [mapScene, setMapScene] = useState<HoleMapScene | null>(null);
+  const [liveMapHeading, setLiveMapHeading] = useState(0);
 
   const distances = liveDistances ?? {
     front: null,
@@ -214,11 +215,12 @@ export function HoleMapModal({
     ? (distances.middle ?? mapScene?.distanceToPin ?? null)
     : (mapScene?.distanceToPin ?? null);
   const distanceStatus = usePlayerAsAnchor ? liveDistanceStatus : "hidden";
-  const mapHeading = mapScene?.view.bearing ?? 0;
+  const mapHeading = liveMapHeading;
   const mapFeatures = features ?? displayFeatures;
 
   const handleSceneChange = useCallback((scene: HoleMapScene) => {
     setMapScene(scene);
+    setLiveMapHeading(scene.view.bearing);
   }, []);
 
   useEffect(() => {
@@ -300,6 +302,7 @@ export function HoleMapModal({
           usePlayerAsAnchor={usePlayerAsAnchor}
           eventSlug={eventSlug}
           editableDogleg
+          onHeadingChange={setLiveMapHeading}
         />
       )}
 

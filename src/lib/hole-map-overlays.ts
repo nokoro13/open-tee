@@ -56,8 +56,6 @@ export type HoleMapScene = {
   distanceToPin: number | null;
 };
 
-const MAX_PLAYER_INCLUDE_YARDS = 700;
-
 const DRAW_ORDER = [
   "rough",
   "scrub",
@@ -231,19 +229,9 @@ export function buildHoleMapScene(options: {
 
   const markers: HoleMapMarker[] = [];
 
-  let includePlayer = false;
+  const includePlayer = usePlayerAsAnchor && playerPosition != null;
   let distanceGuide: HoleDistanceGuide | null = null;
   let distanceToPin: number | null = null;
-
-  if (playerPosition && (usePlayerAsAnchor || view.tee)) {
-    includePlayer =
-      usePlayerAsAnchor ||
-      (view.tee != null &&
-        yardsBetween(
-          { lat: playerPosition.lat, lng: playerPosition.lng },
-          view.tee
-        ) <= MAX_PLAYER_INCLUDE_YARDS);
-  }
 
   const teeColor = preferredTeeColor ?? "#2563eb";
 

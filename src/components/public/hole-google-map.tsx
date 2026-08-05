@@ -37,6 +37,7 @@ import {
   type HoleMapMarker,
   type HoleMapScene,
 } from "@/lib/hole-map-overlays";
+import { HOLE_MAP_CAMERA_TILT } from "@/lib/hole-map-view";
 import { HoleDistanceGuideLayer } from "@/components/public/hole-distance-guide";
 
 const MAP_PADDING = { top: 120, bottom: 96, left: 32, right: 32 };
@@ -57,6 +58,7 @@ type HoleGoogleMapProps = {
   usePlayerAsAnchor?: boolean;
   eventSlug?: string;
   editableDogleg?: boolean;
+  onHeadingChange?: (heading: number) => void;
 };
 
 function getOverlayStyle(featureType: string) {
@@ -129,12 +131,14 @@ function HoleGoogleMapScene({
   onFitHoleReady,
   eventSlug,
   editableDogleg,
+  onHeadingChange,
 }: {
   scene: HoleMapScene;
   holeNumber: number;
   onFitHoleReady: (fitHole: (options?: FitHoleOptions) => void) => void;
   eventSlug?: string;
   editableDogleg?: boolean;
+  onHeadingChange?: (heading: number) => void;
 }) {
   const { view, overlays, markers, distanceGuide } = scene;
 
@@ -143,11 +147,13 @@ function HoleGoogleMapScene({
       defaultCenter={view.center}
       defaultZoom={17}
       defaultHeading={view.bearing}
+      defaultTilt={HOLE_MAP_CAMERA_TILT}
       {...GOLF_SATELLITE_MAP_PROPS}
       renderingType={RenderingType.VECTOR}
       gestureHandling="greedy"
       disableDefaultUI
-      rotateControl={false}
+      headingInteractionEnabled
+      rotateControl
       clickableIcons={false}
       className="h-full w-full"
       style={{ width: "100%", height: "100%" }}
@@ -157,6 +163,7 @@ function HoleGoogleMapScene({
         resetKey={holeNumber}
         padding={MAP_PADDING}
         onReady={onFitHoleReady}
+        onHeadingChange={onHeadingChange}
       />
 
       {overlays.map((overlay) => (
@@ -181,7 +188,7 @@ function HoleGoogleMapScene({
 
 export const HoleGoogleMap = forwardRef<HoleGoogleMapHandle, HoleGoogleMapProps>(
   function HoleGoogleMap(
-    { features, targets, playerPosition, holeNumber, className, onSceneChange, preferredTeeKey, preferredTeeColor, usePlayerAsAnchor = false, eventSlug, editableDogleg = false },
+    { features, targets, playerPosition, holeNumber, className, onSceneChange, preferredTeeKey, preferredTeeColor, usePlayerAsAnchor = false, eventSlug, editableDogleg = false, onHeadingChange },
     ref
   ) {
     const fitHoleRef = useRef<((options?: FitHoleOptions) => void) | null>(null);
@@ -240,6 +247,7 @@ export const HoleGoogleMap = forwardRef<HoleGoogleMapHandle, HoleGoogleMapProps>
             onFitHoleReady={handleFitHoleReady}
             eventSlug={eventSlug}
             editableDogleg={editableDogleg}
+            onHeadingChange={onHeadingChange}
           />
         </APIProvider>
       </div>

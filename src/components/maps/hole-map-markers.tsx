@@ -1,18 +1,21 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   AdvancedMarker,
   AdvancedMarkerAnchorPoint,
   useAdvancedMarkerRef,
+  useMap,
+  type AdvancedMarkerRef,
 } from "@vis.gl/react-google-maps";
 
+import { ScreenSpaceGroundCircle } from "@/components/maps/screen-space-ground-circle";
 import type { LatLng } from "@/lib/green-distance";
 
 const SUPPRESS_MARKER_FOCUS_CLASS = "suppress-gmp-marker-focus";
 
 function collectMarkerFocusElements(
-  marker: google.maps.marker.AdvancedMarkerElement
+  marker: NonNullable<AdvancedMarkerRef>
 ): HTMLElement[] {
   const elements: HTMLElement[] = [];
   const content = marker.content;
@@ -28,9 +31,7 @@ function collectMarkerFocusElements(
   return elements;
 }
 
-function useSuppressAdvancedMarkerDragFocus(
-  marker: google.maps.marker.AdvancedMarkerElement | null
-) {
+function useSuppressAdvancedMarkerDragFocus(marker: AdvancedMarkerRef) {
   useEffect(() => {
     if (!marker) return;
 
@@ -55,28 +56,104 @@ function useSuppressAdvancedMarkerDragFocus(
   }, [marker]);
 }
 
-function latLngFromDragEvent(
-  event: google.maps.MapMouseEvent
-): LatLng | null {
+function latLngFromDragEvent(event: {
+  latLng: { lat: () => number; lng: () => number } | null | undefined;
+}): LatLng | null {
   const latLng = event.latLng;
   if (!latLng) return null;
   return { lat: latLng.lat(), lng: latLng.lng() };
 }
 
-/** Pole base sits at the bottom edge so the yardage line meets the pin exactly. */
-function FlagPinContent() {
+const DOGLEG_OUTER_RADIUS_PX = 22;
+const DOGLEG_INNER_RADIUS_PX = 4;
+
+/** Flag SVG height at {@link FLAG_SIZE_REFERENCE_ZOOM}. */
+const FLAG_SVG_HEIGHT_PX = 40;
+/** Cap apparent flag height when zoomed out (pixels). */
+const FLAG_MAX_HEIGHT_PX = 44;
+const FLAG_SIZE_REFERENCE_ZOOM = 17;
+
+function flagPinContentScale(zoom: number): number {
+  const naturalHeight =
+    FLAG_SVG_HEIGHT_PX * 2 ** (FLAG_SIZE_REFERENCE_ZOOM - zoom);
+  if (naturalHeight <= FLAG_MAX_HEIGHT_PX) return 1;
+  return FLAG_MAX_HEIGHT_PX / naturalHeight;
+}
+
+function useFlagPinContentScale(): number {
+  const map = useMap();
+  const [scale, setScale] = useState(1);
+
+  useEffect(() => {
+    if (!map) return;
+
+    const update = () => {
+      setScale(flagPinContentScale(map.getZoom() ?? FLAG_SIZE_REFERENCE_ZOOM));
+    };
+
+    update();
+    const listener = map.addListener("zoom_changed", update);
+    return () => listener.remove();
+  }, [map]);
+
+  return scale;
+}
+
+function GroundCircle({
+  position,
+  radiusYards,
+  fixedRadiusPx,
+  minRadiusPx,
+  maxRadiusPx,
+  fillColor,
+  fillOpacity = 1,
+  strokeColor,
+  strokeOpacity = 1,
+  strokeWeight = 2,
+}: {
+  position: LatLng;
+  radiusYards?: number;
+  fixedRadiusPx?: number;
+  minRadiusPx?: number;
+  maxRadiusPx?: number;
+  fillColor: string;
+  fillOpacity?: number;
+  strokeColor: string;
+  strokeOpacity?: number;
+  strokeWeight?: number;
+  zIndex?: number;
+}) {
   return (
-    <div className="relative flex flex-col items-center">
-      <div
-        aria-hidden
-        className="absolute bottom-0 left-1/2 z-0 size-5 -translate-x-1/2 translate-y-1/2 rounded-full border-2 border-white/30 bg-gray-500/20 shadow-sm"
-      />
+    <ScreenSpaceGroundCircle
+      position={position}
+      radiusYards={radiusYards}
+      fixedRadiusPx={fixedRadiusPx}
+      minRadiusPx={minRadiusPx}
+      maxRadiusPx={maxRadiusPx}
+      fillColor={fillColor}
+      fillOpacity={fillOpacity}
+      strokeColor={strokeColor}
+      strokeOpacity={strokeOpacity}
+      strokeWeight={strokeWeight}
+    />
+  );
+}
+
+/** Pole base sits at the bottom edge so the yardage line meets the pin exactly. */
+function FlagPinContent({ scale = 1 }: { scale?: number }) {
+  return (
+    <div
+      style={{
+        transform: scale === 1 ? undefined : `scale(${scale})`,
+        transformOrigin: "bottom center",
+      }}
+    >
       <svg
         width={32}
         height={40}
         viewBox="0 0 32 40"
         aria-hidden
-        className="relative z-10 block"
+        className="block"
       >
         <path d="M16 2 L29 7.5 L16 14 Z" fill="#ef4444" />
         <line
@@ -100,15 +177,29 @@ export function FlagPinMarker({
   position: LatLng;
   zIndex?: number;
 }) {
+  const contentScale = useFlagPinContentScale();
+
   return (
-    <AdvancedMarker
-      position={position}
-      clickable={false}
-      zIndex={zIndex}
-      anchorPoint={AdvancedMarkerAnchorPoint.BOTTOM_CENTER}
-    >
-      <FlagPinContent />
-    </AdvancedMarker>
+    <>
+      <GroundCircle
+        position={position}
+        radiusYards={2.5}
+        fillColor="#6b7280"
+        fillOpacity={0.22}
+        strokeColor="#ffffff"
+        strokeOpacity={0.32}
+        strokeWeight={2}
+        zIndex={zIndex - 1}
+      />
+      <AdvancedMarker
+        position={position}
+        clickable={false}
+        zIndex={zIndex}
+        anchorPoint={AdvancedMarkerAnchorPoint.BOTTOM_CENTER}
+      >
+        <FlagPinContent scale={contentScale} />
+      </AdvancedMarker>
+    </>
   );
 }
 
@@ -186,44 +277,66 @@ export function BreakAnchorMarker({
   useSuppressAdvancedMarkerDragFocus(marker);
 
   return (
-    <AdvancedMarker
-      ref={markerRef}
-      position={position}
-      draggable={draggable}
-      clickable={clickable}
-      zIndex={zIndex}
-      title={title}
-      anchorLeft="-50%"
-      anchorTop="-50%"
-      className={SUPPRESS_MARKER_FOCUS_CLASS}
-      onClick={onClick}
-      onDragStart={() => {
-        if (marker) {
-          for (const node of collectMarkerFocusElements(marker)) {
-            node.blur();
-          }
-        }
-        (document.activeElement as HTMLElement | null)?.blur?.();
-        onDragStart?.();
-      }}
-      onDrag={(event) => {
-        (document.activeElement as HTMLElement | null)?.blur?.();
-        const point = latLngFromDragEvent(event);
-        if (point) onDrag?.(point);
-      }}
-      onDragEnd={(event) => {
-        const point = latLngFromDragEvent(event);
-        if (point) onDragEnd?.(point);
-        (document.activeElement as HTMLElement | null)?.blur?.();
-      }}
-    >
-      <div
-        className="flex size-[30px] cursor-grab items-center justify-center rounded-full border-[2.5px] border-white shadow-md outline-none active:cursor-grabbing"
-        onMouseDown={(event) => event.preventDefault()}
-      >
-        <div className="size-[5px] rounded-full bg-white" />
-      </div>
-    </AdvancedMarker>
+    <>
+      <GroundCircle
+        position={position}
+        fixedRadiusPx={DOGLEG_OUTER_RADIUS_PX}
+        fillColor="#000000"
+        fillOpacity={0.08}
+        strokeColor="#ffffff"
+        strokeOpacity={1}
+        strokeWeight={2.5}
+        zIndex={zIndex - 1}
+      />
+      <GroundCircle
+        position={position}
+        fixedRadiusPx={DOGLEG_INNER_RADIUS_PX}
+        fillColor="#ffffff"
+        fillOpacity={1}
+        strokeColor="#ffffff"
+        strokeOpacity={1}
+        strokeWeight={1}
+        zIndex={zIndex}
+      />
+      {(draggable || clickable) && (
+        <AdvancedMarker
+          ref={markerRef}
+          position={position}
+          draggable={draggable}
+          clickable={clickable}
+          zIndex={zIndex + 1}
+          title={title}
+          anchorPoint={AdvancedMarkerAnchorPoint.CENTER}
+          className={SUPPRESS_MARKER_FOCUS_CLASS}
+          onClick={onClick}
+          onDragStart={() => {
+            if (marker) {
+              for (const node of collectMarkerFocusElements(marker)) {
+                node.blur();
+              }
+            }
+            (document.activeElement as HTMLElement | null)?.blur?.();
+            onDragStart?.();
+          }}
+          onDrag={(event) => {
+            (document.activeElement as HTMLElement | null)?.blur?.();
+            const point = latLngFromDragEvent(event);
+            if (point) onDrag?.(point);
+          }}
+          onDragEnd={(event) => {
+            const point = latLngFromDragEvent(event);
+            if (point) onDragEnd?.(point);
+            (document.activeElement as HTMLElement | null)?.blur?.();
+          }}
+        >
+          <div
+            className="size-11 cursor-grab outline-none active:cursor-grabbing"
+            aria-hidden
+            onMouseDown={(event) => event.preventDefault()}
+          />
+        </AdvancedMarker>
+      )}
+    </>
   );
 }
 

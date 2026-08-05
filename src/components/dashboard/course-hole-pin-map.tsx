@@ -218,6 +218,8 @@ function MapCameraController({
       resetKey={resetKey}
       padding={MAP_PADDING}
       enabled={enabled}
+      cameraTilt={0}
+      restrictZoom={false}
     />
   );
 }

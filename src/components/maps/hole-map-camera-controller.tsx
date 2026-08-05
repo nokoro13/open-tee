@@ -10,6 +10,9 @@ import {
 } from "@/lib/hole-map-camera-animation";
 import {
   computeHoleMapCamera,
+  HOLE_MAP_CAMERA_TILT,
+  HOLE_MAP_MAX_ZOOM,
+  holeMapMinZoom,
   type HoleMapCameraPadding,
   type HoleMapView,
 } from "@/lib/hole-map-view";
@@ -23,7 +26,12 @@ type HoleMapCameraControllerProps = {
   resetKey: number;
   padding: HoleMapCameraPadding;
   enabled?: boolean;
+  /** Map tilt in degrees (0 = top-down). Defaults to {@link HOLE_MAP_CAMERA_TILT}. */
+  cameraTilt?: number;
+  /** When true, prevent zooming far beyond the auto-fit level. */
+  restrictZoom?: boolean;
   onReady?: (fitHole: (options?: FitHoleOptions) => void) => void;
+  onHeadingChange?: (heading: number) => void;
 };
 
 export function HoleMapCameraController({
@@ -31,12 +39,17 @@ export function HoleMapCameraController({
   resetKey,
   padding,
   enabled = true,
+  cameraTilt = HOLE_MAP_CAMERA_TILT,
+  restrictZoom = true,
   onReady,
+  onHeadingChange,
 }: HoleMapCameraControllerProps) {
   const map = useMap();
   const viewRef = useRef(view);
   const enabledRef = useRef(enabled);
   const paddingRef = useRef(padding);
+  const cameraTiltRef = useRef(cameraTilt);
+  const restrictZoomRef = useRef(restrictZoom);
   const hasInitialFitRef = useRef(false);
   const prevResetKeyRef = useRef(resetKey);
   const pendingFlyHoleRef = useRef<number | null>(null);
@@ -45,10 +58,15 @@ export function HoleMapCameraController({
   const userAdjustedCameraRef = useRef(false);
   const isProgrammaticCameraRef = useRef(false);
   const lastAppliedHeadingRef = useRef<number | null>(null);
+  const onHeadingChangeRef = useRef(onHeadingChange);
+
+  onHeadingChangeRef.current = onHeadingChange;
 
   viewRef.current = view;
   enabledRef.current = enabled;
   paddingRef.current = padding;
+  cameraTiltRef.current = cameraTilt;
+  restrictZoomRef.current = restrictZoom;
 
   const stopFly = useCallback(() => {
     cancelFlyRef.current?.();
@@ -62,6 +80,18 @@ export function HoleMapCameraController({
       isProgrammaticCameraRef.current = false;
     });
   }, []);
+
+  const applyZoomLimits = useCallback(
+    (fitZoom: number) => {
+      if (!map || !restrictZoomRef.current || !enabledRef.current) return;
+
+      map.setOptions({
+        minZoom: holeMapMinZoom(fitZoom),
+        maxZoom: HOLE_MAP_MAX_ZOOM,
+      });
+    },
+    [map]
+  );
 
   const applyCamera = useCallback(
     (animate: boolean, { force = false }: { force?: boolean } = {}) => {
@@ -88,6 +118,7 @@ export function HoleMapCameraController({
           center: currentView.center,
           zoom: 17,
           heading: 0,
+          tilt: 0,
         });
         lastAppliedHeadingRef.current = 0;
         hasInitialFitRef.current = true;
@@ -100,7 +131,10 @@ export function HoleMapCameraController({
         mapWidth: Math.max(rect.width, 1),
         mapHeight: Math.max(rect.height, 1),
         padding: paddingRef.current,
+        tilt: enabledRef.current ? cameraTiltRef.current : 0,
       });
+
+      applyZoomLimits(camera.zoom);
 
       const recordAppliedHeading = (heading: number) => {
         lastAppliedHeadingRef.current = heading;
@@ -142,7 +176,7 @@ export function HoleMapCameraController({
       hasInitialFitRef.current = true;
       return true;
     },
-    [map, stopFly, markProgrammaticCamera]
+    [map, stopFly, markProgrammaticCamera, applyZoomLimits]
   );
 
   const fitHole = useCallback(
@@ -161,6 +195,17 @@ export function HoleMapCameraController({
   useEffect(() => {
     if (!map) return;
 
+    const notifyHeading = () => {
+      onHeadingChangeRef.current?.(map.getHeading() ?? 0);
+    };
+
+    const onHeadingChanged = () => {
+      if (!isProgrammaticCameraRef.current && !isFlyingRef.current) {
+        userAdjustedCameraRef.current = true;
+      }
+      notifyHeading();
+    };
+
     const markUserAdjusted = () => {
       if (isProgrammaticCameraRef.current || isFlyingRef.current) return;
       userAdjustedCameraRef.current = true;
@@ -168,10 +213,16 @@ export function HoleMapCameraController({
 
     const zoomListener = map.addListener("zoom_changed", markUserAdjusted);
     const dragListener = map.addListener("dragend", markUserAdjusted);
+    const headingListener = map.addListener("heading_changed", onHeadingChanged);
+    const idleListener = map.addListener("idle", notifyHeading);
+
+    notifyHeading();
 
     return () => {
       google.maps.event.removeListener(zoomListener);
       google.maps.event.removeListener(dragListener);
+      google.maps.event.removeListener(headingListener);
+      google.maps.event.removeListener(idleListener);
     };
   }, [map]);
 

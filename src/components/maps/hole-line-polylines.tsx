@@ -1,7 +1,7 @@
 "use client";
 
 import type { LatLng } from "@/lib/green-distance";
-import { ScreenSpaceHoleLine } from "@/components/maps/screen-space-hole-line";
+import { MapSurfaceHoleLine } from "@/components/maps/map-surface-hole-line";
 
 type HoleLinePolylinesProps = {
   path: LatLng[];
@@ -15,7 +15,7 @@ export function HoleLinePolylines({
   onClick,
 }: HoleLinePolylinesProps) {
   return (
-    <ScreenSpaceHoleLine
+    <MapSurfaceHoleLine
       path={path}
       clickable={clickable}
       onClick={onClick}

@@ -27,6 +27,7 @@ function readCurrentCamera(map: google.maps.Map): HoleMapCamera {
     center,
     zoom: map.getZoom() ?? 17,
     heading: map.getHeading() ?? 0,
+    tilt: map.getTilt() ?? 0,
   };
 }
 
@@ -73,7 +74,7 @@ export function flyHoleMapCamera(
       },
       zoom: lerp(from.zoom, target.zoom, t),
       heading: lerpHeading(from.heading, target.heading, t),
-      tilt: 0,
+      tilt: lerp(from.tilt, target.tilt, t),
     });
 
     if (rawProgress < 1) {
@@ -100,6 +101,6 @@ export function snapHoleMapCamera(
     center: target.center,
     zoom: target.zoom,
     heading: target.heading,
-    tilt: 0,
+    tilt: target.tilt,
   });
 }
