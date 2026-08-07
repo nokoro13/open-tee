@@ -15,7 +15,9 @@ import {
 } from "@/actions/course-onboarding";
 import { CourseGooglePlaceSearch } from "@/components/dashboard/course-google-place-search";
 import { CourseHolePinMap } from "@/components/dashboard/course-hole-pin-map";
+import { CourseScorecardEditTable } from "@/components/dashboard/course-scorecard-edit-table";
 import { HoleStrip } from "@/components/dashboard/hole-strip";
+import { ScorecardOcrTotalsPanel } from "@/components/dashboard/scorecard-ocr-totals-panel";
 import { compressScorecardImage } from "@/lib/compress-scorecard-image";
 import {
   CourseDuplicateWarning,
@@ -238,145 +240,6 @@ function buildScorecardRows(
       teeYardages,
     };
   });
-}
-
-function TotalCheckCell({
-  holeSum,
-  expected,
-  matches,
-}: {
-  holeSum: number | null;
-  expected: number | null;
-  matches: boolean;
-}) {
-  if (holeSum == null && expected == null) {
-    return <span className="text-muted-foreground">—</span>;
-  }
-
-  const hasComparison = holeSum != null && expected != null;
-
-  return (
-    <span
-      className={cn(
-        "tabular-nums",
-        hasComparison && matches && "text-emerald-700 dark:text-emerald-300",
-        hasComparison && !matches && "font-medium text-amber-800 dark:text-amber-200"
-      )}
-    >
-      {holeSum ?? "—"}/{expected ?? "—"}
-      {hasComparison && (matches ? " ✓" : " ✗")}
-    </span>
-  );
-}
-
-function ScorecardTotalsPanel({
-  parValidation,
-  yardageValidation,
-  handicapValidation,
-}: {
-  parValidation: ScorecardParValidation | null;
-  yardageValidation: ScorecardYardageValidation[];
-  handicapValidation: ScorecardStrokeIndexValidation[];
-}) {
-  if (
-    !parValidation &&
-    yardageValidation.length === 0 &&
-    handicapValidation.length === 0
-  ) {
-    return null;
-  }
-
-  return (
-    <div className="rounded-lg border bg-muted/20 px-3 py-2 text-xs">
-      <p className="font-medium text-foreground">Totals check</p>
-      <div className="mt-2 overflow-x-auto">
-        <table className="w-full min-w-70">
-          <thead>
-            <tr className="text-muted-foreground">
-              <th className="pr-3 pb-1 text-left font-medium">Row</th>
-              <th className="px-2 pb-1 text-left font-medium">OUT</th>
-              <th className="px-2 pb-1 text-left font-medium">IN</th>
-              <th className="pl-2 pb-1 text-left font-medium">TOT</th>
-            </tr>
-          </thead>
-          <tbody>
-            {parValidation && (
-              <tr>
-                <td className="pr-3 py-1 font-medium">Par</td>
-                <td className="px-2 py-1">
-                  <TotalCheckCell
-                    holeSum={parValidation.frontSum}
-                    expected={parValidation.frontExpected}
-                    matches={parValidation.frontMatches}
-                  />
-                </td>
-                <td className="px-2 py-1">
-                  <TotalCheckCell
-                    holeSum={parValidation.backSum}
-                    expected={parValidation.backExpected}
-                    matches={parValidation.backMatches}
-                  />
-                </td>
-                <td className="pl-2 py-1">
-                  <TotalCheckCell
-                    holeSum={parValidation.totalSum}
-                    expected={parValidation.totalExpected}
-                    matches={parValidation.totalMatches}
-                  />
-                </td>
-              </tr>
-            )}
-            {yardageValidation.map((entry) => (
-              <tr key={entry.teeKey}>
-                <td className="pr-3 py-1 font-medium">{entry.teeName}</td>
-                <td className="px-2 py-1">
-                  <TotalCheckCell
-                    holeSum={entry.totals.frontSum}
-                    expected={entry.totals.frontExpected}
-                    matches={entry.totals.frontMatches}
-                  />
-                </td>
-                <td className="px-2 py-1">
-                  <TotalCheckCell
-                    holeSum={entry.totals.backSum}
-                    expected={entry.totals.backExpected}
-                    matches={entry.totals.backMatches}
-                  />
-                </td>
-                <td className="pl-2 py-1">
-                  <TotalCheckCell
-                    holeSum={entry.totals.totalSum}
-                    expected={entry.totals.totalExpected}
-                    matches={entry.totals.totalMatches}
-                  />
-                </td>
-              </tr>
-            ))}
-            {handicapValidation.map((entry) => (
-              <tr key={entry.label}>
-                <td className="pr-3 py-1 font-medium">{entry.label}</td>
-                <td className="px-2 py-1" colSpan={3}>
-                  <span
-                    className={cn(
-                      "tabular-nums",
-                      entry.isValidPermutation &&
-                        "text-emerald-700 dark:text-emerald-300",
-                      !entry.isValidPermutation &&
-                        "font-medium text-amber-800 dark:text-amber-200"
-                    )}
-                  >
-                    {entry.sum ?? "—"}/{entry.expectedSum}
-                    {entry.sum != null &&
-                      (entry.isValidPermutation ? " ✓" : " ✗")}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
 }
 
 function buildTeeRows(existing: CourseTee[]): CourseTeeInput[] {
@@ -994,6 +857,7 @@ export function CourseOnboardingWizard({
                     backNineMirrorsFront:
                       holeCount === "18" ? backNineMirrorsFront : false,
                     externalCourseId,
+                    courseDetailsConfirmed: true,
                   });
                   if (result.success) setStep("scorecard");
                   return result;
@@ -1007,234 +871,204 @@ export function CourseOnboardingWizard({
       )}
 
       {step === "scorecard" && (
-        <div className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-2">
-            <Card size="sm">
-              <CardHeader className="border-b">
-                <CardTitle>Tee rows</CardTitle>
-                <CardDescription>
-                  Add each name printed on the scorecard — not the row color.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex flex-wrap gap-1.5">
-                  {sortedTees.map((tee) => (
-                    <Badge
-                      key={tee.teeKey}
+        <div className="space-y-5">
+          <Card size="sm">
+            <CardHeader className="border-b">
+              <CardTitle>Scorecard layout</CardTitle>
+              <CardDescription>
+                Match the tee and handicap rows on your physical scorecard
+                before extracting or editing hole data.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="grid lg:grid-cols-2 lg:divide-x">
+                <div className="space-y-4 p-(--card-spacing)">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">Tee rows</p>
+                    <p className="text-xs text-muted-foreground">
+                      Add each name printed on the scorecard — not the row
+                      color.
+                    </p>
+                  </div>
+                  <div className="flex min-h-9 flex-wrap items-center gap-2">
+                    {sortedTees.map((tee) => (
+                      <Badge
+                        key={tee.teeKey}
+                        variant="outline"
+                        className="h-8 gap-1.5 px-2.5"
+                      >
+                        <span
+                          className="inline-block size-2 shrink-0 rounded-full border border-black/10"
+                          style={{ backgroundColor: tee.teeColor ?? "#64748b" }}
+                        />
+                        {tee.teeName}
+                        {sortedTees.length > 1 && (
+                          <button
+                            type="button"
+                            className="ml-0.5 text-muted-foreground hover:text-foreground"
+                            aria-label={`Remove ${tee.teeName}`}
+                            onClick={() => removeTee(tee.teeKey)}
+                          >
+                            ×
+                          </button>
+                        )}
+                      </Badge>
+                    ))}
+                    {PRESET_COURSE_TEES.filter(
+                      (preset) =>
+                        !sortedTees.some(
+                          (tee) => tee.teeKey === normalizeTeeKey(preset.teeKey)
+                        )
+                    ).map((preset) => (
+                      <Button
+                        key={preset.teeKey}
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-8 px-2.5 text-xs"
+                        onClick={() => addTeeFromPreset(preset)}
+                      >
+                        + {preset.teeName}
+                      </Button>
+                    ))}
+                  </div>
+                  <div className="flex max-w-md gap-2">
+                    <Input
+                      value={customTeeName}
+                      placeholder="Custom name (e.g. Palmer)"
+                      className="h-9"
+                      onChange={(event) => setCustomTeeName(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter") return;
+                        event.preventDefault();
+                        addCustomTee(customTeeName);
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
                       variant="outline"
-                      className="gap-1.5 px-2 py-0.5"
+                      className="h-9 shrink-0 px-3"
+                      disabled={!customTeeName.trim()}
+                      onClick={() => addCustomTee(customTeeName)}
                     >
-                      <span
-                        className="inline-block size-2 rounded-full border"
-                        style={{ backgroundColor: tee.teeColor ?? "#64748b" }}
-                      />
-                      {tee.teeName}
-                      {sortedTees.length > 1 && (
+                      Add
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-4 border-t p-(--card-spacing) lg:border-t-0">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">Handicap rows</p>
+                    <p className="text-xs text-muted-foreground">
+                      Include every handicap row shown on the card.
+                    </p>
+                  </div>
+                  <div className="flex min-h-9 flex-wrap items-center gap-2">
+                    {sortedHandicapRows.map((row) => (
+                      <Badge
+                        key={row.rowKey}
+                        variant="outline"
+                        className="h-8 gap-1.5 px-2.5"
+                      >
+                        {row.rowName}
                         <button
                           type="button"
-                          className="text-muted-foreground hover:text-foreground"
-                          onClick={() => removeTee(tee.teeKey)}
+                          className="ml-0.5 text-muted-foreground hover:text-foreground"
+                          aria-label={`Remove ${row.rowName}`}
+                          onClick={() => removeHandicapRow(row.rowKey)}
                         >
                           ×
                         </button>
-                      )}
-                    </Badge>
-                  ))}
+                      </Badge>
+                    ))}
+                    {PRESET_SCORECARD_HANDICAP_ROWS.filter(
+                      (preset) =>
+                        !sortedHandicapRows.some(
+                          (row) => row.rowKey === preset.rowKey
+                        )
+                    ).map((preset) => (
+                      <Button
+                        key={preset.rowKey}
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-8 px-2.5 text-xs"
+                        onClick={() => addHandicapRowFromPreset(preset)}
+                      >
+                        + {preset.rowName}
+                      </Button>
+                    ))}
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {PRESET_COURSE_TEES.filter(
-                    (preset) =>
-                      !sortedTees.some(
-                        (tee) => tee.teeKey === normalizeTeeKey(preset.teeKey)
-                      )
-                  ).map((preset) => (
-                    <Button
-                      key={preset.teeKey}
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-7 px-2 text-xs"
-                      onClick={() => addTeeFromPreset(preset)}
-                    >
-                      + {preset.teeName}
-                    </Button>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <Input
-                    value={customTeeName}
-                    placeholder="Custom name (e.g. Palmer)"
-                    className="h-8 text-xs"
-                    onChange={(event) => setCustomTeeName(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key !== "Enter") return;
-                      event.preventDefault();
-                      addCustomTee(customTeeName);
-                    }}
-                  />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card size="sm">
+            <CardHeader className="border-b">
+              <CardTitle>Scorecard reference</CardTitle>
+              <CardDescription>
+                Upload a photo and extract values, or enter hole data manually
+                below.
+              </CardDescription>
+              {scorecardImageUrl && (
+                <CardAction className="flex gap-1">
                   <Button
                     type="button"
                     size="sm"
-                    variant="outline"
-                    className="h-8 shrink-0 px-2 text-xs"
-                    disabled={!customTeeName.trim()}
-                    onClick={() => addCustomTee(customTeeName)}
+                    variant="ghost"
+                    className="h-8 px-2.5 text-xs"
+                    onClick={() => setScorecardPreviewOpen(true)}
                   >
-                    Add
+                    <Maximize2 className="size-3.5" />
+                    Expand
                   </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card size="sm">
-              <CardHeader className="border-b">
-                <CardTitle>Handicap rows</CardTitle>
-                <CardDescription>
-                  Include every handicap row shown on the card.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex flex-wrap gap-1.5">
-                  {sortedHandicapRows.map((row) => (
-                    <Badge
-                      key={row.rowKey}
-                      variant="outline"
-                      className="gap-1.5 px-2 py-0.5"
-                    >
-                      {row.rowName}
-                      <button
-                        type="button"
-                        className="text-muted-foreground hover:text-foreground"
-                        onClick={() => removeHandicapRow(row.rowKey)}
-                      >
-                        ×
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {PRESET_SCORECARD_HANDICAP_ROWS.filter(
-                    (preset) =>
-                      !sortedHandicapRows.some(
-                        (row) => row.rowKey === preset.rowKey
-                      )
-                  ).map((preset) => (
-                    <Button
-                      key={preset.rowKey}
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-7 px-2 text-xs"
-                      onClick={() => addHandicapRowFromPreset(preset)}
-                    >
-                      + {preset.rowName}
-                    </Button>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-[minmax(300px,2fr)_minmax(0,3fr)]">
-            <Card size="sm" className="xl:sticky xl:top-4 xl:self-start">
-              <CardHeader className="border-b">
-                <CardTitle>Scorecard reference</CardTitle>
-                <CardDescription>
-                  Verify extracted values against the original photo.
-                </CardDescription>
-                {scorecardImageUrl && (
-                  <CardAction className="flex gap-1">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 px-2 text-xs"
-                      onClick={() => setScorecardPreviewOpen(true)}
-                    >
-                      <Maximize2 className="size-3.5" />
-                      Expand
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 px-2 text-xs"
-                      disabled={isUploadingScorecard}
-                      onClick={() => scorecardFileInputRef.current?.click()}
-                    >
-                      <Upload className="size-3.5" />
-                      Replace
-                    </Button>
-                  </CardAction>
-                )}
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <input
-                  ref={scorecardFileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  disabled={isUploadingScorecard}
-                  onChange={(event) =>
-                    handleScorecardImage(event.target.files?.[0] ?? null)
-                  }
-                />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 px-2.5 text-xs"
+                    disabled={isUploadingScorecard}
+                    onClick={() => scorecardFileInputRef.current?.click()}
+                  >
+                    <Upload className="size-3.5" />
+                    Replace
+                  </Button>
+                </CardAction>
+              )}
+            </CardHeader>
+            <CardContent>
+              <input
+                ref={scorecardFileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                disabled={isUploadingScorecard}
+                onChange={(event) =>
+                  handleScorecardImage(event.target.files?.[0] ?? null)
+                }
+              />
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
                 {scorecardImageUrl ? (
-                  <>
-                    <button
-                      type="button"
-                      className="group relative block w-full overflow-hidden rounded-lg border bg-muted/30"
-                      onClick={() => setScorecardPreviewOpen(true)}
-                    >
-                      <div className="relative min-h-[min(52vh,560px)] w-full">
-                        <Image
-                          src={scorecardImageUrl}
-                          alt="Scorecard reference"
-                          fill
-                          className="object-contain p-2 transition-opacity group-hover:opacity-90"
-                          unoptimized
-                        />
-                      </div>
-                      <span className="absolute inset-x-0 bottom-0 bg-linear-to-t from-background/90 to-transparent px-3 py-2 text-left text-[11px] text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
-                        Click to expand
-                      </span>
-                    </button>
-                    <div className="flex flex-col gap-2 sm:flex-row">
-                      <Button
-                        type="button"
-                        className="h-11 w-full sm:h-9"
-                        disabled={
-                          isPending ||
-                          sortedTees.length === 0 ||
-                          sortedHandicapRows.length === 0
-                        }
-                        onClick={handleExtractScorecard}
-                      >
-                        <ScanLine />
-                        {isPending ? "Extracting…" : "Extract with AI"}
-                      </Button>
-                    </div>
-                    {(sortedTees.length === 0 ||
-                      sortedHandicapRows.length === 0) && (
-                      <p className="text-xs text-muted-foreground">
-                        Add at least one tee row and one handicap row before
-                        extracting.
-                      </p>
-                    )}
-                    {(ocrParValidation ||
-                      ocrYardageValidation.length > 0 ||
-                      ocrHandicapValidation.length > 0) && (
-                      <ScorecardTotalsPanel
-                        parValidation={ocrParValidation}
-                        yardageValidation={ocrYardageValidation}
-                        handicapValidation={ocrHandicapValidation}
-                      />
-                    )}
-                  </>
+                  <button
+                    type="button"
+                    className="group relative mx-auto w-full shrink-0 overflow-hidden rounded-lg border bg-muted/30 lg:mx-0 lg:w-56 xl:w-64"
+                    onClick={() => setScorecardPreviewOpen(true)}
+                  >
+                    <Image
+                      src={scorecardImageUrl}
+                      alt="Scorecard reference"
+                      width={640}
+                      height={480}
+                      className="h-auto max-h-72 w-full object-contain p-2 transition-opacity group-hover:opacity-90"
+                      unoptimized
+                    />
+                  </button>
                 ) : (
                   <label
                     className={cn(
-                      "flex min-h-[min(40vh,360px)] cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground transition-colors hover:bg-muted/40",
+                      "flex min-h-44 w-full shrink-0 cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground transition-colors hover:bg-muted/40 lg:w-56 xl:w-64",
                       isUploadingScorecard && "pointer-events-none opacity-60"
                     )}
                   >
@@ -1258,142 +1092,76 @@ export function CourseOnboardingWizard({
                     />
                   </label>
                 )}
-              </CardContent>
-            </Card>
 
-            <Card size="sm" className="min-w-0">
-              <CardHeader className="border-b">
-                <CardTitle>Extracted data</CardTitle>
-                <CardDescription>
-                  Edit any cell that doesn&apos;t match the scorecard image.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="px-0 pb-0">
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-xs">
-                    <thead>
-                      <tr className="border-b bg-muted/30 text-left text-[10px] uppercase tracking-wide text-muted-foreground">
-                        <th className="sticky left-0 z-10 bg-muted/30 px-2 py-1.5 font-medium after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-border">
-                          #
-                        </th>
-                        <th className="px-1.5 py-1.5 font-medium">Par</th>
-                        {sortedTees.map((tee) => (
-                          <th
-                            key={tee.teeKey}
-                            className="whitespace-nowrap px-1.5 py-1.5 font-medium"
-                            title={tee.teeName}
-                          >
-                            {tee.teeName}
-                          </th>
-                        ))}
-                        {extractMensHandicap && (
-                          <th className="px-1.5 py-1.5 font-medium">M HCP</th>
-                        )}
-                        {extractLadiesHandicap && (
-                          <th className="px-1.5 py-1.5 font-medium">L HCP</th>
-                        )}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/50">
-                      {scorecardRows.map((row, index) => (
-                        <tr
-                          key={row.holeNumber}
-                          className={cn(
-                            row.holeNumber === 10 &&
-                              "border-t-2 border-border bg-muted/10"
-                          )}
-                        >
-                          <td className="sticky left-0 z-10 bg-card px-2 py-1 font-medium tabular-nums after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-border">
-                            {row.holeNumber}
-                          </td>
-                          <td className="px-1 py-1">
-                            <Input
-                              type="number"
-                              inputMode="numeric"
-                              min={3}
-                              max={5}
-                              className="h-8 w-12 px-1 text-center text-xs tabular-nums"
-                              value={row.par}
-                              onChange={(event) => {
-                                const next = [...scorecardRows];
-                                next[index] = {
-                                  ...row,
-                                  par: Number(event.target.value),
-                                };
-                                setScorecardRows(next);
-                              }}
-                            />
-                          </td>
-                          {sortedTees.map((tee) => (
-                            <td key={tee.teeKey} className="px-1 py-1">
-                              <Input
-                                type="number"
-                                inputMode="numeric"
-                                min={0}
-                                className="h-8 w-14 px-1 text-center text-xs tabular-nums"
-                                value={row.teeYardages[tee.teeKey] ?? ""}
-                                onChange={(event) => {
-                                  const next = [...scorecardRows];
-                                  next[index] = {
-                                    ...row,
-                                    teeYardages: {
-                                      ...row.teeYardages,
-                                      [tee.teeKey]: event.target.value,
-                                    },
-                                  };
-                                  setScorecardRows(next);
-                                }}
-                              />
-                            </td>
-                          ))}
-                          {extractMensHandicap && (
-                            <td className="px-1 py-1">
-                              <Input
-                                type="number"
-                                inputMode="numeric"
-                                min={1}
-                                max={18}
-                                className="h-8 w-12 px-1 text-center text-xs tabular-nums"
-                                value={row.strokeIndex}
-                                onChange={(event) => {
-                                  const next = [...scorecardRows];
-                                  next[index] = {
-                                    ...row,
-                                    strokeIndex: event.target.value,
-                                  };
-                                  setScorecardRows(next);
-                                }}
-                              />
-                            </td>
-                          )}
-                          {extractLadiesHandicap && (
-                            <td className="px-1 py-1">
-                              <Input
-                                type="number"
-                                inputMode="numeric"
-                                min={1}
-                                max={18}
-                                className="h-8 w-12 px-1 text-center text-xs tabular-nums"
-                                value={row.ladiesStrokeIndex}
-                                onChange={(event) => {
-                                  const next = [...scorecardRows];
-                                  next[index] = {
-                                    ...row,
-                                    ladiesStrokeIndex: event.target.value,
-                                  };
-                                  setScorecardRows(next);
-                                }}
-                              />
-                            </td>
-                          )}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="flex min-w-0 flex-1 flex-col gap-3">
+                  {scorecardImageUrl ? (
+                    <>
+                      <p className="text-sm text-muted-foreground">
+                        Compare the extracted hole data below against your
+                        scorecard photo. Use Expand for a full-size view.
+                      </p>
+                      <Button
+                        type="button"
+                        className="h-10 w-full sm:w-auto sm:self-start"
+                        disabled={
+                          isPending ||
+                          sortedTees.length === 0 ||
+                          sortedHandicapRows.length === 0
+                        }
+                        onClick={handleExtractScorecard}
+                      >
+                        <ScanLine />
+                        {isPending ? "Extracting…" : "Extract with AI"}
+                      </Button>
+                      {(sortedTees.length === 0 ||
+                        sortedHandicapRows.length === 0) && (
+                        <p className="text-xs text-muted-foreground">
+                          Add at least one tee row and one handicap row before
+                          extracting.
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Upload a clear photo of the full scorecard to auto-fill
+                      par, yardages, and handicaps. You can also enter values
+                      manually in the table below.
+                    </p>
+                  )}
                 </div>
-              </CardContent>
-            </Card>
-          </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card size="sm">
+            <CardHeader className="border-b">
+              <CardTitle>Hole data</CardTitle>
+              <CardDescription>
+                Front and back nine side by side. Edit any cell that
+                doesn&apos;t match the scorecard image.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <CourseScorecardEditTable
+                holeCount={course.holeCount}
+                rows={scorecardRows}
+                sortedTees={sortedTees}
+                showMensHandicap={extractMensHandicap}
+                showLadiesHandicap={extractLadiesHandicap}
+                onRowsChange={setScorecardRows}
+              />
+            </CardContent>
+          </Card>
+
+          {(ocrParValidation ||
+            ocrYardageValidation.length > 0 ||
+            ocrHandicapValidation.length > 0) && (
+            <ScorecardOcrTotalsPanel
+              parValidation={ocrParValidation}
+              yardageValidation={ocrYardageValidation}
+              handicapValidation={ocrHandicapValidation}
+            />
+          )}
 
           <Sheet open={scorecardPreviewOpen} onOpenChange={setScorecardPreviewOpen}>
             <SheetContent

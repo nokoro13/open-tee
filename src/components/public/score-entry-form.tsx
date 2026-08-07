@@ -425,6 +425,11 @@ export function ScoreEntryForm({
   }, [slug, code, demoMode]);
 
   useEffect(() => {
+    if (demoMode) return;
+    router.prefetch(`/e/${slug}/leaderboard`);
+  }, [demoMode, router, slug]);
+
+  useEffect(() => {
     isPendingRef.current = isPending;
   }, [isPending]);
 

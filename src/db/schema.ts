@@ -444,6 +444,10 @@ export const golfCourses = pgTable(
     verifiedAt: timestamp("verified_at", { withTimezone: true }),
     verifiedByClerkId: text("verified_by_clerk_id"),
     publishedAt: timestamp("published_at", { withTimezone: true }),
+    /** Set when an organizer explicitly saves course details (Google prefill or manual). */
+    courseDetailsConfirmedAt: timestamp("course_details_confirmed_at", {
+      withTimezone: true,
+    }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },

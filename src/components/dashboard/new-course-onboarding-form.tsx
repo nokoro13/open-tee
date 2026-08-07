@@ -69,6 +69,7 @@ export function NewCourseOnboardingForm() {
             longitude: Number(longitude),
             holeCount: holeCount === "9" ? 9 : 18,
             externalCourseId,
+            courseDetailsConfirmed: true,
           });
           if (!result.success) {
             setError(result.error ?? "Could not create course.");

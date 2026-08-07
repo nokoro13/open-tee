@@ -13,6 +13,7 @@ import {
   strokesReceivedOnHole,
 } from "@/lib/handicap-strokes";
 import { dedupeScoresByHole } from "@/lib/score-aggregation";
+import { getEventScorecard } from "@/lib/scorecard";
 import {
   getHoleCount,
   getHoleNumbers,
@@ -442,6 +443,66 @@ function buildScorecardForEntry(
   };
 }
 
+async function loadLeaderboardScorecardContext(
+  eventId: string,
+  format: string,
+  holes: "9" | "18"
+) {
+  const [event, scores, eventHoles] = await Promise.all([
+    getDb().query.events.findFirst({
+      where: eq(events.id, eventId),
+      columns: { teamAName: true, teamBName: true, teamSize: true },
+    }),
+    getScoresForEvent(eventId),
+    getEventScorecard(eventId),
+  ]);
+
+  const holeData = buildHoleData(
+    eventHoles.map((hole) => ({
+      holeNumber: hole.holeNumber,
+      par: hole.par,
+      strokeIndex: hole.strokeIndex ?? null,
+    })),
+    holes
+  );
+  const contexts = await loadEntryContexts(
+    eventId,
+    format,
+    event?.teamSize ?? null
+  );
+
+  return {
+    event,
+    scores,
+    holeData,
+    contexts,
+  };
+}
+
+export async function getLeaderboardEntryScorecard(
+  eventId: string,
+  entryId: string,
+  format: string,
+  holes: "9" | "18"
+): Promise<LeaderboardScorecard | null> {
+  const { event, scores, holeData, contexts } =
+    await loadLeaderboardScorecardContext(eventId, format, holes);
+
+  return buildScorecardForEntry(
+    format,
+    holes,
+    scores,
+    holeData,
+    resolveEntryContext(entryId, contexts),
+    event
+      ? {
+          teamA: event.teamAName?.trim() || "Team A",
+          teamB: event.teamBName?.trim() || "Team B",
+        }
+      : undefined
+  );
+}
+
 export async function attachLeaderboardScorecards(
   entries: LeaderboardEntry[],
   eventId: string,
@@ -455,18 +516,12 @@ export async function attachLeaderboardScorecards(
 ): Promise<LeaderboardEntry[]> {
   if (entries.length === 0) return entries;
 
-  const event = await getDb().query.events.findFirst({
-    where: eq(events.id, eventId),
-    columns: { teamAName: true, teamBName: true, teamSize: true },
-  });
-
-  const scores = await getScoresForEvent(eventId);
-  const holeData = buildHoleData(eventHoles, holes);
-  const contexts = await loadEntryContexts(
+  const { event, scores, contexts } = await loadLeaderboardScorecardContext(
     eventId,
     format,
-    event?.teamSize ?? null
+    holes
   );
+  const holeData = buildHoleData(eventHoles, holes);
 
   return entries.map((entry) => ({
     ...entry,

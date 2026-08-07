@@ -949,6 +949,9 @@ export function CourseHolePinMap({
             {...GOLF_SATELLITE_MAP_PROPS}
             renderingType={RenderingType.VECTOR}
             gestureHandling="greedy"
+            draggableCursor={
+              showPlacementPicker || dragToAdjust ? "crosshair" : undefined
+            }
             disableDefaultUI
             zoomControl
             rotateControl={false}

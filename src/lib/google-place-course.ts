@@ -5,7 +5,8 @@ import {
 } from "@/lib/course-location";
 import { createGoogleCourseId } from "@/lib/google-course-id";
 
-export type CourseGooglePlaceSelection = {
+/** Ephemeral form values from Places Autocomplete — persist only after user confirms on save. */
+export type CourseGooglePlacePrefill = {
   name: string;
   address: string;
   city: string;
@@ -13,6 +14,10 @@ export type CourseGooglePlaceSelection = {
   country: CourseCountry;
   latitude: number;
   longitude: number;
+};
+
+/** Only `externalCourseId` (Google place_id) may be kept long-term from Places. */
+export type CourseGooglePlaceSelection = CourseGooglePlacePrefill & {
   externalCourseId: string;
 };
 

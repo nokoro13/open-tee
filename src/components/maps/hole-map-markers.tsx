@@ -11,6 +11,7 @@ import {
 
 import { ScreenSpaceGroundCircle } from "@/components/maps/screen-space-ground-circle";
 import type { LatLng } from "@/lib/green-distance";
+import { cn } from "@/lib/utils";
 
 const SUPPRESS_MARKER_FOCUS_CLASS = "suppress-gmp-marker-focus";
 
@@ -330,7 +331,7 @@ export function BreakAnchorMarker({
           }}
         >
           <div
-            className="size-11 cursor-grab outline-none active:cursor-grabbing"
+            className="size-11 cursor-crosshair outline-none active:cursor-crosshair"
             aria-hidden
             onMouseDown={(event) => event.preventDefault()}
           />
@@ -392,7 +393,11 @@ export function LabeledCircleMarker({
       }}
     >
       <div
-        className="flex items-center justify-center rounded-full border-[2.5px] shadow-md"
+        className={cn(
+          "flex items-center justify-center rounded-full border-[2.5px] shadow-md",
+          draggable && "cursor-crosshair active:cursor-crosshair",
+          clickable && !draggable && "cursor-pointer"
+        )}
         style={{
           width: size,
           height: size,

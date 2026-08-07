@@ -63,6 +63,8 @@ export type RyderCupSummary = {
 export type LeaderboardOptions = {
   scoreBasis?: "gross" | "net";
   flightId?: string | null;
+  /** When false (default), scorecards load on demand when a row is expanded. */
+  includeScorecards?: boolean;
 };
 
 export type LeaderboardResult = {
@@ -271,16 +273,17 @@ async function buildIndividualStrokeLeaderboard(
   options: LeaderboardOptions = {}
 ): Promise<LeaderboardEntry[]> {
   const holeCount = getHoleCount(holes);
-  const scores = await getScoresForEvent(eventId);
-  const parMap = await getEventParMap(eventId);
-  const eventHoles = await getEventScorecard(eventId);
+  const [scores, eventHoles, activePlayers] = await Promise.all([
+    getScoresForEvent(eventId),
+    getEventScorecard(eventId),
+    getDb().query.registrations.findMany({
+      where: eq(registrations.eventId, eventId),
+    }),
+  ]);
+  const parMap = new Map(eventHoles.map((hole) => [hole.holeNumber, hole.par]));
   const strokeIndexByHole = new Map(
     eventHoles.map((hole) => [hole.holeNumber, hole.strokeIndex ?? hole.holeNumber])
   );
-
-  const activePlayers = await getDb().query.registrations.findMany({
-    where: eq(registrations.eventId, eventId),
-  });
 
   const entries = activePlayers
     .filter((player) => player.paymentStatus !== "refunded")
@@ -727,18 +730,20 @@ export async function buildLeaderboard(
       break;
   }
 
-  const eventHoles = await getEventScorecard(eventId);
-  result.entries = await attachLeaderboardScorecards(
-    result.entries,
-    eventId,
-    format,
-    holes,
-    eventHoles.map((hole) => ({
-      holeNumber: hole.holeNumber,
-      par: hole.par,
-      strokeIndex: hole.strokeIndex ?? null,
-    }))
-  );
+  if (options.includeScorecards) {
+    const eventHoles = await getEventScorecard(eventId);
+    result.entries = await attachLeaderboardScorecards(
+      result.entries,
+      eventId,
+      format,
+      holes,
+      eventHoles.map((hole) => ({
+        holeNumber: hole.holeNumber,
+        par: hole.par,
+        strokeIndex: hole.strokeIndex ?? null,
+      }))
+    );
+  }
 
   return result;
 }

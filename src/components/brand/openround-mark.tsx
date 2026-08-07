@@ -15,7 +15,7 @@ export function OpenRoundMark({ size = "md", className }: OpenRoundMarkProps) {
 
   return (
     <img
-      src="/icon0.svg"
+      src="/openround-mark.svg"
       alt=""
       width={px}
       height={px}

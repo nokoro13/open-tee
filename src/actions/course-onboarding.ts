@@ -41,6 +41,10 @@ import { DEFAULT_SCORECARD_HANDICAP_ROWS } from "@/lib/scorecard-handicap-rows";
 import { isScorecardImageUrl } from "@/lib/scorecard-image-url";
 import { createLocalCourseId } from "@/lib/local-course";
 import {
+  googlePlacesSaveConfirmationError,
+  requiresGooglePlacesSaveConfirmation,
+} from "@/lib/google-places-compliance";
+import {
   activatePendingCourseAccessForUser,
   canUserEditCourse,
   canUserEditVerifiedCourse,
@@ -118,6 +122,8 @@ export async function createCourseOnboarding(input: {
   longitude: number;
   holeCount: 9 | 18;
   externalCourseId?: string | null;
+  /** Required when linking a Google place_id — confirms name/address/coords are organizer-owned. */
+  courseDetailsConfirmed?: boolean;
 }): Promise<OnboardingActionResult & { courseId?: string }> {
   const org = await requireOrganization();
   const name = input.name.trim();
@@ -144,6 +150,15 @@ export async function createCourseOnboarding(input: {
 
   const externalCourseId = input.externalCourseId?.trim() || createLocalCourseId();
 
+  if (
+    requiresGooglePlacesSaveConfirmation(externalCourseId) &&
+    !input.courseDetailsConfirmed
+  ) {
+    return { success: false, error: googlePlacesSaveConfirmationError() };
+  }
+
+  const courseDetailsConfirmedAt = new Date();
+
   const existing = await getDb().query.golfCourses.findFirst({
     where: eq(golfCourses.externalCourseId, externalCourseId),
   });
@@ -169,6 +184,7 @@ export async function createCourseOnboarding(input: {
         longitude: String(input.longitude),
         holeCount: input.holeCount,
         onboardingStatus: "scorecard",
+        courseDetailsConfirmedAt,
         updatedAt: new Date(),
       })
       .where(eq(golfCourses.id, existing.id))
@@ -193,6 +209,7 @@ export async function createCourseOnboarding(input: {
       holeCount: input.holeCount,
       onboardingStatus: "scorecard",
       status: "draft",
+      courseDetailsConfirmedAt,
     })
     .returning();
 
@@ -213,6 +230,7 @@ export async function updateCourseOnboardingDetails(
     holeCount: 9 | 18;
     backNineMirrorsFront?: boolean;
     externalCourseId?: string | null;
+    courseDetailsConfirmed?: boolean;
   }
 ): Promise<OnboardingActionResult> {
   const allowVerifiedEdit = await canEditVerifiedCourse(courseId);
@@ -253,6 +271,22 @@ export async function updateCourseOnboardingDetails(
       ? input.externalCourseId?.trim() || null
       : undefined;
 
+  const resolvedExternalCourseId =
+    externalCourseIdUpdate !== undefined
+      ? externalCourseIdUpdate
+      : course.externalCourseId;
+
+  if (
+    requiresGooglePlacesSaveConfirmation(resolvedExternalCourseId) &&
+    !input.courseDetailsConfirmed
+  ) {
+    return { success: false, error: googlePlacesSaveConfirmationError() };
+  }
+
+  const courseDetailsConfirmedAt = input.courseDetailsConfirmed
+    ? new Date()
+    : undefined;
+
   await getDb()
     .update(golfCourses)
     .set({
@@ -267,6 +301,9 @@ export async function updateCourseOnboardingDetails(
       backNineMirrorsFront,
       ...(externalCourseIdUpdate !== undefined
         ? { externalCourseId: externalCourseIdUpdate }
+        : {}),
+      ...(courseDetailsConfirmedAt
+        ? { courseDetailsConfirmedAt }
         : {}),
       updatedAt: new Date(),
     })

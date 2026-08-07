@@ -1,11 +1,12 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ClipboardList, ChevronDown, RefreshCw } from "lucide-react";
 
 import { LeaderboardExpandedScorecard } from "@/components/public/leaderboard-expanded-scorecard";
 import { OpenRoundMark } from "@/components/brand/openround-mark";
+import type { LeaderboardScorecard } from "@/lib/leaderboard-scorecard";
 import type { LeaderboardEntry, RyderCupSummary } from "@/lib/scoring";
 import { formatRyderCupScore } from "@/lib/scoring";
 import {
@@ -108,6 +109,12 @@ export function LeaderboardView({
   const [scoreBasis, setScoreBasis] = useState<"gross" | "net">("gross");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [expandedEntryId, setExpandedEntryId] = useState<string | null>(null);
+  const [scorecardsByEntryId, setScorecardsByEntryId] = useState<
+    Record<string, LeaderboardScorecard>
+  >({});
+  const [loadingScorecardId, setLoadingScorecardId] = useState<string | null>(
+    null
+  );
   const [scoreHref, setScoreHref] = useState(() => getScorePageHref(slug));
 
   useEffect(() => {
@@ -144,22 +151,49 @@ export function LeaderboardView({
     return () => clearInterval(interval);
   }, [slug, pollIntervalMs, initialData.event.scoringStatus, scoreBasis]);
 
-  useEffect(() => {
-    if (!showNetToggle || initialData.event.scoringStatus === "disabled") return;
+  const changeScoreBasis = useCallback(
+    async (next: "gross" | "net") => {
+      if (next === scoreBasis) return;
+      setScoreBasis(next);
 
-    async function refreshBasis() {
+      if (!showNetToggle || initialData.event.scoringStatus === "disabled") {
+        return;
+      }
+
       const response = await fetch(
-        `/api/e/${slug}/leaderboard?basis=${scoreBasis}`,
+        `/api/e/${slug}/leaderboard?basis=${next}`,
         { cache: "no-store" }
       );
       if (response.ok) {
         const json = (await response.json()) as LeaderboardPayload;
         setData(json);
       }
-    }
+    },
+    [scoreBasis, showNetToggle, slug, initialData.event.scoringStatus]
+  );
 
-    void refreshBasis();
-  }, [scoreBasis, showNetToggle, slug, initialData.event.scoringStatus]);
+  async function loadEntryScorecard(entryId: string) {
+    if (scorecardsByEntryId[entryId]) return;
+
+    setLoadingScorecardId(entryId);
+    try {
+      const response = await fetch(
+        `/api/e/${slug}/leaderboard/scorecard?entryId=${encodeURIComponent(entryId)}`,
+        { cache: "no-store" }
+      );
+      if (response.ok) {
+        const json = (await response.json()) as {
+          scorecard: LeaderboardScorecard;
+        };
+        setScorecardsByEntryId((current) => ({
+          ...current,
+          [entryId]: json.scorecard,
+        }));
+      }
+    } finally {
+      setLoadingScorecardId((current) => (current === entryId ? null : current));
+    }
+  }
 
   const { event, entries, ryderCup } = data;
   const isLive = event.scoringStatus === "open";
@@ -184,8 +218,7 @@ export function LeaderboardView({
   }, [entries]);
 
   const expandableCount = entries.filter(
-    (entry) =>
-      entry.thru > 0 || entry.total != null || Boolean(entry.scorecard)
+    (entry) => entry.thru > 0 || entry.total != null
   ).length;
 
   return (
@@ -260,7 +293,7 @@ export function LeaderboardView({
                       ? "bg-background text-foreground shadow-sm"
                       : "text-muted-foreground hover:text-foreground"
                   )}
-                  onClick={() => setScoreBasis("gross")}
+                  onClick={() => void changeScoreBasis("gross")}
                 >
                   Gross
                 </button>
@@ -272,7 +305,7 @@ export function LeaderboardView({
                       ? "bg-background text-foreground shadow-sm"
                       : "text-muted-foreground hover:text-foreground"
                   )}
-                  onClick={() => setScoreBasis("net")}
+                  onClick={() => void changeScoreBasis("net")}
                 >
                   Net
                 </button>
@@ -352,13 +385,19 @@ export function LeaderboardView({
                     {entries.map((entry) => {
                       const isExpanded = expandedEntryId === entry.id;
                       const canExpand =
-                        entry.thru > 0 ||
-                        entry.total != null ||
-                        Boolean(entry.scorecard);
+                        entry.thru > 0 || entry.total != null;
+                      const entryScorecard =
+                        scorecardsByEntryId[entry.id] ?? entry.scorecard;
+                      const isLoadingScorecard =
+                        loadingScorecardId === entry.id;
 
                       const toggleExpanded = () => {
                         if (!canExpand) return;
-                        setExpandedEntryId(isExpanded ? null : entry.id);
+                        const nextExpanded = isExpanded ? null : entry.id;
+                        setExpandedEntryId(nextExpanded);
+                        if (nextExpanded && !entryScorecard) {
+                          void loadEntryScorecard(entry.id);
+                        }
                       };
 
                       const scoreDisplay = showToParColumn
@@ -442,12 +481,16 @@ export function LeaderboardView({
                               >
                                 <div className="overflow-hidden">
                                   <div className="border-t border-border/70 px-2 py-3 sm:px-3">
-                                    {entry.scorecard ? (
+                                    {entryScorecard ? (
                                       <LeaderboardExpandedScorecard
                                         key={`${entry.id}-${entry.thru}`}
-                                        scorecard={entry.scorecard}
+                                        scorecard={entryScorecard}
                                         thru={entry.thru}
                                       />
+                                    ) : isLoadingScorecard ? (
+                                      <p className="rounded-lg border border-dashed border-border bg-white px-4 py-6 text-center text-sm text-muted-foreground">
+                                        Loading scorecard…
+                                      </p>
                                     ) : (
                                       <p className="rounded-lg border border-dashed border-border bg-white px-4 py-6 text-center text-sm text-muted-foreground">
                                         Scorecard details are not available for
