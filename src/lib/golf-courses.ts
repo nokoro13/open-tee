@@ -355,33 +355,41 @@ export async function getCaddieContextForEvent(event: {
   const course = await getPublishedGolfCourseByExternalId(event.externalCourseId);
   if (!course) return null;
 
-  const greenTargetsByHole = await getGreenTargetsForEvent(event);
+  const [greenTargetsByHole, courseTeeRows, holeFeatureEntries] =
+    await Promise.all([
+      getGreenTargetsForEvent(event),
+      getDb().query.courseTees.findMany({
+        where: eq(courseTees.courseId, course.id),
+        orderBy: [asc(courseTees.sortOrder), asc(courseTees.teeName)],
+      }),
+      Promise.all(
+        event.holeNumbers.map(async (eventHole) => {
+          const courseHole = eventHoleToCourseHole(eventHole, {
+            holes: event.holes,
+            nineSide: event.nineSide,
+          });
+          const physicalHole = courseHoleToPhysicalHole(courseHole, course);
+          const features = await getHoleFeatureCollection(
+            course.id,
+            physicalHole
+          );
+          return [eventHole, features] as const;
+        })
+      ),
+    ]);
+
   if (!greenTargetsByHole) return null;
 
-  const holeFeaturesByHole: CaddieContextForEvent["holeFeaturesByHole"] = {};
+  const holeFeaturesByHole = Object.fromEntries(
+    holeFeatureEntries
+  ) as CaddieContextForEvent["holeFeaturesByHole"];
 
-  const courseTeeRows = await getDb().query.courseTees.findMany({
-    where: eq(courseTees.courseId, course.id),
-    orderBy: [asc(courseTees.sortOrder), asc(courseTees.teeName)],
-  });
   const sortedCourseTees = sortCourseTees(courseTeeRows);
   const selectedTee =
     sortedCourseTees.find((tee) => tee.teeKey === event.selectedTeeKey) ??
     sortedCourseTees[0] ??
     null;
   const selectedTeeColor = selectedTee ? teeMarkerColor(selectedTee) : null;
-
-  for (const eventHole of event.holeNumbers) {
-    const courseHole = eventHoleToCourseHole(eventHole, {
-      holes: event.holes,
-      nineSide: event.nineSide,
-    });
-    const physicalHole = courseHoleToPhysicalHole(courseHole, course);
-    holeFeaturesByHole[eventHole] = await getHoleFeatureCollection(
-      course.id,
-      physicalHole
-    );
-  }
 
   return {
     courseId: course.id,

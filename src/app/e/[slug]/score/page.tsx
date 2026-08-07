@@ -89,7 +89,20 @@ export default async function ScorePage({ params, searchParams }: ScorePageProps
     );
   }
 
-  const allGroups = await getScoreEntryGroups(event.id, event.format);
+  const holeNumbers = getHoleNumbers(event.holes);
+
+  const [allGroups, initialScores, caddieContext] = await Promise.all([
+    getScoreEntryGroups(event.id, event.format),
+    buildEventScoresRecord(event.id),
+    getCaddieContextForEvent({
+      externalCourseId: event.externalCourseId,
+      selectedTeeKey: event.selectedTeeKey,
+      holes: event.holes,
+      nineSide: event.nineSide,
+      holeNumbers,
+    }),
+  ]);
+
   const allowGroupSwitch = access.type === "marshal";
   const visibleGroups =
     access.type === "group"
@@ -107,8 +120,6 @@ export default async function ScorePage({ params, searchParams }: ScorePageProps
     );
   }
 
-  const initialScores = await buildEventScoresRecord(event.id);
-
   const readOnly = !isScoringEditable(event.scoringStatus);
 
   const parByHole = Object.fromEntries(
@@ -119,15 +130,6 @@ export default async function ScorePage({ params, searchParams }: ScorePageProps
       .filter((hole) => hole.yardage != null)
       .map((hole) => [hole.holeNumber, hole.yardage!])
   );
-
-  const holeNumbers = getHoleNumbers(event.holes);
-  const caddieContext = await getCaddieContextForEvent({
-    externalCourseId: event.externalCourseId,
-    selectedTeeKey: event.selectedTeeKey,
-    holes: event.holes,
-    nineSide: event.nineSide,
-    holeNumbers,
-  });
 
   return (
     <ScoreEntryForm

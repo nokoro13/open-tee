@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ClipboardList, ChevronDown, RefreshCw } from "lucide-react";
 
 import { LeaderboardExpandedScorecard } from "@/components/public/leaderboard-expanded-scorecard";
@@ -105,6 +106,7 @@ export function LeaderboardView({
   embed = false,
   showNetToggle = false,
 }: LeaderboardViewProps) {
+  const router = useRouter();
   const [data, setData] = useState(initialData);
   const [scoreBasis, setScoreBasis] = useState<"gross" | "net">("gross");
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -119,8 +121,12 @@ export function LeaderboardView({
 
   useEffect(() => {
     const storedCode = getScoringCode(slug);
-    setScoreHref(getScorePageHref(slug, storedCode));
-  }, [slug]);
+    const href = getScorePageHref(slug, storedCode);
+    setScoreHref(href);
+    if (!embed && initialData.event.scoringStatus !== "disabled") {
+      router.prefetch(href);
+    }
+  }, [slug, router, embed, initialData.event.scoringStatus]);
 
   useEffect(() => {
     if (initialData.event.scoringStatus === "disabled") return;
