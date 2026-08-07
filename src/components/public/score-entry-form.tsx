@@ -1312,7 +1312,6 @@ export function ScoreEntryForm({
         playerPosition={position}
         par={activePar}
         yardage={activeYardage}
-        liveDistances={distances}
         liveDistanceStatus={liveDistanceStatus}
         selectedTeeKey={selectedTeeKey}
         selectedTeeColor={selectedTeeColor}

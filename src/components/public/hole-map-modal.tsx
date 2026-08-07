@@ -32,7 +32,6 @@ type HoleMapModalProps = {
   playerPosition: GeolocationPosition | null;
   par?: number | null;
   yardage?: number | null;
-  liveDistances?: LiveDistances;
   liveDistanceStatus?: LiveDistanceStatus;
   selectedTeeKey?: string | null;
   selectedTeeColor?: string | null;
@@ -141,7 +140,6 @@ export function HoleMapModal({
   playerPosition,
   par,
   yardage,
-  liveDistances,
   liveDistanceStatus = "hidden",
   selectedTeeKey = null,
   selectedTeeColor = null,
