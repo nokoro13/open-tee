@@ -172,6 +172,18 @@ export function measureHolePathYardage(
   return { leg1, leg2, total: leg1 + leg2 };
 }
 
+/** Total yards along the guide path, summing dogleg legs when a break exists. */
+export function totalGuideYards(
+  from: LatLng,
+  to: LatLng,
+  breakPoint: LatLng | null
+): number {
+  if (breakPoint) {
+    return measureHolePathYardage(from, breakPoint, to).total;
+  }
+  return segmentYards(from, to);
+}
+
 export function yardageMatchDelta(measured: number, target: number): number {
   return measured - target;
 }

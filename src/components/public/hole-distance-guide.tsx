@@ -40,6 +40,7 @@ type HoleDistanceGuideLayerProps = {
   holeNumber: number;
   eventSlug?: string;
   editable?: boolean;
+  onBreakChange?: (breakPoint: LatLng | null) => void;
 };
 
 export function HoleDistanceGuideLayer({
@@ -47,6 +48,7 @@ export function HoleDistanceGuideLayer({
   holeNumber,
   eventSlug,
   editable = false,
+  onBreakChange,
 }: HoleDistanceGuideLayerProps) {
   const { resolveBreak, setBreakPoint, clearBreakPoint } =
     useHoleDoglegPreferences(eventSlug ?? "");
@@ -73,28 +75,43 @@ export function HoleDistanceGuideLayer({
     draggedRef.current = false;
   }, [holeNumber, mappedBreak?.lat, mappedBreak?.lng, storedBreak?.lat, storedBreak?.lng]);
 
+  useEffect(() => {
+    if (dragBreak) return;
+    onBreakChange?.(storedBreak ?? null);
+  }, [
+    dragBreak,
+    holeNumber,
+    onBreakChange,
+    storedBreak?.lat,
+    storedBreak?.lng,
+  ]);
+
   function handleAddBreak(event: google.maps.MapMouseEvent) {
     if (!canEdit) return;
     const point = latLngFromMapEvent(event);
     if (!point) return;
     setDragBreak(null);
     setBreakPoint(holeNumber, point);
+    onBreakChange?.(point);
   }
 
   function handleRemoveBreak() {
     if (!canEdit || draggedRef.current) return;
     setDragBreak(null);
     clearBreakPoint(holeNumber);
+    onBreakChange?.(null);
   }
 
   function handleBreakDrag(point: LatLng) {
     setDragBreak(point);
+    onBreakChange?.(point);
   }
 
   function handleBreakDragEnd(point: LatLng) {
     if (!canEdit) return;
     setDragBreak(null);
     setBreakPoint(holeNumber, point);
+    onBreakChange?.(point);
     window.setTimeout(() => {
       draggedRef.current = false;
     }, 0);

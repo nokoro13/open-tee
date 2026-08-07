@@ -23,7 +23,7 @@ import {
   PulseRingMarker,
 } from "@/components/maps/hole-map-markers";
 import type { GeolocationPosition } from "@/hooks/use-geolocation";
-import type { GreenTargets } from "@/lib/green-distance";
+import type { GreenTargets, LatLng } from "@/lib/green-distance";
 import type { GeoJsonFeatureCollection } from "@/lib/geojson";
 import { teeMarkerLabelColor } from "@/lib/course-tees";
 import {
@@ -59,6 +59,7 @@ type HoleGoogleMapProps = {
   eventSlug?: string;
   editableDogleg?: boolean;
   onHeadingChange?: (heading: number) => void;
+  onBreakChange?: (breakPoint: LatLng | null) => void;
 };
 
 function getOverlayStyle(featureType: string) {
@@ -132,6 +133,7 @@ function HoleGoogleMapScene({
   eventSlug,
   editableDogleg,
   onHeadingChange,
+  onBreakChange,
 }: {
   scene: HoleMapScene;
   holeNumber: number;
@@ -139,6 +141,7 @@ function HoleGoogleMapScene({
   eventSlug?: string;
   editableDogleg?: boolean;
   onHeadingChange?: (heading: number) => void;
+  onBreakChange?: (breakPoint: LatLng | null) => void;
 }) {
   const { view, overlays, markers, distanceGuide } = scene;
 
@@ -176,6 +179,7 @@ function HoleGoogleMapScene({
           holeNumber={holeNumber}
           eventSlug={eventSlug}
           editable={editableDogleg}
+          onBreakChange={onBreakChange}
         />
       )}
 
@@ -188,7 +192,7 @@ function HoleGoogleMapScene({
 
 export const HoleGoogleMap = forwardRef<HoleGoogleMapHandle, HoleGoogleMapProps>(
   function HoleGoogleMap(
-    { features, targets, playerPosition, holeNumber, className, onSceneChange, preferredTeeKey, preferredTeeColor, usePlayerAsAnchor = false, eventSlug, editableDogleg = false, onHeadingChange },
+    { features, targets, playerPosition, holeNumber, className, onSceneChange, preferredTeeKey, preferredTeeColor, usePlayerAsAnchor = false, eventSlug, editableDogleg = false, onHeadingChange, onBreakChange },
     ref
   ) {
     const fitHoleRef = useRef<((options?: FitHoleOptions) => void) | null>(null);
@@ -248,6 +252,7 @@ export const HoleGoogleMap = forwardRef<HoleGoogleMapHandle, HoleGoogleMapProps>
             eventSlug={eventSlug}
             editableDogleg={editableDogleg}
             onHeadingChange={onHeadingChange}
+            onBreakChange={onBreakChange}
           />
         </APIProvider>
       </div>

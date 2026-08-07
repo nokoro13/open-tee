@@ -1,10 +1,10 @@
 import type { GeolocationPosition } from "@/hooks/use-geolocation";
 import type { GreenTargets } from "@/lib/green-distance";
-import { yardsBetween } from "@/lib/green-distance";
 import type { GeoJsonFeatureCollection } from "@/lib/geojson";
 import {
   extractHoleLinePath,
   extractSharedLineBreak,
+  totalGuideYards,
   type HoleDistanceGuide,
 } from "@/lib/hole-distance-guide";
 import { teeMarkerStrokeColor } from "@/lib/course-tees";
@@ -242,15 +242,16 @@ export function buildHoleMapScene(options: {
         : view.tee;
 
     if (from) {
+      const lineBreak = extractSharedLineBreak(features, preferredTeeKey);
       distanceGuide = {
         from,
         to: targets.middle,
         holeLinePath: extractHoleLinePath(features, preferredTeeKey),
-        lineBreak: extractSharedLineBreak(features, preferredTeeKey),
+        lineBreak,
         fromKind: includePlayer && playerPosition ? "player" : "tee",
         teeColor,
       };
-      distanceToPin = Math.round(yardsBetween(from, targets.middle));
+      distanceToPin = totalGuideYards(from, targets.middle, lineBreak);
     }
   }
 

@@ -10,14 +10,15 @@ import {
 
 import type { LiveDistanceStatus } from "@/hooks/use-live-distances";
 import type { GeolocationPosition } from "@/hooks/use-geolocation";
-import type { GreenTargets, LiveDistances } from "@/lib/green-distance";
+import type { GreenTargets, LatLng } from "@/lib/green-distance";
 import type { GeoJsonFeatureCollection } from "@/lib/geojson";
+import { useHoleDoglegPreferences } from "@/hooks/use-hole-dogleg-preferences";
 import type { HoleMapScene } from "@/lib/hole-map-overlays";
+import { totalGuideYards } from "@/lib/hole-distance-guide";
 import {
   HoleGoogleMap,
   type HoleGoogleMapHandle,
 } from "@/components/public/hole-google-map";
-import { requestGeolocationFromUserGesture } from "@/lib/geolocation-controller";
 import { cn } from "@/lib/utils";
 
 type HoleMapModalProps = {
@@ -76,6 +77,11 @@ function MapChromeButton({
   );
 }
 
+function sameLatLng(a: LatLng | null, b: LatLng | null): boolean {
+  if (a == null || b == null) return a === b;
+  return a.lat === b.lat && a.lng === b.lng;
+}
+
 function CompassRose({ heading }: { heading: number }) {
   return (
     <div className="mt-2 flex justify-center">
@@ -102,77 +108,24 @@ function ToPinOverlay({
   heading: number;
   status: LiveDistanceStatus;
 }) {
-  const needsLocationAction =
-    status === "prompt" || status === "denied" || status === "unavailable";
-
-  const helperText =
-    status === "prompt"
-      ? "Tap to allow"
-      : status === "denied"
-        ? "Check Safari location settings"
-        : status === "unavailable"
-          ? "Tap to retry"
-          : null;
-
   const label =
-    status === "locating"
+    status === "locating" && distance == null
       ? "…"
-      : status === "prompt"
-        ? "Tap"
-        : status === "denied" || status === "unavailable"
-          ? "—"
-          : distance != null
-            ? String(distance)
-            : "—";
-
-  const handleLocationGesture = () => {
-    requestGeolocationFromUserGesture();
-  };
-
-  const content = (
-    <div
-      className={cn(
-        "min-w-[5.5rem] rounded-2xl border border-white/10 bg-black/78 px-4 py-3 shadow-xl backdrop-blur-md",
-        needsLocationAction &&
-          "pointer-events-auto cursor-pointer transition-colors hover:bg-black/88"
-      )}
-    >
-      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/55">
-        To pin
-      </p>
-      <p className="mt-0.5 font-heading text-4xl font-semibold tabular-nums leading-none text-white">
-        {label}
-      </p>
-      {helperText ? (
-        <p className="mt-1 text-[10px] font-medium text-white/55">{helperText}</p>
-      ) : (
-        <CompassRose heading={heading} />
-      )}
-    </div>
-  );
+      : distance != null
+        ? String(distance)
+        : "—";
 
   return (
     <div className="pointer-events-none absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-3 z-30">
-      {needsLocationAction ? (
-        <button
-          type="button"
-          className="block text-left"
-          onPointerDown={(event) => {
-            if (event.pointerType === "mouse" && event.button !== 0) return;
-            handleLocationGesture();
-          }}
-          onClick={handleLocationGesture}
-          aria-label={
-            status === "prompt"
-              ? "Enable location for live yardage"
-              : "Retry location for live yardage"
-          }
-        >
-          {content}
-        </button>
-      ) : (
-        content
-      )}
+      <div className="min-w-[5.5rem] rounded-2xl border border-white/10 bg-black/78 px-4 py-3 shadow-xl backdrop-blur-md">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/55">
+          To pin
+        </p>
+        <p className="mt-0.5 font-heading text-4xl font-semibold tabular-nums leading-none text-white">
+          {label}
+        </p>
+        <CompassRose heading={heading} />
+      </div>
     </div>
   );
 }
@@ -204,16 +157,18 @@ export function HoleMapModal({
   const [loadingFeatures, setLoadingFeatures] = useState(false);
   const [mapScene, setMapScene] = useState<HoleMapScene | null>(null);
   const [liveMapHeading, setLiveMapHeading] = useState(0);
+  const [liveBreak, setLiveBreak] = useState<LatLng | null>(null);
+  const { resolveBreak } = useHoleDoglegPreferences(eventSlug);
 
-  const distances = liveDistances ?? {
-    front: null,
-    middle: null,
-    back: null,
-  };
+  const mappedDistanceToPin = (() => {
+    const guide = mapScene?.distanceGuide;
+    if (!guide) return mapScene?.distanceToPin ?? null;
+    const breakPoint =
+      liveBreak ?? resolveBreak(holeNumber, guide.lineBreak);
+    return totalGuideYards(guide.from, guide.to, breakPoint);
+  })();
 
-  const distanceToPin = usePlayerAsAnchor
-    ? (distances.middle ?? mapScene?.distanceToPin ?? null)
-    : (mapScene?.distanceToPin ?? null);
+  const distanceToPin = mappedDistanceToPin;
   const distanceStatus = usePlayerAsAnchor ? liveDistanceStatus : "hidden";
   const mapHeading = liveMapHeading;
   const mapFeatures = features ?? displayFeatures;
@@ -222,6 +177,16 @@ export function HoleMapModal({
     setMapScene(scene);
     setLiveMapHeading(scene.view.bearing);
   }, []);
+
+  const handleBreakChange = useCallback((breakPoint: LatLng | null) => {
+    setLiveBreak((current) =>
+      sameLatLng(current, breakPoint) ? current : breakPoint
+    );
+  }, []);
+
+  useEffect(() => {
+    setLiveBreak(null);
+  }, [holeNumber]);
 
   useEffect(() => {
     if (!open) return;
@@ -303,6 +268,7 @@ export function HoleMapModal({
           eventSlug={eventSlug}
           editableDogleg
           onHeadingChange={setLiveMapHeading}
+          onBreakChange={handleBreakChange}
         />
       )}
 
