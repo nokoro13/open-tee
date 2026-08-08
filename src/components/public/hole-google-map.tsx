@@ -59,7 +59,7 @@ type HoleGoogleMapProps = {
   eventSlug?: string;
   editableDogleg?: boolean;
   onHeadingChange?: (heading: number) => void;
-  onBreakChange?: (breakPoint: LatLng | null) => void;
+  onBreakChange?: (breakPoints: LatLng[]) => void;
 };
 
 function getOverlayStyle(featureType: string) {
@@ -141,7 +141,7 @@ function HoleGoogleMapScene({
   eventSlug?: string;
   editableDogleg?: boolean;
   onHeadingChange?: (heading: number) => void;
-  onBreakChange?: (breakPoint: LatLng | null) => void;
+  onBreakChange?: (breakPoints: LatLng[]) => void;
 }) {
   const { view, overlays, markers, distanceGuide } = scene;
 

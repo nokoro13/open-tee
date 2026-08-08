@@ -44,7 +44,7 @@ export type CourseHolePin = {
   holeNumber: number;
   green: LatLng | null;
   tees: Record<string, LatLng>;
-  lineBreak: LatLng | null;
+  lineBreaks: LatLng[];
 };
 
 export type CourseMappingProgress = {
@@ -197,15 +197,20 @@ export function lineStringToPath(geometry: unknown): LatLng[] {
   return line.coordinates.map(([lng, lat]) => ({ lat, lng }));
 }
 
+export function breakPointsFromLinePath(path: LatLng[]): LatLng[] {
+  if (path.length < 3) return [];
+  return path.slice(1, -1);
+}
+
 export function breakPointFromLinePath(
   path: LatLng[],
   from: LatLng,
   to: LatLng
 ): LatLng | null {
-  if (path.length >= 3) {
-    return resolveInitialBreakPoint(path, from, to);
-  }
-  return null;
+  const breaks = breakPointsFromLinePath(path);
+  if (breaks.length === 0) return null;
+  if (breaks.length === 1) return breaks[0]!;
+  return resolveInitialBreakPoint(path, from, to);
 }
 
 export function manualTargetsFromPins(tee: LatLng, green: LatLng) {
@@ -279,20 +284,19 @@ export function extractHolePinsFromFeatures(
         holeNumber: feature.holeNumber,
         green: null,
         tees: {},
-        lineBreak: null,
+        lineBreaks: [],
       };
     }
 
     if (feature.featureType === "hole_line" && geometry.type === "LineString") {
       const path = lineStringToPath(geometry);
       if (path.length < 2) continue;
-      const breakPoint = breakPointFromLinePath(
-        path,
-        path[0]!,
-        path[path.length - 1]!
-      );
-      if (breakPoint && pins[feature.holeNumber].lineBreak == null) {
-        pins[feature.holeNumber].lineBreak = breakPoint;
+      const breakPoints = breakPointsFromLinePath(path);
+      if (
+        breakPoints.length > 0 &&
+        pins[feature.holeNumber].lineBreaks.length === 0
+      ) {
+        pins[feature.holeNumber].lineBreaks = breakPoints;
       }
       continue;
     }
@@ -496,10 +500,10 @@ export async function saveManualHoleLine(
   teeKey: string,
   tee: LatLng,
   green: LatLng,
-  breakPoint: LatLng | null
+  breakPoints: LatLng[] | null
 ) {
-  const path =
-    breakPoint != null ? [tee, breakPoint, green] : [tee, green];
+  const breaks = breakPoints?.length ? breakPoints : [];
+  const path = breaks.length > 0 ? [tee, ...breaks, green] : [tee, green];
 
   await upsertManualHoleFeature(
     courseId,
@@ -510,29 +514,20 @@ export async function saveManualHoleLine(
   );
 }
 
-async function resolveSharedLineBreakForHole(
+async function resolveSharedLineBreaksForHole(
   features: {
     featureType: string;
     geometry: unknown;
-  }[],
-  _tee: LatLng,
-  _green: LatLng
-): Promise<LatLng | null> {
+  }[]
+): Promise<LatLng[]> {
   for (const feature of features) {
     if (feature.featureType !== "hole_line") continue;
     const path = lineStringToPath(feature.geometry);
-    if (path.length === 2) return null;
-    if (path.length >= 3) {
-      const breakPoint = breakPointFromLinePath(
-        path,
-        path[0]!,
-        path[path.length - 1]!
-      );
-      if (breakPoint) return breakPoint;
-    }
+    const breakPoints = breakPointsFromLinePath(path);
+    if (breakPoints.length > 0) return breakPoints;
   }
 
-  return null;
+  return [];
 }
 
 async function refreshHoleLinesForHole(courseId: string, holeNumber: number) {
@@ -553,21 +548,7 @@ async function refreshHoleLinesForHole(courseId: string, holeNumber: number) {
   if (!green) return;
 
   const teeFeatures = features.filter((feature) => feature.featureType === "tee");
-  const primaryTeeFeature = teeFeatures[0];
-  const primaryTeeGeometry = primaryTeeFeature?.geometry as {
-    type?: string;
-    coordinates?: [number, number];
-  };
-  const primaryTee =
-    primaryTeeGeometry?.type === "Point" && primaryTeeGeometry.coordinates
-      ? {
-          lat: primaryTeeGeometry.coordinates[1],
-          lng: primaryTeeGeometry.coordinates[0],
-        }
-      : null;
-  const sharedBreak = primaryTee
-    ? await resolveSharedLineBreakForHole(features, primaryTee, green)
-    : null;
+  const sharedBreaks = await resolveSharedLineBreaksForHole(features);
 
   for (const feature of teeFeatures) {
     const parsedTee = parseManualTeeOsmId(feature.osmId);
@@ -587,7 +568,7 @@ async function refreshHoleLinesForHole(courseId: string, holeNumber: number) {
       parsedTee.teeKey,
       tee,
       green,
-      sharedBreak
+      sharedBreaks
     );
   }
 }
@@ -614,7 +595,7 @@ export async function setManualHoleDogleg(
   if (!green) return;
 
   const teeFeatures = features.filter((feature) => feature.featureType === "tee");
-  let breakPoint: LatLng | null = null;
+  let breakPoints: LatLng[] = [];
 
   if (enabled) {
     let farthestTee: LatLng | null = null;
@@ -635,7 +616,7 @@ export async function setManualHoleDogleg(
       }
     }
 
-    breakPoint = farthestTee ? midpoint(farthestTee, green) : null;
+    breakPoints = farthestTee ? [midpoint(farthestTee, green)] : [];
   }
 
   for (const feature of teeFeatures) {
@@ -656,15 +637,15 @@ export async function setManualHoleDogleg(
       parsedTee.teeKey,
       tee,
       green,
-      breakPoint
+      breakPoints
     );
   }
 }
 
-export async function saveManualLineBreak(
+export async function saveManualLineBreaks(
   courseId: string,
   holeNumber: number,
-  breakPoint: LatLng
+  breakPoints: LatLng[]
 ) {
   const db = getDb();
   const features = await db.query.holeFeatures.findMany({
@@ -704,7 +685,7 @@ export async function saveManualLineBreak(
       parsedTee.teeKey,
       tee,
       green,
-      breakPoint
+      breakPoints
     );
   }
 
@@ -765,10 +746,8 @@ export async function saveManualTeePin(
           eq(holeFeatures.holeNumber, holeNumber)
         ),
       });
-      const breakPoint = await resolveSharedLineBreakForHole(
-        holeFeaturesForHole,
-        tee,
-        greenCenter
+      const breakPoints = await resolveSharedLineBreaksForHole(
+        holeFeaturesForHole
       );
 
       await saveManualHoleLine(
@@ -777,7 +756,7 @@ export async function saveManualTeePin(
         teeKey,
         tee,
         greenCenter,
-        breakPoint
+        breakPoints
       );
       await recomputeGreenTargetsForHole(
         courseId,

@@ -32,9 +32,12 @@ function collectMarkerFocusElements(
   return elements;
 }
 
-function useSuppressAdvancedMarkerDragFocus(marker: AdvancedMarkerRef) {
+function useSuppressAdvancedMarkerDragFocus(
+  marker: AdvancedMarkerRef,
+  enabled = true
+) {
   useEffect(() => {
-    if (!marker) return;
+    if (!marker || !enabled) return;
 
     const elements = collectMarkerFocusElements(marker);
     if (elements.length === 0) return;
@@ -54,7 +57,7 @@ function useSuppressAdvancedMarkerDragFocus(marker: AdvancedMarkerRef) {
         node.removeEventListener("mousedown", preventMouseFocus);
       }
     };
-  }, [marker]);
+  }, [marker, enabled]);
 }
 
 function latLngFromDragEvent(event: {
@@ -275,7 +278,7 @@ export function BreakAnchorMarker({
   onDragEnd?: (point: LatLng) => void;
 }) {
   const [markerRef, marker] = useAdvancedMarkerRef();
-  useSuppressAdvancedMarkerDragFocus(marker);
+  useSuppressAdvancedMarkerDragFocus(marker, !draggable);
 
   return (
     <>
@@ -331,9 +334,13 @@ export function BreakAnchorMarker({
           }}
         >
           <div
-            className="size-11 cursor-crosshair outline-none active:cursor-crosshair"
+            className={cn(
+              "size-11 outline-none",
+              draggable
+                ? "cursor-grab active:cursor-grabbing"
+                : "cursor-crosshair"
+            )}
             aria-hidden
-            onMouseDown={(event) => event.preventDefault()}
           />
         </AdvancedMarker>
       )}

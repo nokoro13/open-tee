@@ -18,7 +18,7 @@ import {
   replaceCourseTees,
   refreshCourseMappedHoleCount,
   saveManualGreenPin,
-  saveManualLineBreak,
+  saveManualLineBreaks,
   saveManualTeePin,
   setManualHoleDogleg,
   type CourseDuplicateMatch,
@@ -497,6 +497,7 @@ export async function saveCourseOnboardingHolePin(
     | { kind: "green"; lat: number; lng: number }
     | { kind: "tee"; teeKey: string; lat: number; lng: number }
     | { kind: "line_break"; lat: number; lng: number }
+    | { kind: "line_breaks"; points: Array<{ lat: number; lng: number }> }
     | { kind: "dogleg"; enabled: boolean }
 ): Promise<OnboardingActionResult> {
   const course = await getEditableOnboardingCourse(courseId);
@@ -518,7 +519,9 @@ export async function saveCourseOnboardingHolePin(
     }
     await saveManualTeePin(courseId, holeNumber, pin.teeKey, pin);
   } else if (pin.kind === "line_break") {
-    await saveManualLineBreak(courseId, holeNumber, pin);
+    await saveManualLineBreaks(courseId, holeNumber, [pin]);
+  } else if (pin.kind === "line_breaks") {
+    await saveManualLineBreaks(courseId, holeNumber, pin.points);
   } else {
     await setManualHoleDogleg(courseId, holeNumber, pin.enabled);
   }

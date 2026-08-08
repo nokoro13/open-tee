@@ -23,7 +23,7 @@ export type FitHoleOptions = {
 
 type HoleMapCameraControllerProps = {
   view: HoleMapView;
-  resetKey: number;
+  resetKey: string | number;
   padding: HoleMapCameraPadding;
   enabled?: boolean;
   /** Map tilt in degrees (0 = top-down). Defaults to {@link HOLE_MAP_CAMERA_TILT}. */
@@ -52,7 +52,7 @@ export function HoleMapCameraController({
   const restrictZoomRef = useRef(restrictZoom);
   const hasInitialFitRef = useRef(false);
   const prevResetKeyRef = useRef(resetKey);
-  const pendingFlyHoleRef = useRef<number | null>(null);
+  const pendingFlyHoleRef = useRef<string | number | null>(null);
   const cancelFlyRef = useRef<(() => void) | null>(null);
   const isFlyingRef = useRef(false);
   const userAdjustedCameraRef = useRef(false);

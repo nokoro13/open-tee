@@ -3,7 +3,7 @@ import {
   breakPointFromLinePath,
   holeNumbersForCount,
   saveManualGreenPin,
-  saveManualLineBreak,
+  saveManualLineBreaks,
   saveManualTeePin,
 } from "@/lib/course-onboarding";
 import type { LatLng } from "@/lib/green-distance";
@@ -268,10 +268,10 @@ export async function applyOsmOnboardingPrefill(options: {
     }
 
     if (hole.breakPoint) {
-      await saveManualLineBreak(
+      await saveManualLineBreaks(
         options.courseId,
         hole.holeNumber,
-        hole.breakPoint
+        [hole.breakPoint]
       );
     }
 

@@ -13,7 +13,7 @@ export type HoleDistanceGuide = {
   from: LatLng;
   to: LatLng;
   holeLinePath: LatLng[];
-  lineBreak: LatLng | null;
+  lineBreaks: LatLng[];
   fromKind: "player" | "tee";
   teeColor: string;
 };
@@ -62,12 +62,12 @@ export function extractHoleLinePath(
   return bestPath;
 }
 
-export function extractSharedLineBreak(
+export function extractSharedLineBreaks(
   features: GeoJsonFeatureCollection,
   preferredTeeKey?: string | null
-): LatLng | null {
+): LatLng[] {
   const candidates: {
-    break: LatLng;
+    breaks: LatLng[];
     span: number;
     teeKey: string | null;
   }[] = [];
@@ -76,14 +76,11 @@ export function extractSharedLineBreak(
     if (feature.properties?.featureType !== "hole_line") continue;
 
     const path = lineStringToPath(feature.geometry);
-    if (path.length < 3) continue;
+    const breaks = path.length >= 3 ? path.slice(1, -1) : [];
+    if (breaks.length === 0) continue;
 
     const from = path[0]!;
     const to = path[path.length - 1]!;
-    const breakPoint =
-      path.length === 3
-        ? path[1]!
-        : resolveInitialBreakPoint(path, from, to);
 
     const osmId =
       typeof feature.properties?.osmId === "string"
@@ -92,24 +89,31 @@ export function extractSharedLineBreak(
     const parsed = parseManualHoleLineOsmId(osmId);
 
     candidates.push({
-      break: breakPoint,
+      breaks,
       span: yardsBetween(from, to),
       teeKey: parsed?.teeKey ?? null,
     });
   }
 
-  if (candidates.length === 0) return null;
+  if (candidates.length === 0) return [];
 
   if (preferredTeeKey) {
     const preferred = candidates.find(
       (candidate) => candidate.teeKey === preferredTeeKey
     );
-    if (preferred) return preferred.break;
+    if (preferred) return preferred.breaks;
   }
 
   return candidates.reduce((best, candidate) =>
     candidate.span > best.span ? candidate : best
-  ).break;
+  ).breaks;
+}
+
+export function extractSharedLineBreak(
+  features: GeoJsonFeatureCollection,
+  preferredTeeKey?: string | null
+): LatLng | null {
+  return extractSharedLineBreaks(features, preferredTeeKey)[0] ?? null;
 }
 
 function angleDeviation(a: LatLng, b: LatLng, c: LatLng): number {
@@ -172,16 +176,30 @@ export function measureHolePathYardage(
   return { leg1, leg2, total: leg1 + leg2 };
 }
 
-/** Total yards along the guide path, summing dogleg legs when a break exists. */
+function normalizeBreakPoints(
+  breakPoints: LatLng | LatLng[] | null | undefined
+): LatLng[] {
+  if (breakPoints == null) return [];
+  return Array.isArray(breakPoints) ? breakPoints : [breakPoints];
+}
+
+/** Total yards along the guide path, summing dogleg legs when breaks exist. */
 export function totalGuideYards(
   from: LatLng,
   to: LatLng,
-  breakPoint: LatLng | null
+  breakPoints: LatLng | LatLng[] | null | undefined
 ): number {
-  if (breakPoint) {
-    return measureHolePathYardage(from, breakPoint, to).total;
+  const breaks = normalizeBreakPoints(breakPoints);
+  if (breaks.length === 0) {
+    return segmentYards(from, to);
   }
-  return segmentYards(from, to);
+
+  const path = [from, ...breaks, to];
+  let total = 0;
+  for (let index = 0; index < path.length - 1; index += 1) {
+    total += segmentYards(path[index]!, path[index + 1]!);
+  }
+  return total;
 }
 
 export function yardageMatchDelta(measured: number, target: number): number {

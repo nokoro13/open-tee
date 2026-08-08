@@ -3,7 +3,7 @@ import type { GreenTargets } from "@/lib/green-distance";
 import type { GeoJsonFeatureCollection } from "@/lib/geojson";
 import {
   extractHoleLinePath,
-  extractSharedLineBreak,
+  extractSharedLineBreaks,
   totalGuideYards,
   type HoleDistanceGuide,
 } from "@/lib/hole-distance-guide";
@@ -242,16 +242,16 @@ export function buildHoleMapScene(options: {
         : view.tee;
 
     if (from) {
-      const lineBreak = extractSharedLineBreak(features, preferredTeeKey);
+      const lineBreaks = extractSharedLineBreaks(features, preferredTeeKey);
       distanceGuide = {
         from,
         to: targets.middle,
         holeLinePath: extractHoleLinePath(features, preferredTeeKey),
-        lineBreak,
+        lineBreaks,
         fromKind: includePlayer && playerPosition ? "player" : "tee",
         teeColor,
       };
-      distanceToPin = totalGuideYards(from, targets.middle, lineBreak);
+      distanceToPin = totalGuideYards(from, targets.middle, lineBreaks);
     }
   }
 

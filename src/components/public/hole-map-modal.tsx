@@ -155,15 +155,17 @@ export function HoleMapModal({
   const [loadingFeatures, setLoadingFeatures] = useState(false);
   const [mapScene, setMapScene] = useState<HoleMapScene | null>(null);
   const [liveMapHeading, setLiveMapHeading] = useState(0);
-  const [liveBreak, setLiveBreak] = useState<LatLng | null>(null);
-  const { resolveBreak } = useHoleDoglegPreferences(eventSlug);
+  const [liveBreaks, setLiveBreaks] = useState<LatLng[]>([]);
+  const { resolveBreaks } = useHoleDoglegPreferences(eventSlug);
 
   const mappedDistanceToPin = (() => {
     const guide = mapScene?.distanceGuide;
     if (!guide) return mapScene?.distanceToPin ?? null;
-    const breakPoint =
-      liveBreak ?? resolveBreak(holeNumber, guide.lineBreak);
-    return totalGuideYards(guide.from, guide.to, breakPoint);
+    const breakPoints =
+      liveBreaks.length > 0
+        ? liveBreaks
+        : resolveBreaks(holeNumber, guide.lineBreaks);
+    return totalGuideYards(guide.from, guide.to, breakPoints);
   })();
 
   const distanceToPin = mappedDistanceToPin;
@@ -176,14 +178,22 @@ export function HoleMapModal({
     setLiveMapHeading(scene.view.bearing);
   }, []);
 
-  const handleBreakChange = useCallback((breakPoint: LatLng | null) => {
-    setLiveBreak((current) =>
-      sameLatLng(current, breakPoint) ? current : breakPoint
-    );
+  const handleBreakChange = useCallback((breakPoints: LatLng[]) => {
+    setLiveBreaks((current) => {
+      if (
+        current.length === breakPoints.length &&
+        current.every((point, index) =>
+          sameLatLng(point, breakPoints[index] ?? point)
+        )
+      ) {
+        return current;
+      }
+      return breakPoints;
+    });
   }, []);
 
   useEffect(() => {
-    setLiveBreak(null);
+    setLiveBreaks([]);
   }, [holeNumber]);
 
   useEffect(() => {

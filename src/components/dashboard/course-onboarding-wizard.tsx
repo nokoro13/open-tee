@@ -1472,7 +1472,7 @@ export function CourseOnboardingWizard({
             courseTees={course.courseTees}
             initialGreen={holePins[activeHole]?.green ?? null}
             initialTees={holePins[activeHole]?.tees ?? {}}
-            initialLineBreak={holePins[activeHole]?.lineBreak ?? null}
+            initialLineBreaks={holePins[activeHole]?.lineBreaks ?? []}
             scorecardYardages={activeHoleScorecardYardages}
             isSaving={isPending}
             backNineMirrorsFront={course.backNineMirrorsFront}
@@ -1521,7 +1521,7 @@ export function CourseOnboardingWizard({
                   ? `Saved green for hole ${activeHole}.`
                   : pin.kind === "tee"
                     ? `Saved tee for hole ${activeHole}.`
-                    : pin.kind === "line_break"
+                    : pin.kind === "line_break" || pin.kind === "line_breaks"
                       ? `Updated fairway line for hole ${activeHole}.`
                       : pin.enabled
                         ? `Enabled dogleg for hole ${activeHole}.`

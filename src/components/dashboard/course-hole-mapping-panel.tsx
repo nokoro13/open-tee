@@ -26,6 +26,7 @@ type CourseHoleMappingPanelProps = {
   courseTees: CourseTee[];
   initialGreen: LatLng | null;
   initialTees: Record<string, LatLng>;
+  initialLineBreaks?: LatLng[];
   initialLineBreak?: LatLng | null;
   scorecardYardages?: Record<string, number>;
   readOnly?: boolean;
@@ -62,6 +63,7 @@ export function CourseHoleMappingPanel({
   courseTees,
   initialGreen,
   initialTees,
+  initialLineBreaks,
   initialLineBreak = null,
   scorecardYardages,
   readOnly = false,
@@ -156,6 +158,10 @@ export function CourseHoleMappingPanel({
           courseTees={courseTees}
           initialGreen={initialGreen}
           initialTees={initialTees}
+          initialLineBreaks={
+            initialLineBreaks ??
+            (initialLineBreak ? [initialLineBreak] : undefined)
+          }
           initialLineBreak={initialLineBreak}
           scorecardYardages={scorecardYardages}
           canGoPrevious={activeHole > 1}

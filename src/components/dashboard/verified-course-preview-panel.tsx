@@ -189,7 +189,7 @@ export function VerifiedCoursePreviewPanel({
         courseTees={course.courseTees}
         initialGreen={holePins[activeHole]?.green ?? null}
         initialTees={holePins[activeHole]?.tees ?? {}}
-        initialLineBreak={holePins[activeHole]?.lineBreak ?? null}
+        initialLineBreaks={holePins[activeHole]?.lineBreaks ?? []}
         scorecardYardages={activeHoleScorecardYardages}
         readOnly
       />

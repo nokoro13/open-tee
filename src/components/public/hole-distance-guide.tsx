@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { HoleLinePolylines } from "@/components/maps/hole-line-polylines";
 import {
@@ -14,6 +14,7 @@ import { teeMarkerStrokeColor } from "@/lib/course-tees";
 import type { LatLng } from "@/lib/green-distance";
 import type { HoleDistanceGuide } from "@/lib/hole-distance-guide";
 import { midpoint, segmentYards } from "@/lib/hole-distance-guide";
+import { MAX_DOGLEG_ANCHORS, orderBreakPointsAlongPath } from "@/lib/hole-dogleg-preferences";
 
 function SegmentYardageLabel({
   from,
@@ -35,12 +36,16 @@ function latLngFromMapEvent(event: google.maps.MapMouseEvent): LatLng | null {
   return { lat: latLng.lat(), lng: latLng.lng() };
 }
 
+function sameLatLng(left: LatLng, right: LatLng): boolean {
+  return left.lat === right.lat && left.lng === right.lng;
+}
+
 type HoleDistanceGuideLayerProps = {
   guide: HoleDistanceGuide;
   holeNumber: number;
   eventSlug?: string;
   editable?: boolean;
-  onBreakChange?: (breakPoint: LatLng | null) => void;
+  onBreakChange?: (breakPoints: LatLng[]) => void;
 };
 
 export function HoleDistanceGuideLayer({
@@ -50,18 +55,31 @@ export function HoleDistanceGuideLayer({
   editable = false,
   onBreakChange,
 }: HoleDistanceGuideLayerProps) {
-  const { resolveBreak, setBreakPoint, clearBreakPoint } =
+  const { resolveBreaks, addBreakPoint, updateBreakPoint, removeBreakPoint } =
     useHoleDoglegPreferences(eventSlug ?? "");
-  const [dragBreak, setDragBreak] = useState<LatLng | null>(null);
+  const [dragState, setDragState] = useState<{
+    index: number;
+    point: LatLng;
+  } | null>(null);
   const draggedRef = useRef(false);
 
-  const mappedBreak = guide.lineBreak;
-  const storedBreak = eventSlug
-    ? resolveBreak(holeNumber, mappedBreak)
-    : mappedBreak;
-  const breakPoint = dragBreak ?? storedBreak;
-  const hasDogleg = breakPoint != null;
+  const mappedBreaks = guide.lineBreaks;
+  const storedBreaks = eventSlug
+    ? resolveBreaks(holeNumber, mappedBreaks)
+    : mappedBreaks;
+  const breakPoints = useMemo(() => {
+    if (!dragState) return storedBreaks;
+    return storedBreaks.map((point, index) =>
+      index === dragState.index ? dragState.point : point
+    );
+  }, [dragState, storedBreaks]);
   const canEdit = editable && Boolean(eventSlug);
+  const canAddMore =
+    breakPoints.length < MAX_DOGLEG_ANCHORS && dragState == null;
+  const pathPoints = useMemo(
+    () => [guide.from, ...breakPoints, guide.to],
+    [breakPoints, guide.from, guide.to]
+  );
 
   const originFill =
     guide.fromKind === "player" ? "#ef4444" : guide.teeColor;
@@ -70,79 +88,81 @@ export function HoleDistanceGuideLayer({
       ? "#ffffff"
       : teeMarkerStrokeColor(guide.teeColor);
 
-  useEffect(() => {
-    setDragBreak(null);
-    draggedRef.current = false;
-  }, [holeNumber, mappedBreak?.lat, mappedBreak?.lng, storedBreak?.lat, storedBreak?.lng]);
+  const storedBreaksKey = storedBreaks
+    .map((point) => `${point.lat},${point.lng}`)
+    .join("|");
 
   useEffect(() => {
-    if (dragBreak) return;
-    onBreakChange?.(storedBreak ?? null);
-  }, [
-    dragBreak,
-    holeNumber,
-    onBreakChange,
-    storedBreak?.lat,
-    storedBreak?.lng,
-  ]);
+    setDragState(null);
+    draggedRef.current = false;
+  }, [holeNumber, mappedBreaks, storedBreaksKey]);
+
+  useEffect(() => {
+    if (dragState) return;
+    onBreakChange?.(storedBreaks);
+  }, [dragState, holeNumber, onBreakChange, storedBreaks, storedBreaksKey]);
 
   function handleAddBreak(event: google.maps.MapMouseEvent) {
-    if (!canEdit) return;
+    if (!canEdit || !canAddMore) return;
     const point = latLngFromMapEvent(event);
     if (!point) return;
-    setDragBreak(null);
-    setBreakPoint(holeNumber, point);
-    onBreakChange?.(point);
+    setDragState(null);
+    addBreakPoint(holeNumber, point, mappedBreaks, guide.from, guide.to);
+    onBreakChange?.(
+      orderBreakPointsAlongPath(guide.from, guide.to, [...breakPoints, point])
+    );
   }
 
-  function handleRemoveBreak() {
+  function handleRemoveBreak(index: number) {
     if (!canEdit || draggedRef.current) return;
-    setDragBreak(null);
-    clearBreakPoint(holeNumber);
-    onBreakChange?.(null);
+    setDragState(null);
+    removeBreakPoint(holeNumber, index, mappedBreaks);
+    onBreakChange?.(breakPoints.filter((_, currentIndex) => currentIndex !== index));
   }
 
-  function handleBreakDrag(point: LatLng) {
-    setDragBreak(point);
-    onBreakChange?.(point);
+  function handleBreakDrag(index: number, point: LatLng) {
+    setDragState({ index, point });
+    onBreakChange?.(
+      breakPoints.map((currentPoint, currentIndex) =>
+        currentIndex === index ? point : currentPoint
+      )
+    );
   }
 
-  function handleBreakDragEnd(point: LatLng) {
+  function handleBreakDragEnd(index: number, point: LatLng) {
     if (!canEdit) return;
-    setDragBreak(null);
-    setBreakPoint(holeNumber, point);
-    onBreakChange?.(point);
+    setDragState(null);
+    updateBreakPoint(
+      holeNumber,
+      index,
+      point,
+      mappedBreaks,
+      guide.from,
+      guide.to
+    );
+    onBreakChange?.(
+      breakPoints.map((currentPoint, currentIndex) =>
+        currentIndex === index ? point : currentPoint
+      )
+    );
     window.setTimeout(() => {
       draggedRef.current = false;
     }, 0);
   }
 
-  if (!hasDogleg || !breakPoint) {
-    return (
-      <>
-        <HoleLinePolylines
-          path={[guide.from, guide.to]}
-          clickable={canEdit}
-          onClick={handleAddBreak}
-        />
-
-        <OriginMarker
-          position={guide.from}
-          fillColor={originFill}
-          strokeColor={originStroke}
-        />
-
-        <FlagPinMarker position={guide.to} />
-
-        <SegmentYardageLabel from={guide.from} to={guide.to} />
-      </>
-    );
-  }
-
   return (
     <>
-      <HoleLinePolylines path={[guide.from, breakPoint]} />
-      <HoleLinePolylines path={[breakPoint, guide.to]} />
+      {pathPoints.slice(0, -1).map((from, index) => {
+        const to = pathPoints[index + 1]!;
+        return (
+          <HoleLinePolylines
+            key={`guide-segment-${index}`}
+            path={[from, to]}
+            clickable={canEdit && canAddMore}
+            onClick={handleAddBreak}
+          />
+        );
+      })}
 
       <OriginMarker
         position={guide.from}
@@ -152,26 +172,43 @@ export function HoleDistanceGuideLayer({
 
       <FlagPinMarker position={guide.to} />
 
-      <SegmentYardageLabel from={guide.from} to={breakPoint} />
-      <SegmentYardageLabel from={breakPoint} to={guide.to} />
+      {pathPoints.slice(0, -1).map((from, index) => {
+        const to = pathPoints[index + 1]!;
+        return (
+          <SegmentYardageLabel
+            key={`guide-yards-${index}`}
+            from={from}
+            to={to}
+          />
+        );
+      })}
 
-      <BreakAnchorMarker
-        position={breakPoint}
-        draggable={canEdit}
-        clickable={canEdit}
-        zIndex={30}
-        title={
-          canEdit
-            ? "Tap to remove · drag to adjust layup"
-            : "Fairway layup target"
-        }
-        onClick={handleRemoveBreak}
-        onDragStart={() => {
-          draggedRef.current = true;
-        }}
-        onDrag={handleBreakDrag}
-        onDragEnd={handleBreakDragEnd}
-      />
+      {breakPoints.map((point, index) => (
+        <BreakAnchorMarker
+          key={`guide-anchor-${index}`}
+          position={point}
+          draggable={canEdit}
+          clickable={canEdit}
+          zIndex={50 + index}
+          title={
+            canEdit
+              ? breakPoints.length < MAX_DOGLEG_ANCHORS
+                ? "Tap to remove · drag to adjust layup"
+                : "Tap to remove · drag to adjust layup (max 2 anchors)"
+              : "Fairway layup target"
+          }
+          onClick={() => handleRemoveBreak(index)}
+          onDragStart={() => {
+            draggedRef.current = true;
+          }}
+          onDrag={(nextPoint) => {
+            if (!sameLatLng(point, nextPoint)) {
+              handleBreakDrag(index, nextPoint);
+            }
+          }}
+          onDragEnd={(nextPoint) => handleBreakDragEnd(index, nextPoint)}
+        />
+      ))}
     </>
   );
 }

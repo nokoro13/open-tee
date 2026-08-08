@@ -5,7 +5,10 @@ import { useCallback, useSyncExternalStore } from "react";
 import type { LatLng } from "@/lib/green-distance";
 import {
   loadHoleDoglegPreferences,
+  MAX_DOGLEG_ANCHORS,
+  orderBreakPointsAlongPath,
   resolveHoleDoglegBreak,
+  resolveHoleDoglegBreaks,
   saveHoleDoglegPreferences,
   type HoleDoglegPreference,
   type HoleDoglegPreferencesByHole,
@@ -59,23 +62,97 @@ export function useHoleDoglegPreferences(slug: string) {
     () => loadHoleDoglegPreferences(slug)
   );
 
-  const resolveBreak = useCallback(
-    (holeNumber: number, mappedBreak: LatLng | null) =>
-      resolveHoleDoglegBreak(mappedBreak, preferences[holeNumber]),
+  const resolveBreaks = useCallback(
+    (holeNumber: number, mappedBreaks: LatLng | LatLng[] | null) =>
+      resolveHoleDoglegBreaks(mappedBreaks, preferences[holeNumber]),
     [preferences]
   );
 
-  const setBreakPoint = useCallback(
-    (holeNumber: number, point: LatLng) => {
-      updateSlugPreferences(slug, (current) => ({
-        ...current,
-        [holeNumber]: { kind: "point", lat: point.lat, lng: point.lng },
-      }));
+  const resolveBreak = useCallback(
+    (holeNumber: number, mappedBreaks: LatLng | LatLng[] | null) =>
+      resolveHoleDoglegBreak(mappedBreaks, preferences[holeNumber]),
+    [preferences]
+  );
+
+  const addBreakPoint = useCallback(
+    (
+      holeNumber: number,
+      point: LatLng,
+      mappedBreaks: LatLng | LatLng[] | null,
+      from: LatLng,
+      to: LatLng
+    ) => {
+      updateSlugPreferences(slug, (current) => {
+        const existing = resolveHoleDoglegBreaks(
+          mappedBreaks,
+          current[holeNumber]
+        );
+        if (existing.length >= MAX_DOGLEG_ANCHORS) return current;
+
+        const next = orderBreakPointsAlongPath(from, to, [...existing, point]);
+        return {
+          ...current,
+          [holeNumber]: {
+            kind: "points",
+            points: next,
+          },
+        };
+      });
     },
     [slug]
   );
 
-  const clearBreakPoint = useCallback(
+  const updateBreakPoint = useCallback(
+    (
+      holeNumber: number,
+      index: number,
+      point: LatLng,
+      mappedBreaks: LatLng | LatLng[] | null,
+      from: LatLng,
+      to: LatLng
+    ) => {
+      updateSlugPreferences(slug, (current) => {
+        const existing = resolveHoleDoglegBreaks(
+          mappedBreaks,
+          current[holeNumber]
+        );
+        const updated = existing.map((currentPoint, currentIndex) =>
+          currentIndex === index ? point : currentPoint
+        );
+        const next = orderBreakPointsAlongPath(from, to, updated);
+        return {
+          ...current,
+          [holeNumber]: {
+            kind: "points",
+            points: next,
+          },
+        };
+      });
+    },
+    [slug]
+  );
+
+  const removeBreakPoint = useCallback(
+    (holeNumber: number, index: number, mappedBreaks: LatLng | LatLng[] | null) => {
+      updateSlugPreferences(slug, (current) => {
+        const existing = resolveHoleDoglegBreaks(
+          mappedBreaks,
+          current[holeNumber]
+        );
+        const next = existing.filter((_, currentIndex) => currentIndex !== index);
+        return {
+          ...current,
+          [holeNumber]:
+            next.length === 0
+              ? { kind: "none" }
+              : { kind: "points", points: next },
+        };
+      });
+    },
+    [slug]
+  );
+
+  const clearBreakPoints = useCallback(
     (holeNumber: number) => {
       updateSlugPreferences(slug, (current) => ({
         ...current,
@@ -93,8 +170,11 @@ export function useHoleDoglegPreferences(slug: string) {
 
   return {
     resolveBreak,
-    setBreakPoint,
-    clearBreakPoint,
+    resolveBreaks,
+    addBreakPoint,
+    updateBreakPoint,
+    removeBreakPoint,
+    clearBreakPoints,
     getPreference,
   };
 }
