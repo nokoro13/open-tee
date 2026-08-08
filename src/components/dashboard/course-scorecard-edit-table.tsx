@@ -1,11 +1,35 @@
 "use client";
 
-import { useMemo, type ComponentProps } from "react";
-import { Check, X } from "lucide-react";
+import { useMemo, type ComponentProps, type ReactNode } from "react";
 
+import { buildScorecardNineSections } from "@/components/dashboard/course-scorecard-sections";
+import {
+  CourseScorecardNineSectionsShell,
+  ScorecardNineSectionHeader,
+  scorecardNineSectionTableClassName,
+  SCORECARD_TABLE_BODY,
+} from "@/components/dashboard/course-scorecard-nine-sections-shell";
+import {
+  SCORECARD_DATA_CELL,
+  SCORECARD_EDIT_INPUT,
+  SCORECARD_HOLE_HEADER,
+  SCORECARD_ROW_LABEL,
+  SCORECARD_TOTAL_CELL,
+  SCORECARD_VALUE_CELL,
+  SCORECARD_VALUE_SLOT,
+} from "@/components/dashboard/course-scorecard-table-styles";
 import { Input } from "@/components/ui/input";
-import { holeNumbersForCount } from "@/lib/course-onboarding";
+import { CombinationTeeLabel } from "@/components/dashboard/combination-tee-name";
 import type { CourseTeeInput } from "@/lib/course-tees";
+import {
+  getCombinationBaseTeeKeys,
+  sortCourseTeesByTotalYardage,
+  yardageCellPresentationForHole,
+} from "@/lib/course-tees";
+import {
+  ladiesHandicapRowLabel,
+  mensHandicapRowLabel,
+} from "@/lib/scorecard-handicap-rows";
 import { cn } from "@/lib/utils";
 
 export type ScorecardEditRow = {
@@ -25,9 +49,6 @@ type CourseScorecardEditTableProps = {
   onRowsChange: (rows: ScorecardEditRow[]) => void;
 };
 
-const NUMERIC_INPUT =
-  "h-7 w-full min-w-0 rounded-md border border-input/60 bg-background px-0.5 text-center text-xs tabular-nums shadow-none [appearance:textfield] focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/30 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none";
-
 function parseNumeric(value: string): number | null {
   const trimmed = value.trim();
   if (!trimmed) return null;
@@ -35,8 +56,8 @@ function parseNumeric(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function sumPar(rows: ScorecardEditRow[], range: number[]): number {
-  return range.reduce((total, holeNumber) => {
+function sumPar(rows: ScorecardEditRow[], holeNumbers: number[]): number {
+  return holeNumbers.reduce((total, holeNumber) => {
     const row = rows.find((entry) => entry.holeNumber === holeNumber);
     return total + (row?.par ?? 0);
   }, 0);
@@ -45,176 +66,73 @@ function sumPar(rows: ScorecardEditRow[], range: number[]): number {
 function sumYardages(
   rows: ScorecardEditRow[],
   teeKey: string,
-  range: number[]
+  holeNumbers: number[]
 ): number {
-  return range.reduce((total, holeNumber) => {
+  return holeNumbers.reduce((total, holeNumber) => {
     const row = rows.find((entry) => entry.holeNumber === holeNumber);
     const value = parseNumeric(row?.teeYardages[teeKey] ?? "");
     return total + (value ?? 0);
   }, 0);
 }
 
+function holeYardageNumbers(
+  rows: ScorecardEditRow[],
+  holeNumber: number
+): Record<string, number | null | undefined> {
+  const row = rows.find((entry) => entry.holeNumber === holeNumber);
+  if (!row) return {};
+
+  return Object.fromEntries(
+    Object.entries(row.teeYardages).map(([teeKey, raw]) => [
+      teeKey,
+      parseNumeric(raw),
+    ])
+  );
+}
+
 function NumericCellInput({
   className,
   ...props
 }: ComponentProps<typeof Input>) {
-  return <Input className={cn(NUMERIC_INPUT, className)} {...props} />;
+  return <Input className={cn(SCORECARD_EDIT_INPUT, className)} {...props} />;
 }
 
-function ScorecardNineTable({
-  title,
-  totalLabel,
+function EditableRow({
+  label,
   holeNumbers,
-  rows,
-  allRows,
-  sortedTees,
-  showMensHandicap,
-  showLadiesHandicap,
-  onRowsChange,
+  children,
+  total,
+  emphasizeTotal = false,
+  labelClassName,
 }: {
-  title: string;
-  totalLabel: string;
+  label: ReactNode;
   holeNumbers: number[];
-  rows: ScorecardEditRow[];
-  allRows: ScorecardEditRow[];
-  sortedTees: CourseTeeInput[];
-  showMensHandicap: boolean;
-  showLadiesHandicap: boolean;
-  onRowsChange: (rows: ScorecardEditRow[]) => void;
+  children: (holeNumber: number, index: number) => ReactNode;
+  total?: string | number | null;
+  emphasizeTotal?: boolean;
+  labelClassName?: string;
 }) {
-  function updateRow(holeNumber: number, patch: Partial<ScorecardEditRow>) {
-    const next = allRows.map((row) =>
-      row.holeNumber === holeNumber ? { ...row, ...patch } : row
-    );
-    onRowsChange(next);
-  }
-
   return (
-    <div className="min-w-0 overflow-x-auto rounded-lg border">
-      <table className="w-full border-collapse text-sm">
-        <caption className="border-b bg-muted/30 px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          {title}
-        </caption>
-        <thead>
-          <tr className="border-b bg-muted/20 text-[10px] uppercase tracking-wide text-muted-foreground">
-            <th className="w-9 px-2 py-2 text-center font-medium">#</th>
-            <th className="w-11 px-1 py-2 text-center font-medium">Par</th>
-            {sortedTees.map((tee) => (
-              <th
-                key={tee.teeKey}
-                className="w-13 px-1 py-2 text-center font-medium"
-                title={tee.teeName}
-              >
-                <span className="inline-flex items-center justify-center gap-1 normal-case">
-                  {tee.teeColor && (
-                    <span
-                      className="size-1.5 shrink-0 rounded-full border border-black/10"
-                      style={{ backgroundColor: tee.teeColor }}
-                      aria-hidden
-                    />
-                  )}
-                  <span className="truncate">{tee.teeName}</span>
-                </span>
-              </th>
-            ))}
-            {showMensHandicap && (
-              <th className="w-11 px-1 py-2 text-center font-medium">M</th>
-            )}
-            {showLadiesHandicap && (
-              <th className="w-11 px-1 py-2 text-center font-medium">L</th>
-            )}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border/50">
-          {rows.map((row) => (
-            <tr key={row.holeNumber}>
-              <td className="px-2 py-1 text-center font-medium tabular-nums">
-                {row.holeNumber}
-              </td>
-              <td className="px-1 py-1">
-                <NumericCellInput
-                  type="number"
-                  inputMode="numeric"
-                  min={3}
-                  max={5}
-                  value={row.par}
-                  onChange={(event) =>
-                    updateRow(row.holeNumber, {
-                      par: Number(event.target.value),
-                    })
-                  }
-                />
-              </td>
-              {sortedTees.map((tee) => (
-                <td key={tee.teeKey} className="px-1 py-1">
-                  <NumericCellInput
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    value={row.teeYardages[tee.teeKey] ?? ""}
-                    onChange={(event) =>
-                      updateRow(row.holeNumber, {
-                        teeYardages: {
-                          ...row.teeYardages,
-                          [tee.teeKey]: event.target.value,
-                        },
-                      })
-                    }
-                  />
-                </td>
-              ))}
-              {showMensHandicap && (
-                <td className="px-1 py-1">
-                  <NumericCellInput
-                    type="number"
-                    inputMode="numeric"
-                    min={1}
-                    max={18}
-                    value={row.strokeIndex}
-                    onChange={(event) =>
-                      updateRow(row.holeNumber, {
-                        strokeIndex: event.target.value,
-                      })
-                    }
-                  />
-                </td>
-              )}
-              {showLadiesHandicap && (
-                <td className="px-1 py-1">
-                  <NumericCellInput
-                    type="number"
-                    inputMode="numeric"
-                    min={1}
-                    max={18}
-                    value={row.ladiesStrokeIndex}
-                    onChange={(event) =>
-                      updateRow(row.holeNumber, {
-                        ladiesStrokeIndex: event.target.value,
-                      })
-                    }
-                  />
-                </td>
-              )}
-            </tr>
-          ))}
-        </tbody>
-        <tfoot>
-          <tr className="border-t bg-muted/15 font-semibold">
-            <td className="px-2 py-2 text-center">{totalLabel}</td>
-            <td className="px-1 py-2 text-center tabular-nums">
-              {sumPar(allRows, holeNumbers)}
-            </td>
-            {sortedTees.map((tee) => (
-              <td key={tee.teeKey} className="px-1 py-2 text-center tabular-nums">
-                {sumYardages(allRows, tee.teeKey, holeNumbers).toLocaleString()}
-              </td>
-            ))}
-            {showMensHandicap && <td className="px-1 py-2" />}
-            {showLadiesHandicap && <td className="px-1 py-2" />}
-          </tr>
-        </tfoot>
-      </table>
-    </div>
+    <tr>
+      <th scope="row" className={cn(SCORECARD_ROW_LABEL, labelClassName)}>
+        {label}
+      </th>
+      {holeNumbers.map((holeNumber, index) => (
+        <td key={holeNumber} className={SCORECARD_VALUE_CELL}>
+          {children(holeNumber, index)}
+        </td>
+      ))}
+      <td
+        className={cn(
+          SCORECARD_TOTAL_CELL,
+          emphasizeTotal && total != null && "font-semibold"
+        )}
+      >
+        {total != null ? (
+          <div className={SCORECARD_VALUE_SLOT}>{total}</div>
+        ) : null}
+      </td>
+    </tr>
   );
 }
 
@@ -226,56 +144,246 @@ export function CourseScorecardEditTable({
   showLadiesHandicap,
   onRowsChange,
 }: CourseScorecardEditTableProps) {
-  const holeNumbers = useMemo(
-    () => holeNumbersForCount(holeCount),
+  const sections = useMemo(
+    () => buildScorecardNineSections(holeCount),
     [holeCount]
   );
-  const frontNine = holeNumbers.filter((hole) => hole <= 9);
-  const backNine = holeNumbers.filter((hole) => hole > 9);
+  const handicapAvailability = useMemo(
+    () => ({
+      hasMens: showMensHandicap,
+      hasLadies: showLadiesHandicap,
+      hasBoth: showMensHandicap && showLadiesHandicap,
+    }),
+    [showLadiesHandicap, showMensHandicap]
+  );
+  const holesForYardageSort = useMemo(
+    () =>
+      rows.map((row) => ({
+        teeYardages: Object.fromEntries(
+          Object.entries(row.teeYardages)
+            .map(([teeKey, raw]) => {
+              const parsed = parseNumeric(raw);
+              return parsed != null ? [teeKey, parsed] : null;
+            })
+            .filter((entry): entry is [string, number] => entry != null)
+        ),
+      })),
+    [rows]
+  );
+  const displayTees = useMemo(
+    () => sortCourseTeesByTotalYardage(sortedTees, holesForYardageSort),
+    [holesForYardageSort, sortedTees]
+  );
 
-  const frontRows = rows.filter((row) => row.holeNumber <= 9);
-  const backRows = rows.filter((row) => row.holeNumber > 9);
-
-  if (backNine.length > 0) {
-    return (
-      <div className="grid gap-4 lg:grid-cols-2">
-        <ScorecardNineTable
-          title="Front nine"
-          totalLabel="OUT"
-          holeNumbers={frontNine}
-          rows={frontRows}
-          allRows={rows}
-          sortedTees={sortedTees}
-          showMensHandicap={showMensHandicap}
-          showLadiesHandicap={showLadiesHandicap}
-          onRowsChange={onRowsChange}
-        />
-        <ScorecardNineTable
-          title="Back nine"
-          totalLabel="IN"
-          holeNumbers={backNine}
-          rows={backRows}
-          allRows={rows}
-          sortedTees={sortedTees}
-          showMensHandicap={showMensHandicap}
-          showLadiesHandicap={showLadiesHandicap}
-          onRowsChange={onRowsChange}
-        />
-      </div>
+  function updateRow(holeNumber: number, patch: Partial<ScorecardEditRow>) {
+    onRowsChange(
+      rows.map((row) =>
+        row.holeNumber === holeNumber ? { ...row, ...patch } : row
+      )
     );
   }
 
   return (
-    <ScorecardNineTable
-      title="Holes"
-      totalLabel="TOT"
-      holeNumbers={holeNumbers}
-      rows={rows}
-      allRows={rows}
-      sortedTees={sortedTees}
-      showMensHandicap={showMensHandicap}
-      showLadiesHandicap={showLadiesHandicap}
-      onRowsChange={onRowsChange}
-    />
+    <CourseScorecardNineSectionsShell sections={sections}>
+      {(section) => {
+        const sectionPar = sumPar(rows, section.holeNumbers);
+
+        return (
+          <div className="overflow-x-auto">
+            <ScorecardNineSectionHeader label={section.label} par={sectionPar} />
+
+            <table className={scorecardNineSectionTableClassName()}>
+              <thead>
+                <tr className="border-b bg-muted/10">
+                  <th className={SCORECARD_HOLE_HEADER}>Hole</th>
+                  {section.holeNumbers.map((holeNumber) => (
+                    <th
+                      key={holeNumber}
+                      className={cn(SCORECARD_DATA_CELL, "font-semibold")}
+                    >
+                      {holeNumber}
+                    </th>
+                  ))}
+                  <th className={SCORECARD_TOTAL_CELL}>Tot</th>
+                </tr>
+              </thead>
+              <tbody className={SCORECARD_TABLE_BODY}>
+                {displayTees.map((tee) => {
+                  const sectionYardage = sumYardages(
+                    rows,
+                    tee.teeKey,
+                    section.holeNumbers
+                  );
+                  const baseTeeKeys = getCombinationBaseTeeKeys(tee, displayTees);
+                  const isCombination = baseTeeKeys != null;
+
+                  return (
+                    <EditableRow
+                      key={tee.teeKey}
+                      label={
+                        isCombination ? (
+                          <CombinationTeeLabel
+                            teeKey={tee.teeKey}
+                            teeName={tee.teeName}
+                            allTees={displayTees}
+                            className="normal-case tracking-normal"
+                          />
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 normal-case tracking-normal">
+                            {tee.teeColor && (
+                              <span
+                                className="size-2 shrink-0 rounded-full border border-black/10"
+                                style={{ backgroundColor: tee.teeColor }}
+                                aria-hidden
+                              />
+                            )}
+                            {tee.teeName}
+                          </span>
+                        )
+                      }
+                      labelClassName="normal-case tracking-normal"
+                      holeNumbers={section.holeNumbers}
+                      total={
+                        sectionYardage > 0
+                          ? sectionYardage.toLocaleString()
+                          : "—"
+                      }
+                      emphasizeTotal
+                    >
+                      {(holeNumber) => {
+                        const row = rows.find(
+                          (entry) => entry.holeNumber === holeNumber
+                        );
+                        if (!row) return null;
+
+                        const holeYardages = holeYardageNumbers(rows, holeNumber);
+                        const cellPresentation = yardageCellPresentationForHole(
+                          tee,
+                          displayTees,
+                          holeYardages
+                        );
+
+                        return (
+                          <div
+                            className={cn(
+                              "rounded-sm",
+                              cellPresentation?.className
+                            )}
+                            style={cellPresentation?.style}
+                          >
+                            <NumericCellInput
+                              type="number"
+                              inputMode="numeric"
+                              min={0}
+                              value={row.teeYardages[tee.teeKey] ?? ""}
+                              onChange={(event) =>
+                                updateRow(row.holeNumber, {
+                                  teeYardages: {
+                                    ...row.teeYardages,
+                                    [tee.teeKey]: event.target.value,
+                                  },
+                                })
+                              }
+                            />
+                          </div>
+                        );
+                      }}
+                    </EditableRow>
+                  );
+                })}
+
+                {showMensHandicap && (
+                  <EditableRow
+                    label={mensHandicapRowLabel(handicapAvailability)}
+                    labelClassName="normal-case tracking-normal"
+                    holeNumbers={section.holeNumbers}
+                  >
+                    {(holeNumber) => {
+                      const row = rows.find(
+                        (entry) => entry.holeNumber === holeNumber
+                      );
+                      if (!row) return null;
+
+                      return (
+                        <NumericCellInput
+                          type="number"
+                          inputMode="numeric"
+                          min={1}
+                          max={18}
+                          value={row.strokeIndex}
+                          onChange={(event) =>
+                            updateRow(row.holeNumber, {
+                              strokeIndex: event.target.value,
+                            })
+                          }
+                        />
+                      );
+                    }}
+                  </EditableRow>
+                )}
+
+                {showLadiesHandicap && (
+                  <EditableRow
+                    label={ladiesHandicapRowLabel()}
+                    labelClassName="normal-case tracking-normal"
+                    holeNumbers={section.holeNumbers}
+                  >
+                    {(holeNumber) => {
+                      const row = rows.find(
+                        (entry) => entry.holeNumber === holeNumber
+                      );
+                      if (!row) return null;
+
+                      return (
+                        <NumericCellInput
+                          type="number"
+                          inputMode="numeric"
+                          min={1}
+                          max={18}
+                          value={row.ladiesStrokeIndex}
+                          onChange={(event) =>
+                            updateRow(row.holeNumber, {
+                              ladiesStrokeIndex: event.target.value,
+                            })
+                          }
+                        />
+                      );
+                    }}
+                  </EditableRow>
+                )}
+
+                <EditableRow
+                  label="Par"
+                  holeNumbers={section.holeNumbers}
+                  total={sectionPar}
+                >
+                  {(holeNumber) => {
+                    const row = rows.find(
+                      (entry) => entry.holeNumber === holeNumber
+                    );
+                    if (!row) return null;
+
+                    return (
+                      <NumericCellInput
+                        type="number"
+                        inputMode="numeric"
+                        min={3}
+                        max={5}
+                        value={row.par}
+                        onChange={(event) =>
+                          updateRow(row.holeNumber, {
+                            par: Number(event.target.value),
+                          })
+                        }
+                      />
+                    );
+                  }}
+                </EditableRow>
+              </tbody>
+            </table>
+          </div>
+        );
+      }}
+    </CourseScorecardNineSectionsShell>
   );
 }

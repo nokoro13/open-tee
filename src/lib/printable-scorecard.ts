@@ -14,7 +14,10 @@ import {
   buildMultiTeeHoleSnapshots,
   STANDARD_SCORECARD_TEE_COLORS,
 } from "@/lib/course-catalog";
-import { getVerifiedCourseDetail } from "@/lib/course-onboarding";
+import { getCourseDetailByExternalId } from "@/lib/course-onboarding";
+import {
+  getCombinationBaseTeeKeys,
+} from "@/lib/course-tees";
 import { buildScorecardSnapshot, type ScorecardHoleSnapshot } from "@/lib/scorecard";
 import { getGroupScorePageUrl } from "@/lib/scoring-code-storage";
 import { formatTimeDisplay } from "@/lib/start-format";
@@ -39,6 +42,14 @@ export type PrintableScorecard = {
   minPlayerRows: number;
 };
 
+export type PrintableScorecardTeeRow = {
+  teeKey: string;
+  teeName: string;
+  teeColor: string | null;
+  isCombination?: boolean;
+  baseTeeKeys?: string[];
+};
+
 export type PrintableScorecardEvent = {
   id: string;
   slug: string;
@@ -54,6 +65,7 @@ export type PrintableScorecardEvent = {
   formatLabel: string;
   holes: "9" | "18";
   holeData: ScorecardHoleSnapshot[];
+  teeRows: PrintableScorecardTeeRow[];
 };
 
 export type PrintableScorecardBundle = {
@@ -162,7 +174,10 @@ async function resolveHoleData(
       strokeIndex: number | null;
     }[];
   }
-): Promise<ScorecardHoleSnapshot[]> {
+): Promise<{
+  holeData: ScorecardHoleSnapshot[];
+  teeRows: PrintableScorecardTeeRow[];
+}> {
   const holeCount = event.holes === "18" ? 18 : 9;
   let holeData: ScorecardHoleSnapshot[] =
     event.eventHoles.length > 0
@@ -173,21 +188,42 @@ async function resolveHoleData(
           strokeIndex: hole.strokeIndex,
         }))
       : [];
+  let teeRows: PrintableScorecardTeeRow[] = [];
 
   if (event.externalCourseId) {
     try {
-      const course = await getVerifiedCourseDetail(event.externalCourseId);
+      const course = await getCourseDetailByExternalId(event.externalCourseId);
+      if (course?.tees?.length) {
+        const courseTeeInputs = course.tees.map((tee) => ({
+          teeKey: tee.tee_key,
+          teeName: tee.tee_name,
+          teeColor: tee.tee_color ?? null,
+        }));
+        teeRows = courseTeeInputs.map((tee) => {
+          const baseTeeKeys = getCombinationBaseTeeKeys(tee, courseTeeInputs);
+          return {
+            teeKey: tee.teeKey,
+            teeName: tee.teeName,
+            teeColor: tee.teeColor,
+            isCombination: baseTeeKeys != null,
+            baseTeeKeys: baseTeeKeys ?? undefined,
+          };
+        });
+      }
+
+      const snapshotOptions = {
+        holes: event.holes,
+        nineSide: event.nineSide,
+      };
       const fromApi =
         course?.holes_data?.length
-          ? buildMultiTeeHoleSnapshots(course.holes_data, {
-              holes: event.holes,
-              nineSide: event.nineSide,
-            })
+          ? buildMultiTeeHoleSnapshots(
+              course.holes_data,
+              snapshotOptions,
+              course.tees
+            )
           : course?.scorecard?.length
-            ? buildScorecardSnapshot(course.scorecard, {
-                holes: event.holes,
-                nineSide: event.nineSide,
-              })
+            ? buildScorecardSnapshot(course.scorecard, snapshotOptions)
             : [];
 
       if (fromApi.length > 0) {
@@ -212,7 +248,7 @@ async function resolveHoleData(
     }
   }
 
-  if (holeData.length > 0) {
+  if (holeData.length > 0 && teeRows.length === 0) {
     holeData = holeData.map((hole) => {
       if (hole.yardagesByTee) return hole;
       const fallbackYardage = hole.yardage ?? null;
@@ -226,6 +262,11 @@ async function resolveHoleData(
         ),
       };
     });
+    teeRows = STANDARD_SCORECARD_TEE_COLORS.map((color) => ({
+      teeKey: color,
+      teeName: color.charAt(0).toUpperCase() + color.slice(1),
+      teeColor: color,
+    }));
   }
 
   if (holeData.length === 0) {
@@ -237,7 +278,7 @@ async function resolveHoleData(
     }));
   }
 
-  return holeData;
+  return { holeData, teeRows };
 }
 
 function buildScorecard(
@@ -329,7 +370,7 @@ export async function getPrintableScorecardBundle(
 
   if (!event) return null;
 
-  const holeData = await resolveHoleData(event);
+  const { holeData, teeRows } = await resolveHoleData(event);
 
   const groups = options?.groupId
     ? event.pairingGroups.filter((group) => group.id === options.groupId)
@@ -437,6 +478,7 @@ export async function getPrintableScorecardBundle(
       formatLabel: getEventFormatLabel(event.format),
       holes: event.holes,
       holeData,
+      teeRows,
     },
     scorecards,
   };

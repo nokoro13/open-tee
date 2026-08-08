@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import { updateOrganization } from "@/actions/organization";
+import { CoursePicker } from "@/components/dashboard/course-picker";
 import type { Organization } from "@/db/schema";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,6 +14,11 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import {
+  homeCourseFieldsFromSelection,
+  homeCourseSelectionSeedFromOrganization,
+} from "@/lib/organization-home-course";
+import type { CourseSelection } from "@/lib/course-selection";
 
 type OrganizationSettingsFormProps = {
   organization: Organization;
@@ -29,6 +35,9 @@ export function OrganizationSettingsForm({
     name: organization.name,
     contactEmail: organization.contactEmail ?? "",
   });
+  const [homeCourseSelection, setHomeCourseSelection] = useState<CourseSelection>(
+    () => homeCourseSelectionSeedFromOrganization(organization)
+  );
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -36,7 +45,10 @@ export function OrganizationSettingsForm({
     setSaved(false);
 
     startTransition(async () => {
-      const result = await updateOrganization(values);
+      const result = await updateOrganization({
+        ...values,
+        ...homeCourseFieldsFromSelection(homeCourseSelection),
+      });
 
       if (!result.success) {
         setError(result.error ?? "Could not save organization settings.");
@@ -95,6 +107,21 @@ export function OrganizationSettingsForm({
           />
           <FieldDescription>
             Used for publish receipts and tournament notifications.
+          </FieldDescription>
+        </Field>
+
+        <Field>
+          <FieldLabel>Home course</FieldLabel>
+          <CoursePicker
+            selection={homeCourseSelection}
+            holes="18"
+            onChange={(selection) => {
+              setSaved(false);
+              setHomeCourseSelection(selection);
+            }}
+          />
+          <FieldDescription>
+            Optional. Pre-selects this course when you create a new event.
           </FieldDescription>
         </Field>
       </FieldGroup>

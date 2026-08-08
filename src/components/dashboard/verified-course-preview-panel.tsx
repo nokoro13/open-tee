@@ -1,14 +1,10 @@
 "use client";
 
-import Image from "next/image";
 import { useMemo, useState } from "react";
-import { CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react";
 
-import { CourseHolePinMap } from "@/components/dashboard/course-hole-pin-map";
-import { CourseScorecardReviewTable } from "@/components/dashboard/course-scorecard-review-table";
-import { HoleStrip } from "@/components/dashboard/hole-strip";
+import { CourseHoleMappingPanel } from "@/components/dashboard/course-hole-mapping-panel";
+import { CourseScorecardPreviewSection } from "@/components/dashboard/course-scorecard-preview-section";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import type {
   CourseHole,
   CourseTee,
@@ -21,10 +17,9 @@ import {
   countCourseMappingProgress,
   extractHolePinsFromFeatures,
 } from "@/lib/course-onboarding";
-import { sortCourseTees } from "@/lib/course-tees";
+import { isHoleMappingCompleteForTees, sortCourseTees } from "@/lib/course-tees";
 import { formatCourseLocationLine } from "@/lib/course-location";
 import { parseCoordinate, holeNumbersForMapping } from "@/lib/green-distance";
-import { cn } from "@/lib/utils";
 
 type VerifiedCoursePreviewPanelProps = {
   course: GolfCourse & {
@@ -41,7 +36,10 @@ export function VerifiedCoursePreviewPanel({
 }: VerifiedCoursePreviewPanelProps) {
   const [activeHole, setActiveHole] = useState(1);
 
-  const sortedTees = useMemo(() => sortCourseTees(course.courseTees), [course.courseTees]);
+  const sortedTees = useMemo(
+    () => sortCourseTees(course.courseTees),
+    [course.courseTees]
+  );
   const holePins = useMemo(
     () => extractHolePinsFromFeatures(course.holeFeatures),
     [course.holeFeatures]
@@ -83,9 +81,6 @@ export function VerifiedCoursePreviewPanel({
 
   const mappingHoleCount = mappingHoleNumbers.length;
 
-  const mappingFrontNine = mappingHoleNumbers.filter((hole) => hole <= 9);
-  const mappingBackNine = mappingHoleNumbers.filter((hole) => hole > 9);
-
   const activeHoleScorecardYardages = useMemo(() => {
     const hole = course.courseHoles.find(
       (entry) => entry.holeNumber === activeHole
@@ -104,24 +99,27 @@ export function VerifiedCoursePreviewPanel({
 
   function isHoleMappingComplete(holeNumber: number) {
     const pins = holePins[holeNumber];
-    const placedTees = pins
-      ? Object.keys(pins.tees).filter((key) =>
-          course.courseTees.some((tee) => tee.teeKey === key)
-        ).length
-      : 0;
-    return mappedHoleNumbers.has(holeNumber) && placedTees >= course.courseTees.length;
+    return isHoleMappingCompleteForTees(
+      mappedHoleNumbers.has(holeNumber),
+      pins ? Object.keys(pins.tees) : [],
+      course.courseTees
+    );
   }
 
-  const activeHolePar = course.courseHoles.find(
+  const activeHoleData = course.courseHoles.find(
     (entry) => entry.holeNumber === activeHole
-  )?.par;
+  );
+  const activeHolePar = activeHoleData?.par;
+  const activeHoleYardage =
+    activeHoleScorecardYardages[sortedTees[0]?.teeKey ?? ""] ??
+    activeHoleData?.yardage;
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="flex flex-col gap-5 sm:gap-6">
       {/* Course summary */}
       <div className="rounded-xl border bg-card p-4 shadow-sm sm:p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0 space-y-1">
+        <div className="flex flex-col gap-4">
+          <div className="space-y-1">
             <p className="text-sm text-muted-foreground">
               {formatCourseLocationLine({
                 address: course.address,
@@ -141,222 +139,68 @@ export function VerifiedCoursePreviewPanel({
               </p>
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Badge variant="default">Verified</Badge>
-            <Badge variant="outline">{course.holeCount} holes</Badge>
-            <Badge variant="outline">
-              {mappingProgress.mappedHoleCount}/{mappingHoleCount} mapped
-            </Badge>
-            <Badge variant="outline" className="max-w-full">
-              <span className="truncate">
+
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="rounded-lg border bg-muted/20 px-3 py-2.5">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                Status
+              </p>
+              <div className="mt-1">
+                <Badge variant="default">Verified</Badge>
+              </div>
+            </div>
+            <div className="rounded-lg border bg-muted/20 px-3 py-2.5">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                Holes
+              </p>
+              <p className="mt-1 text-sm font-semibold tabular-nums">
+                {course.holeCount}
+              </p>
+            </div>
+            <div className="rounded-lg border bg-muted/20 px-3 py-2.5">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                Mapped
+              </p>
+              <p className="mt-1 text-sm font-semibold tabular-nums">
+                {mappingProgress.mappedHoleCount}/{mappingHoleCount}
+              </p>
+            </div>
+            <div className="col-span-2 rounded-lg border bg-muted/20 px-3 py-2.5 sm:col-span-1">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                Tees
+              </p>
+              <p className="mt-1 truncate text-sm font-semibold">
                 {sortedTees.map((tee) => tee.teeName).join(" · ")}
-              </span>
-            </Badge>
+              </p>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="grid gap-4 sm:gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
-        {/* Scorecard */}
-        <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
-          <div className="border-b px-4 py-3 sm:px-5">
-            <h2 className="text-sm font-semibold sm:text-base">Scorecard</h2>
-            <p className="text-xs text-muted-foreground sm:text-sm">
-              Official par, handicap, and yardages for this course.
-            </p>
-          </div>
+      <CourseHoleMappingPanel
+        mappingHoleNumbers={mappingHoleNumbers}
+        activeHole={activeHole}
+        onActiveHoleChange={setActiveHole}
+        isHoleComplete={isHoleMappingComplete}
+        mappingHoleCount={mappingHoleCount}
+        activeHolePar={activeHolePar}
+        activeHoleYardage={activeHoleYardage}
+        courseCenter={courseCenter}
+        courseTees={course.courseTees}
+        initialGreen={holePins[activeHole]?.green ?? null}
+        initialTees={holePins[activeHole]?.tees ?? {}}
+        initialLineBreak={holePins[activeHole]?.lineBreak ?? null}
+        scorecardYardages={activeHoleScorecardYardages}
+        readOnly
+      />
 
-          <div className="space-y-4 p-4 sm:p-5">
-            {course.scorecardImageUrl ? (
-              <a
-                href={course.scorecardImageUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="relative block h-40 w-full overflow-hidden rounded-lg border bg-muted/20 transition-opacity hover:opacity-90 sm:h-56"
-                aria-label="Open scorecard image in a new tab"
-              >
-                <Image
-                  src={course.scorecardImageUrl}
-                  alt={`${course.name} scorecard`}
-                  fill
-                  className="object-contain"
-                  unoptimized
-                />
-              </a>
-            ) : null}
-
-            <CourseScorecardReviewTable
-              holeCount={course.holeCount}
-              courseHoles={course.courseHoles}
-              sortedTees={sortedTees}
-            />
-          </div>
-        </section>
-
-        {/* Hole map */}
-        <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
-          <div className="flex items-center justify-between gap-3 border-b px-4 py-3 sm:px-5">
-            <div className="min-w-0">
-              <h2 className="text-sm font-semibold sm:text-base">Hole map</h2>
-              <p className="hidden text-xs text-muted-foreground sm:block sm:text-sm">
-                Verified greens, tee boxes, and fairway lines.
-              </p>
-            </div>
-            <p className="shrink-0 text-sm font-medium tabular-nums text-muted-foreground">
-              Hole {activeHole}
-              {activeHolePar != null ? ` · Par ${activeHolePar}` : ""}
-            </p>
-          </div>
-
-          {/* Mobile: horizontal hole strip */}
-          <div className="border-b bg-muted/20 lg:hidden">
-            <HoleStrip
-              holes={mappingHoleNumbers}
-              activeHole={activeHole}
-              onSelect={setActiveHole}
-              isHoleComplete={isHoleMappingComplete}
-            />
-          </div>
-
-          <div className="grid lg:min-h-[min(70vh,720px)] lg:grid-cols-[12rem_1fr]">
-            {/* Desktop: hole sidebar */}
-            <aside className="hidden flex-col border-r bg-muted/20 lg:flex">
-              <div className="space-y-4 overflow-y-auto px-3 py-3">
-                {[
-                  { label: "Front nine", holes: mappingFrontNine },
-                  { label: "Back nine", holes: mappingBackNine },
-                ]
-                  .filter((section) => section.holes.length > 0)
-                  .map((section) => (
-                    <div key={section.label}>
-                      <p className="mb-2 px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                        {section.label}
-                      </p>
-                      <div className="grid grid-cols-3 gap-1.5">
-                        {section.holes.map((holeNumber) => {
-                          const complete = isHoleMappingComplete(holeNumber);
-                          const isActive = activeHole === holeNumber;
-
-                          return (
-                            <button
-                              key={holeNumber}
-                              type="button"
-                              onClick={() => setActiveHole(holeNumber)}
-                              className={cn(
-                                "relative flex h-9 items-center justify-center rounded-md text-sm font-medium transition-colors",
-                                isActive
-                                  ? "bg-primary text-primary-foreground shadow-sm"
-                                  : "bg-background/80 text-foreground ring-1 ring-foreground/10 hover:bg-background",
-                                complete && !isActive && "ring-primary/30"
-                              )}
-                            >
-                              {holeNumber}
-                              {complete && (
-                                <CheckCircle2
-                                  className={cn(
-                                    "absolute -right-1 -top-1 size-3.5",
-                                    isActive
-                                      ? "text-primary-foreground"
-                                      : "text-primary"
-                                  )}
-                                />
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-              </div>
-
-              <div className="mt-auto border-t p-3">
-                <div className="grid grid-cols-[auto_1fr_auto] gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon-sm"
-                    disabled={activeHole <= 1}
-                    onClick={() => setActiveHole((current) => current - 1)}
-                  >
-                    <ChevronLeft />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full"
-                    disabled={activeHole >= mappingHoleCount}
-                    onClick={() => setActiveHole((current) => current + 1)}
-                  >
-                    Next hole
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon-sm"
-                    disabled={activeHole >= mappingHoleCount}
-                    onClick={() => setActiveHole((current) => current + 1)}
-                  >
-                    <ChevronRight />
-                  </Button>
-                </div>
-              </div>
-            </aside>
-
-            <div className="min-h-[min(55vh,480px)] min-w-0 lg:min-h-0">
-              <CourseHolePinMap
-                readOnly
-                className="h-full min-h-[min(55vh,480px)] lg:min-h-full"
-                courseCenter={courseCenter}
-                holeNumber={activeHole}
-                courseTees={course.courseTees}
-                initialGreen={holePins[activeHole]?.green ?? null}
-                initialTees={holePins[activeHole]?.tees ?? {}}
-                initialLineBreak={holePins[activeHole]?.lineBreak ?? null}
-                scorecardYardages={activeHoleScorecardYardages}
-                canGoPrevious={activeHole > 1}
-                canGoNext={activeHole < mappingHoleCount}
-                onPreviousHole={() =>
-                  setActiveHole((current) => Math.max(1, current - 1))
-                }
-                onNextHole={() =>
-                  setActiveHole((current) =>
-                    Math.min(mappingHoleCount, current + 1)
-                  )
-                }
-              />
-            </div>
-          </div>
-
-          {/* Mobile: prev / next bar */}
-          <div className="flex items-center justify-between gap-3 border-t px-4 py-3 lg:hidden">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-10 flex-1"
-              disabled={activeHole <= 1}
-              onClick={() => setActiveHole((current) => current - 1)}
-            >
-              <ChevronLeft />
-              Previous
-            </Button>
-            <span className="shrink-0 text-xs font-medium tabular-nums text-muted-foreground">
-              {activeHole} / {mappingHoleCount}
-            </span>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-10 flex-1"
-              disabled={activeHole >= course.holeCount}
-              onClick={() => setActiveHole((current) => current + 1)}
-            >
-              Next
-              <ChevronRight />
-            </Button>
-          </div>
-        </section>
-      </div>
+      <CourseScorecardPreviewSection
+        courseName={course.name}
+        holeCount={course.holeCount}
+        courseHoles={course.courseHoles}
+        sortedTees={sortedTees}
+        scorecardImageUrl={course.scorecardImageUrl}
+      />
     </div>
   );
 }

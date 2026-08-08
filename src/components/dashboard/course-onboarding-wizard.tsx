@@ -1,9 +1,15 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, ChevronLeft, ChevronRight, MapPin, Maximize2, ScanLine, Sparkles, Upload } from "lucide-react";
+import {
+  CheckCircle2,
+  LayoutList,
+  MapPin,
+  ScanLine,
+  Sparkles,
+  Upload,
+} from "lucide-react";
 
 import {
   extractCourseOnboardingScorecard,
@@ -14,9 +20,13 @@ import {
   updateCourseOnboardingDetails,
 } from "@/actions/course-onboarding";
 import { CourseGooglePlaceSearch } from "@/components/dashboard/course-google-place-search";
-import { CourseHolePinMap } from "@/components/dashboard/course-hole-pin-map";
+import { CourseHoleMappingPanel } from "@/components/dashboard/course-hole-mapping-panel";
 import { CourseScorecardEditTable } from "@/components/dashboard/course-scorecard-edit-table";
-import { HoleStrip } from "@/components/dashboard/hole-strip";
+import { CourseScorecardPreviewSection } from "@/components/dashboard/course-scorecard-preview-section";
+import { CombinationTeeIcon } from "@/components/dashboard/combination-tee-name";
+import { CombinationTeeLinker } from "@/components/dashboard/combination-tee-linker";
+import { TeeColorPicker } from "@/components/dashboard/tee-color-picker";
+import { DashboardSectionCard } from "@/components/dashboard/dashboard-section-card";
 import { ScorecardOcrTotalsPanel } from "@/components/dashboard/scorecard-ocr-totals-panel";
 import { compressScorecardImage } from "@/lib/compress-scorecard-image";
 import {
@@ -28,7 +38,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
-  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -61,10 +70,15 @@ import {
   type CourseOnboardingStep,
 } from "@/lib/course-onboarding";
 import {
+  combinationTeeKeySignature,
   DEFAULT_COURSE_TEES,
+  getCombinationBaseTeeKeys,
+  isCombinationTee,
+  isHoleMappingCompleteForTees,
   normalizeTeeKey,
   PRESET_COURSE_TEES,
   sortCourseTees,
+  suggestTeeColor,
   type CourseTeeInput,
 } from "@/lib/course-tees";
 import {
@@ -248,6 +262,7 @@ function buildTeeRows(existing: CourseTee[]): CourseTeeInput[] {
       teeKey: tee.teeKey,
       teeName: tee.teeName,
       teeColor: tee.teeColor,
+      combinationBaseTeeKeys: tee.combinationBaseTeeKeys ?? null,
       sortOrder: tee.sortOrder,
     }));
   }
@@ -319,6 +334,7 @@ export function CourseOnboardingWizard({
     ScorecardStrokeIndexValidation[]
   >([]);
   const [customTeeName, setCustomTeeName] = useState("");
+  const [customTeeColor, setCustomTeeColor] = useState("#64748b");
   const [scorecardPreviewOpen, setScorecardPreviewOpen] = useState(false);
 
   const duplicateCheck = useCourseDuplicateCheck({
@@ -395,6 +411,17 @@ export function CourseOnboardingWizard({
   }, [activeHole, mappingHoleCount]);
 
   const sortedTees = useMemo(() => sortCourseTees(teeRows), [teeRows]);
+  const baseTeesForCombination = useMemo(
+    () => teeRows.filter((tee) => !isCombinationTee(tee, teeRows)),
+    [teeRows]
+  );
+  const mappingCombinationTeeNames = useMemo(
+    () =>
+      sortCourseTees(course.courseTees)
+        .filter((tee) => isCombinationTee(tee, course.courseTees))
+        .map((tee) => tee.teeName),
+    [course.courseTees]
+  );
   const sortedHandicapRows = useMemo(
     () => sortScorecardHandicapRows(handicapRows),
     [handicapRows]
@@ -507,22 +534,144 @@ export function CourseOnboardingWizard({
     }
 
     setError(null);
+    const teeColor = customTeeColor;
     const nextTees = [
       ...teeRows,
       {
         teeKey,
         teeName,
-        teeColor: "#64748b",
+        teeColor,
         sortOrder: teeRows.length,
       },
     ];
     setTeeRows(nextTees);
     syncScorecardRowsForTees(nextTees);
     setCustomTeeName("");
+    setCustomTeeColor(suggestTeeColor("", "", nextTees));
+  }
+
+  function updateTeeColor(teeKey: string, teeColor: string) {
+    setTeeRows((current) =>
+      current.map((tee) =>
+        tee.teeKey === teeKey ? { ...tee, teeColor } : tee
+      )
+    );
+  }
+
+  function combinationAlreadyExists(
+    baseTeeKeys: [string, string],
+    excludeTeeKey?: string
+  ): boolean {
+    const signature = combinationTeeKeySignature(baseTeeKeys);
+    return teeRows.some((tee) => {
+      if (tee.teeKey === excludeTeeKey) return false;
+      const keys = getCombinationBaseTeeKeys(tee, teeRows);
+      return keys != null && combinationTeeKeySignature(keys) === signature;
+    });
+  }
+
+  function addCombinationTee({
+    baseTeeKeys,
+    teeName: rawTeeName,
+  }: {
+    baseTeeKeys: [string, string];
+    teeName: string;
+  }) {
+    if (combinationAlreadyExists(baseTeeKeys)) {
+      setError("That combination already exists.");
+      return;
+    }
+
+    const teeName = rawTeeName.trim();
+    if (!teeName) {
+      setError("Enter the name printed on the scorecard.");
+      return;
+    }
+
+    const teeKey = normalizeTeeKey(teeName);
+    if (
+      teeRows.some((tee) => normalizeTeeKey(tee.teeKey || tee.teeName) === teeKey)
+    ) {
+      setError(`"${teeName}" is already in your tee list.`);
+      return;
+    }
+
+    setError(null);
+    const nextTees = [
+      ...teeRows,
+      {
+        teeKey,
+        teeName,
+        combinationBaseTeeKeys: baseTeeKeys,
+        sortOrder: teeRows.length,
+      },
+    ];
+    setTeeRows(nextTees);
+    syncScorecardRowsForTees(nextTees);
+  }
+
+  function updateCombinationTee(
+    teeKey: string,
+    {
+      baseTeeKeys,
+      teeName: rawTeeName,
+    }: {
+      baseTeeKeys: [string, string];
+      teeName: string;
+    }
+  ) {
+    if (combinationAlreadyExists(baseTeeKeys, teeKey)) {
+      setError("That combination already exists.");
+      return;
+    }
+
+    const teeName = rawTeeName.trim();
+    if (!teeName) {
+      setError("Enter the name printed on the scorecard.");
+      return;
+    }
+
+    const normalizedName = normalizeTeeKey(teeName);
+    if (
+      teeRows.some(
+        (tee) =>
+          tee.teeKey !== teeKey &&
+          normalizeTeeKey(tee.teeKey || tee.teeName) === normalizedName
+      )
+    ) {
+      setError(`"${teeName}" is already in your tee list.`);
+      return;
+    }
+
+    setError(null);
+    const nextTees = teeRows.map((tee) => {
+      if (tee.teeKey !== teeKey) return tee;
+      return {
+        ...tee,
+        teeName,
+        combinationBaseTeeKeys: baseTeeKeys,
+        teeColor: null,
+      };
+    });
+    setTeeRows(nextTees);
   }
 
   function removeTee(teeKey: string) {
     if (teeRows.length <= 1) return;
+
+    const dependentCombo = teeRows.find(
+      (tee) =>
+        isCombinationTee(tee, teeRows) &&
+        getCombinationBaseTeeKeys(tee, teeRows)?.includes(teeKey)
+    );
+    if (dependentCombo) {
+      setError(
+        `"${dependentCombo.teeName}" uses this tee. Edit or remove it first.`
+      );
+      return;
+    }
+
+    setError(null);
     const nextTees = teeRows
       .filter((tee) => tee.teeKey !== teeKey)
       .map((tee, index) => ({ ...tee, sortOrder: index }));
@@ -650,22 +799,46 @@ export function CourseOnboardingWizard({
 
   function isHoleMappingComplete(holeNumber: number) {
     const pins = holePins[holeNumber];
-    const teeCount = course.courseTees.length;
-    const placedTees = pins
-      ? Object.keys(pins.tees).filter((key) =>
-          course.courseTees.some((tee) => tee.teeKey === key)
-        ).length
-      : 0;
-    return mappedHoleNumbers.has(holeNumber) && placedTees >= teeCount;
+    return isHoleMappingCompleteForTees(
+      mappedHoleNumbers.has(holeNumber),
+      pins ? Object.keys(pins.tees) : [],
+      course.courseTees
+    );
   }
 
-  const mappingPercent =
-    mappingProgress.requiredTeeCount > 0
-      ? Math.round(
-          (mappingProgress.mappedTeeCount / mappingProgress.requiredTeeCount) *
-            100
-        )
-      : 0;
+  const activeHoleData = course.courseHoles.find(
+    (entry) => entry.holeNumber === activeHole
+  );
+  const activeHolePar = activeHoleData?.par;
+  const activeHoleYardage =
+    activeHoleScorecardYardages[course.courseTees[0]?.teeKey ?? ""] ??
+    activeHoleData?.yardage;
+
+  const previewCourseHoles = useMemo((): CourseHole[] => {
+    return scorecardRows.map((row) => ({
+      id: `preview-${row.holeNumber}`,
+      courseId: course.id,
+      holeNumber: row.holeNumber,
+      par: row.par,
+      yardage: null,
+      teeYardages: Object.fromEntries(
+        sortedTees
+          .map((tee) => {
+            const raw = row.teeYardages[tee.teeKey]?.trim();
+            if (!raw) return null;
+            const parsed = Number(raw);
+            return Number.isFinite(parsed) ? [tee.teeKey, parsed] : null;
+          })
+          .filter((entry): entry is [string, number] => entry != null)
+      ),
+      strokeIndex: row.strokeIndex.trim() ? Number(row.strokeIndex) : null,
+      ladiesStrokeIndex: row.ladiesStrokeIndex.trim()
+        ? Number(row.ladiesStrokeIndex)
+        : null,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    }));
+  }, [course.id, scorecardRows, sortedTees]);
 
   return (
     <div className={cn("space-y-6", step === "mapping" && "space-y-4")}>
@@ -681,13 +854,6 @@ export function CourseOnboardingWizard({
           {course.onboardingStatus}
         </Badge>
       </div>
-
-      {course.onboardingStatus === "verified" && canEditVerifiedCourse && (
-        <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm text-amber-900 dark:text-amber-200">
-          This verified course is editable. Use the steps above to update
-          details, scorecard, or hole mapping.
-        </div>
-      )}
 
       {error && <p className="text-sm text-destructive">{error}</p>}
       {message && <p className="text-sm text-primary">{message}</p>}
@@ -871,37 +1037,73 @@ export function CourseOnboardingWizard({
       )}
 
       {step === "scorecard" && (
-        <div className="space-y-5">
-          <Card size="sm">
-            <CardHeader className="border-b">
-              <CardTitle>Scorecard layout</CardTitle>
-              <CardDescription>
-                Match the tee and handicap rows on your physical scorecard
-                before extracting or editing hole data.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="grid lg:grid-cols-2 lg:divide-x">
-                <div className="space-y-4 p-(--card-spacing)">
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">Tee rows</p>
-                    <p className="text-xs text-muted-foreground">
-                      Add each name printed on the scorecard — not the row
-                      color.
-                    </p>
-                  </div>
-                  <div className="flex min-h-9 flex-wrap items-center gap-2">
-                    {sortedTees.map((tee) => (
+        <div className="flex flex-col gap-5 sm:gap-6">
+          <input
+            ref={scorecardFileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            disabled={isUploadingScorecard}
+            onChange={(event) =>
+              handleScorecardImage(event.target.files?.[0] ?? null)
+            }
+          />
+
+          <DashboardSectionCard
+            icon={LayoutList}
+            title="Scorecard layout"
+            description="Match the tee and handicap rows on your physical scorecard before extracting or editing hole data."
+          >
+            <div className="grid gap-5 p-4 sm:p-5 lg:grid-cols-2">
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Tee rows</p>
+                  <p className="text-xs text-muted-foreground">
+                    Add each name printed on the scorecard. Use the link icon to
+                    combine two existing tees.
+                  </p>
+                </div>
+                <div className="flex min-h-9 flex-wrap items-center gap-2">
+                  {sortedTees.map((tee) => {
+                    const combo = isCombinationTee(tee, sortedTees);
+                    const comboBaseKeys = combo
+                      ? getCombinationBaseTeeKeys(tee, sortedTees)
+                      : null;
+
+                    return (
                       <Badge
                         key={tee.teeKey}
                         variant="outline"
                         className="h-8 gap-1.5 px-2.5"
                       >
-                        <span
-                          className="inline-block size-2 shrink-0 rounded-full border border-black/10"
-                          style={{ backgroundColor: tee.teeColor ?? "#64748b" }}
-                        />
+                        {combo ? (
+                          <CombinationTeeIcon
+                            teeKey={tee.teeKey}
+                            teeName={tee.teeName}
+                            allTees={sortedTees}
+                            className="size-3.5"
+                          />
+                        ) : (
+                          <TeeColorPicker
+                            value={tee.teeColor ?? "#64748b"}
+                            onChange={(color) => updateTeeColor(tee.teeKey, color)}
+                            swatchClassName="size-3.5"
+                          />
+                        )}
                         {tee.teeName}
+                        {combo && comboBaseKeys && (
+                          <CombinationTeeLinker
+                            mode="edit"
+                            tees={sortedTees}
+                            selectableTees={baseTeesForCombination}
+                            selectedBaseTeeKeys={comboBaseKeys}
+                            selectedTeeName={tee.teeName}
+                            onConfirm={(payload) =>
+                              updateCombinationTee(tee.teeKey, payload)
+                            }
+                            className="size-6 border-none bg-transparent hover:bg-muted/60"
+                          />
+                        )}
                         {sortedTees.length > 1 && (
                           <button
                             type="button"
@@ -913,235 +1115,207 @@ export function CourseOnboardingWizard({
                           </button>
                         )}
                       </Badge>
-                    ))}
-                    {PRESET_COURSE_TEES.filter(
-                      (preset) =>
-                        !sortedTees.some(
-                          (tee) => tee.teeKey === normalizeTeeKey(preset.teeKey)
-                        )
-                    ).map((preset) => (
-                      <Button
-                        key={preset.teeKey}
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="h-8 px-2.5 text-xs"
-                        onClick={() => addTeeFromPreset(preset)}
-                      >
-                        + {preset.teeName}
-                      </Button>
-                    ))}
-                  </div>
-                  <div className="flex max-w-md gap-2">
-                    <Input
-                      value={customTeeName}
-                      placeholder="Custom name (e.g. Palmer)"
-                      className="h-9"
-                      onChange={(event) => setCustomTeeName(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key !== "Enter") return;
-                        event.preventDefault();
-                        addCustomTee(customTeeName);
-                      }}
-                    />
+                    );
+                  })}
+                  <CombinationTeeLinker
+                    tees={sortedTees}
+                    selectableTees={baseTeesForCombination}
+                    onConfirm={addCombinationTee}
+                  />
+                  {PRESET_COURSE_TEES.filter(
+                    (preset) =>
+                      !sortedTees.some(
+                        (tee) => tee.teeKey === normalizeTeeKey(preset.teeKey)
+                      )
+                  ).map((preset) => (
                     <Button
+                      key={preset.teeKey}
                       type="button"
                       size="sm"
                       variant="outline"
-                      className="h-9 shrink-0 px-3"
-                      disabled={!customTeeName.trim()}
-                      onClick={() => addCustomTee(customTeeName)}
+                      className="h-8 px-2.5 text-xs"
+                      onClick={() => addTeeFromPreset(preset)}
                     >
-                      Add
+                      + {preset.teeName}
                     </Button>
-                  </div>
+                  ))}
                 </div>
-
-                <div className="space-y-4 border-t p-(--card-spacing) lg:border-t-0">
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">Handicap rows</p>
-                    <p className="text-xs text-muted-foreground">
-                      Include every handicap row shown on the card.
-                    </p>
-                  </div>
-                  <div className="flex min-h-9 flex-wrap items-center gap-2">
-                    {sortedHandicapRows.map((row) => (
-                      <Badge
-                        key={row.rowKey}
-                        variant="outline"
-                        className="h-8 gap-1.5 px-2.5"
-                      >
-                        {row.rowName}
-                        <button
-                          type="button"
-                          className="ml-0.5 text-muted-foreground hover:text-foreground"
-                          aria-label={`Remove ${row.rowName}`}
-                          onClick={() => removeHandicapRow(row.rowKey)}
-                        >
-                          ×
-                        </button>
-                      </Badge>
-                    ))}
-                    {PRESET_SCORECARD_HANDICAP_ROWS.filter(
-                      (preset) =>
-                        !sortedHandicapRows.some(
-                          (row) => row.rowKey === preset.rowKey
-                        )
-                    ).map((preset) => (
-                      <Button
-                        key={preset.rowKey}
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="h-8 px-2.5 text-xs"
-                        onClick={() => addHandicapRowFromPreset(preset)}
-                      >
-                        + {preset.rowName}
-                      </Button>
-                    ))}
-                  </div>
+                <div className="flex max-w-md items-center gap-2">
+                  <TeeColorPicker
+                    value={customTeeColor}
+                    onChange={setCustomTeeColor}
+                  />
+                  <Input
+                    value={customTeeName}
+                    placeholder="Custom name (e.g. Palmer)"
+                    className="h-9"
+                    onChange={(event) => {
+                      const nextName = event.target.value;
+                      setCustomTeeName(nextName);
+                      if (nextName.trim()) {
+                        setCustomTeeColor(
+                          suggestTeeColor(
+                            nextName,
+                            normalizeTeeKey(nextName),
+                            teeRows
+                          )
+                        );
+                      }
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter") return;
+                      event.preventDefault();
+                      addCustomTee(customTeeName);
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-9 shrink-0 px-3"
+                    disabled={!customTeeName.trim()}
+                    onClick={() => addCustomTee(customTeeName)}
+                  >
+                    Add
+                  </Button>
                 </div>
               </div>
-            </CardContent>
-          </Card>
 
-          <Card size="sm">
-            <CardHeader className="border-b">
-              <CardTitle>Scorecard reference</CardTitle>
-              <CardDescription>
-                Upload a photo and extract values, or enter hole data manually
-                below.
-              </CardDescription>
-              {scorecardImageUrl && (
-                <CardAction className="flex gap-1">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="h-8 px-2.5 text-xs"
-                    onClick={() => setScorecardPreviewOpen(true)}
-                  >
-                    <Maximize2 className="size-3.5" />
-                    Expand
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="h-8 px-2.5 text-xs"
-                    disabled={isUploadingScorecard}
-                    onClick={() => scorecardFileInputRef.current?.click()}
-                  >
-                    <Upload className="size-3.5" />
-                    Replace
-                  </Button>
-                </CardAction>
-              )}
-            </CardHeader>
-            <CardContent>
-              <input
-                ref={scorecardFileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                disabled={isUploadingScorecard}
-                onChange={(event) =>
-                  handleScorecardImage(event.target.files?.[0] ?? null)
-                }
-              />
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-                {scorecardImageUrl ? (
-                  <button
-                    type="button"
-                    className="group relative mx-auto w-full shrink-0 overflow-hidden rounded-lg border bg-muted/30 lg:mx-0 lg:w-56 xl:w-64"
-                    onClick={() => setScorecardPreviewOpen(true)}
-                  >
-                    <Image
-                      src={scorecardImageUrl}
-                      alt="Scorecard reference"
-                      width={640}
-                      height={480}
-                      className="h-auto max-h-72 w-full object-contain p-2 transition-opacity group-hover:opacity-90"
-                      unoptimized
-                    />
-                  </button>
-                ) : (
-                  <label
-                    className={cn(
-                      "flex min-h-44 w-full shrink-0 cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground transition-colors hover:bg-muted/40 lg:w-56 xl:w-64",
-                      isUploadingScorecard && "pointer-events-none opacity-60"
-                    )}
-                  >
-                    <Upload className="size-5" />
-                    <span className="font-medium text-foreground">
-                      {isUploadingScorecard
-                        ? "Uploading…"
-                        : "Upload scorecard photo"}
-                    </span>
-                    <span className="text-xs">
-                      JPG or PNG · clear, flat, full card visible
-                    </span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      disabled={isUploadingScorecard}
-                      onChange={(event) =>
-                        handleScorecardImage(event.target.files?.[0] ?? null)
-                      }
-                    />
-                  </label>
-                )}
-
-                <div className="flex min-w-0 flex-1 flex-col gap-3">
-                  {scorecardImageUrl ? (
-                    <>
-                      <p className="text-sm text-muted-foreground">
-                        Compare the extracted hole data below against your
-                        scorecard photo. Use Expand for a full-size view.
-                      </p>
-                      <Button
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Handicap rows</p>
+                  <p className="text-xs text-muted-foreground">
+                    Include every handicap row shown on the card.
+                  </p>
+                </div>
+                <div className="flex min-h-9 flex-wrap items-center gap-2">
+                  {sortedHandicapRows.map((row) => (
+                    <Badge
+                      key={row.rowKey}
+                      variant="outline"
+                      className="h-8 gap-1.5 px-2.5"
+                    >
+                      {row.rowName}
+                      <button
                         type="button"
-                        className="h-10 w-full sm:w-auto sm:self-start"
-                        disabled={
-                          isPending ||
-                          sortedTees.length === 0 ||
-                          sortedHandicapRows.length === 0
-                        }
-                        onClick={handleExtractScorecard}
+                        className="ml-0.5 text-muted-foreground hover:text-foreground"
+                        aria-label={`Remove ${row.rowName}`}
+                        onClick={() => removeHandicapRow(row.rowKey)}
                       >
-                        <ScanLine />
-                        {isPending ? "Extracting…" : "Extract with AI"}
-                      </Button>
-                      {(sortedTees.length === 0 ||
-                        sortedHandicapRows.length === 0) && (
-                        <p className="text-xs text-muted-foreground">
-                          Add at least one tee row and one handicap row before
-                          extracting.
-                        </p>
-                      )}
-                    </>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      Upload a clear photo of the full scorecard to auto-fill
-                      par, yardages, and handicaps. You can also enter values
-                      manually in the table below.
-                    </p>
+                        ×
+                      </button>
+                    </Badge>
+                  ))}
+                  {PRESET_SCORECARD_HANDICAP_ROWS.filter(
+                    (preset) =>
+                      !sortedHandicapRows.some(
+                        (row) => row.rowKey === preset.rowKey
+                      )
+                  ).map((preset) => (
+                    <Button
+                      key={preset.rowKey}
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 px-2.5 text-xs"
+                      onClick={() => addHandicapRowFromPreset(preset)}
+                    >
+                      + {preset.rowName}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </DashboardSectionCard>
+
+          <CourseScorecardPreviewSection
+            courseName={course.name}
+            holeCount={course.holeCount}
+            courseHoles={previewCourseHoles}
+            sortedTees={sortedTees}
+            scorecardImageUrl={scorecardImageUrl || null}
+            description="Upload a photo and extract values, or enter hole data manually below."
+            onImageClick={
+              scorecardImageUrl
+                ? () => setScorecardPreviewOpen(true)
+                : undefined
+            }
+            emptyImage={
+              <label
+                className={cn(
+                  "flex aspect-4/3 min-h-[min(45vh,480px)] w-full cursor-pointer flex-col items-center justify-center gap-3 border-b bg-muted/10 px-6 py-10 text-center sm:aspect-21/9",
+                  isUploadingScorecard && "pointer-events-none opacity-60"
+                )}
+              >
+                <Upload className="size-6 text-muted-foreground" />
+                <span className="text-sm font-medium text-foreground">
+                  {isUploadingScorecard
+                    ? "Uploading…"
+                    : "Upload scorecard photo"}
+                </span>
+                <span className="max-w-sm text-xs text-muted-foreground">
+                  JPG or PNG · clear, flat, full card visible
+                </span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  disabled={isUploadingScorecard}
+                  onChange={(event) =>
+                    handleScorecardImage(event.target.files?.[0] ?? null)
+                  }
+                />
+              </label>
+            }
+            imageActions={
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-muted-foreground">
+                  {scorecardImageUrl
+                    ? "Compare the hole data below against your scorecard photo. Click the image to expand."
+                    : "Upload a clear photo of the full scorecard to auto-fill par, yardages, and handicaps."}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {scorecardImageUrl && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-10"
+                      disabled={isUploadingScorecard}
+                      onClick={() => scorecardFileInputRef.current?.click()}
+                    >
+                      <Upload />
+                      Replace photo
+                    </Button>
+                  )}
+                  {scorecardImageUrl && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-10"
+                      disabled={
+                        isPending ||
+                        sortedTees.length === 0 ||
+                        sortedHandicapRows.length === 0
+                      }
+                      onClick={handleExtractScorecard}
+                    >
+                      <ScanLine />
+                      {isPending ? "Extracting…" : "Extract with AI"}
+                    </Button>
                   )}
                 </div>
+                {scorecardImageUrl &&
+                  (sortedTees.length === 0 ||
+                    sortedHandicapRows.length === 0) && (
+                    <p className="text-xs text-muted-foreground sm:basis-full">
+                      Add at least one tee row and one handicap row before
+                      extracting.
+                    </p>
+                  )}
               </div>
-            </CardContent>
-          </Card>
-
-          <Card size="sm">
-            <CardHeader className="border-b">
-              <CardTitle>Hole data</CardTitle>
-              <CardDescription>
-                Front and back nine side by side. Edit any cell that
-                doesn&apos;t match the scorecard image.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
+            }
+            table={
               <CourseScorecardEditTable
                 holeCount={course.holeCount}
                 rows={scorecardRows}
@@ -1150,18 +1324,21 @@ export function CourseOnboardingWizard({
                 showLadiesHandicap={extractLadiesHandicap}
                 onRowsChange={setScorecardRows}
               />
-            </CardContent>
-          </Card>
-
-          {(ocrParValidation ||
-            ocrYardageValidation.length > 0 ||
-            ocrHandicapValidation.length > 0) && (
-            <ScorecardOcrTotalsPanel
-              parValidation={ocrParValidation}
-              yardageValidation={ocrYardageValidation}
-              handicapValidation={ocrHandicapValidation}
-            />
-          )}
+            }
+            footer={
+              ocrParValidation ||
+              ocrYardageValidation.length > 0 ||
+              ocrHandicapValidation.length > 0 ? (
+                <div className="border-t p-4 sm:p-5">
+                  <ScorecardOcrTotalsPanel
+                    parValidation={ocrParValidation}
+                    yardageValidation={ocrYardageValidation}
+                    handicapValidation={ocrHandicapValidation}
+                  />
+                </div>
+              ) : null
+            }
+          />
 
           <Sheet open={scorecardPreviewOpen} onOpenChange={setScorecardPreviewOpen}>
             <SheetContent
@@ -1173,7 +1350,6 @@ export function CourseOnboardingWizard({
               </SheetHeader>
               {scorecardImageUrl && (
                 <div className="min-h-0 flex-1 overflow-auto bg-muted/30 p-2 sm:p-4">
-                  {/* Native img so expand view renders at full container width */}
                   <img
                     src={scorecardImageUrl}
                     alt="Scorecard full view"
@@ -1184,7 +1360,7 @@ export function CourseOnboardingWizard({
             </SheetContent>
           </Sheet>
 
-          <div className="flex justify-end border-t pt-4">
+          <div className="flex justify-end">
             <Button
               type="button"
               className="h-11 w-full sm:h-9 sm:w-auto"
@@ -1196,6 +1372,7 @@ export function CourseOnboardingWizard({
                       teeKey: tee.teeKey || normalizeTeeKey(tee.teeName),
                       teeName: tee.teeName,
                       teeColor: tee.teeColor,
+                      combinationBaseTeeKeys: tee.combinationBaseTeeKeys ?? null,
                       sortOrder: index,
                     })),
                     holes: scorecardRows.map((row) => ({
@@ -1229,7 +1406,14 @@ export function CourseOnboardingWizard({
       )}
 
       {step === "mapping" && (
-        <div className="space-y-3">
+        <div className="flex min-h-0 flex-col gap-3">
+          {mappingCombinationTeeNames.length > 0 && (
+            <div className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-muted-foreground">
+              Combination tees ({mappingCombinationTeeNames.join(", ")}) reuse the
+              base tee boxes you place below. Each hole picks the matching base
+              tee automatically from scorecard yardages — no separate pins needed.
+            </div>
+          )}
           {course.backNineMirrorsFront && (
             <div className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-muted-foreground">
               This course is played twice through the same nine holes. Map holes
@@ -1271,152 +1455,47 @@ export function CourseOnboardingWizard({
             </Button>
           </div>
 
-          <div className="mx-auto w-full overflow-hidden rounded-xl border bg-card shadow-sm">
-            <div className="border-b bg-muted/20 px-4 py-3">
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-2">
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    Hole {activeHole}
-                  </p>
-                  <span className="hidden h-4 w-px bg-border sm:inline-block" />
-                  <p className="text-xs text-muted-foreground">
-                    {mappingProgress.mappedHoleCount}/{mappingHoleCount} greens
-                    · {mappingProgress.mappedTeeCount}/
-                    {mappingProgress.requiredTeeCount} tees
-                  </p>
-                  <div className="flex min-w-28 flex-1 items-center gap-2 sm:max-w-xs">
-                    <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
-                      <div
-                        className="h-full rounded-full bg-primary transition-all duration-300"
-                        style={{ width: `${mappingPercent}%` }}
-                      />
-                    </div>
-                    <span className="text-xs font-medium tabular-nums text-primary">
-                      {mappingPercent}%
-                    </span>
-                  </div>
-                </div>
-                <div className="hidden shrink-0 items-center gap-2 lg:flex">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon-sm"
-                    disabled={activeHole <= 1}
-                    onClick={() => setActiveHole((current) => current - 1)}
-                  >
-                    <ChevronLeft />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={activeHole >= mappingHoleCount}
-                    onClick={() => setActiveHole((current) => current + 1)}
-                  >
-                    Next hole
-                    <ChevronRight />
-                  </Button>
-                  {mappingProgress.isComplete && (
-                    <Button type="button" size="sm" onClick={() => setStep("review")}>
-                      Continue to review
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <HoleStrip
-              holes={mappingHoleNumbers}
-              activeHole={activeHole}
-              onSelect={setActiveHole}
-              isHoleComplete={isHoleMappingComplete}
-            />
-
-            <div className="min-h-[min(52vh,560px)] min-w-0 lg:min-h-[min(78vh,820px)]">
-              <CourseHolePinMap
-                className="h-full min-h-[min(52vh,560px)] lg:min-h-[min(78vh,820px)]"
-                courseCenter={courseCenter}
-                holeNumber={activeHole}
-                courseTees={course.courseTees}
-                initialGreen={holePins[activeHole]?.green ?? null}
-                initialTees={holePins[activeHole]?.tees ?? {}}
-                initialLineBreak={holePins[activeHole]?.lineBreak ?? null}
-                scorecardYardages={activeHoleScorecardYardages}
-                isSaving={isPending}
-                canGoPrevious={activeHole > 1}
-                canGoNext={activeHole < mappingHoleCount}
-                onPreviousHole={() =>
-                  setActiveHole((current) => Math.max(1, current - 1))
-                }
-                onNextHole={() =>
-                  setActiveHole((current) =>
-                    Math.min(mappingHoleCount, current + 1)
-                  )
-                }
-                onSavePin={async (pin) => {
-                  setError(null);
-                  const result = await saveCourseOnboardingHolePin(
-                    course.id,
-                    activeHole,
-                    pin
-                  );
-                  if (!result.success) {
-                    setError(result.error ?? "Could not save pin.");
-                    return;
-                  }
-                  setMessage(
-                    pin.kind === "green"
-                      ? `Saved green for hole ${activeHole}.`
-                      : pin.kind === "tee"
-                        ? `Saved tee for hole ${activeHole}.`
-                        : pin.kind === "line_break"
-                          ? `Updated fairway line for hole ${activeHole}.`
-                          : pin.enabled
-                            ? `Enabled dogleg for hole ${activeHole}.`
-                            : `Set hole ${activeHole} to a straight path.`
-                  );
-                  startTransition(() => {
-                    router.refresh();
-                  });
-                }}
-              />
-            </div>
-
-            <div className="space-y-2 border-t px-4 py-3 lg:hidden">
-              <div className="flex items-center justify-between gap-3">
+          <CourseHoleMappingPanel
+            title="Hole mapping"
+            description="Place the green, tee boxes, and fairway path for each hole."
+            viewportOffset="26rem"
+            mappingHoleNumbers={mappingHoleNumbers}
+            activeHole={activeHole}
+            onActiveHoleChange={setActiveHole}
+            isHoleComplete={isHoleMappingComplete}
+            mappingHoleCount={mappingHoleCount}
+            mappingProgress={mappingProgress}
+            showProgress
+            activeHolePar={activeHolePar}
+            activeHoleYardage={activeHoleYardage}
+            courseCenter={courseCenter}
+            courseTees={course.courseTees}
+            initialGreen={holePins[activeHole]?.green ?? null}
+            initialTees={holePins[activeHole]?.tees ?? {}}
+            initialLineBreak={holePins[activeHole]?.lineBreak ?? null}
+            scorecardYardages={activeHoleScorecardYardages}
+            isSaving={isPending}
+            backNineMirrorsFront={course.backNineMirrorsFront}
+            headerActions={
+              <>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-10 flex-1"
-                  disabled={activeHole <= 1}
-                  onClick={() => setActiveHole((current) => current - 1)}
-                >
-                  <ChevronLeft />
-                  Previous
-                </Button>
-                <span className="shrink-0 text-xs font-medium tabular-nums text-muted-foreground">
-                  {activeHole} / {mappingHoleCount}
-                  {course.backNineMirrorsFront && (
-                    <span className="text-muted-foreground">
-                      {" "}
-                      (18-hole scorecard)
-                    </span>
-                  )}
-                </span>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-10 flex-1"
                   disabled={activeHole >= mappingHoleCount}
                   onClick={() => setActiveHole((current) => current + 1)}
                 >
-                  Next
-                  <ChevronRight />
+                  Next hole
                 </Button>
-              </div>
-              {mappingProgress.isComplete && (
+                {mappingProgress.isComplete && (
+                  <Button type="button" size="sm" onClick={() => setStep("review")}>
+                    Continue to review
+                  </Button>
+                )}
+              </>
+            }
+            footerExtra={
+              mappingProgress.isComplete ? (
                 <Button
                   type="button"
                   className="h-10 w-full"
@@ -1424,9 +1503,35 @@ export function CourseOnboardingWizard({
                 >
                   Continue to review
                 </Button>
-              )}
-            </div>
-          </div>
+              ) : null
+            }
+            onSavePin={async (pin) => {
+              setError(null);
+              const result = await saveCourseOnboardingHolePin(
+                course.id,
+                activeHole,
+                pin
+              );
+              if (!result.success) {
+                setError(result.error ?? "Could not save pin.");
+                return;
+              }
+              setMessage(
+                pin.kind === "green"
+                  ? `Saved green for hole ${activeHole}.`
+                  : pin.kind === "tee"
+                    ? `Saved tee for hole ${activeHole}.`
+                    : pin.kind === "line_break"
+                      ? `Updated fairway line for hole ${activeHole}.`
+                      : pin.enabled
+                        ? `Enabled dogleg for hole ${activeHole}.`
+                        : `Set hole ${activeHole} to a straight path.`
+              );
+              startTransition(() => {
+                router.refresh();
+              });
+            }}
+          />
         </div>
       )}
 

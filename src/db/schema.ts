@@ -149,6 +149,8 @@ export const organizations = pgTable("organizations", {
   subscriptionCurrentPeriodEnd: timestamp("subscription_current_period_end", {
     withTimezone: true,
   }),
+  homeExternalCourseId: text("home_external_course_id"),
+  homeSelectedTeeKey: text("home_selected_tee_key"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -494,6 +496,9 @@ export const courseTees = pgTable(
     teeKey: text("tee_key").notNull(),
     teeName: text("tee_name").notNull(),
     teeColor: text("tee_color"),
+    combinationBaseTeeKeys: jsonb("combination_base_tee_keys").$type<
+      string[] | null
+    >(),
     sortOrder: integer("sort_order").notNull().default(0),
     courseRating: text("course_rating"),
     slope: integer("slope"),

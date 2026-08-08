@@ -1,17 +1,14 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 
-import { HandicapRowToggle } from "@/components/dashboard/handicap-row-toggle";
 import type { ScorecardHoleSnapshot } from "@/lib/scorecard";
 import { totalPar } from "@/lib/scorecard";
 import {
-  activeHandicapView,
-  defaultHandicapView,
-  handicapRowLabel,
+  ladiesHandicapRowLabel,
+  mensHandicapRowLabel,
   resolveHandicapAvailability,
   strokeIndexForHandicapView,
-  type HandicapView,
 } from "@/lib/scorecard-handicap-rows";
 import { cn } from "@/lib/utils";
 
@@ -103,13 +100,6 @@ export function EventScorecardPreview({
     () => resolveHandicapAvailability(holes),
     [holes]
   );
-  const [handicapView, setHandicapView] = useState<HandicapView>(() =>
-    defaultHandicapView(handicapAvailability)
-  );
-  const activeView = activeHandicapView(handicapView, handicapAvailability);
-  const handicapLabel = handicapRowLabel(handicapAvailability);
-  const showHandicapRow =
-    handicapAvailability.hasMens || handicapAvailability.hasLadies;
   const showNineTotals = holes.length === 18;
   const frontNine = showNineTotals ? holes.slice(0, 9) : holes;
   const backNine = showNineTotals ? holes.slice(9, 18) : [];
@@ -215,20 +205,19 @@ export function EventScorecardPreview({
                     }
                     emphasizeTotal
                   />
-                  {showHandicapRow && (
+                  {handicapAvailability.hasMens && (
                     <ScorecardRow
-                      label={
-                        handicapAvailability.hasBoth ? (
-                          <HandicapRowToggle
-                            view={activeView}
-                            onChange={setHandicapView}
-                          />
-                        ) : (
-                          handicapLabel
-                        )
-                      }
+                      label={mensHandicapRowLabel(handicapAvailability)}
                       values={section.holes.map((hole) =>
-                        strokeIndexForHandicapView(hole, activeView)
+                        strokeIndexForHandicapView(hole, "mens")
+                      )}
+                    />
+                  )}
+                  {handicapAvailability.hasLadies && (
+                    <ScorecardRow
+                      label={ladiesHandicapRowLabel()}
+                      values={section.holes.map((hole) =>
+                        strokeIndexForHandicapView(hole, "ladies")
                       )}
                     />
                   )}

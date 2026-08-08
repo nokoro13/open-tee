@@ -41,8 +41,10 @@ import {
   getDefaultScoreForHole,
   ScoreStepper,
 } from "@/components/public/score-stepper";
-import type { MatchRunningScore, RunningScore } from "@/lib/score-entry-utils";
+import type { CourseTee } from "@/db/schema";
+import { resolveEffectiveTeeKeyForHole } from "@/lib/course-tees";
 import type { ScoreEntryGroup } from "@/lib/scoring";
+import type { MatchRunningScore, RunningScore } from "@/lib/score-entry-utils";
 import {
   applyRemoteScores,
   computeMatchRunningScore,
@@ -99,6 +101,8 @@ type ScoreEntryFormProps = {
   holeFeaturesGeoJson?: Record<number, GeoJsonFeatureCollection | null>;
   selectedTeeKey?: string | null;
   selectedTeeColor?: string | null;
+  courseTees?: CourseTee[];
+  teeYardagesByEventHole?: Record<number, Record<string, number>>;
   pollIntervalMs?: number;
 };
 
@@ -317,6 +321,8 @@ export function ScoreEntryForm({
   holeFeaturesGeoJson,
   selectedTeeKey = null,
   selectedTeeColor = null,
+  courseTees = [],
+  teeYardagesByEventHole = {},
   pollIntervalMs = 1000,
 }: ScoreEntryFormProps) {
   const router = useRouter();
@@ -515,6 +521,23 @@ export function ScoreEntryForm({
 
   const activePar = parByHole[activeHole];
   const activeYardage = yardageByHole[activeHole];
+  const effectiveTeeKeyForHole = useMemo(() => {
+    if (!selectedTeeKey || courseTees.length === 0) return selectedTeeKey;
+    const holeYardages = teeYardagesByEventHole[activeHole];
+    if (!holeYardages) return selectedTeeKey;
+    return resolveEffectiveTeeKeyForHole(
+      selectedTeeKey,
+      courseTees,
+      holeYardages,
+      activeYardage
+    );
+  }, [
+    activeHole,
+    activeYardage,
+    courseTees,
+    selectedTeeKey,
+    teeYardagesByEventHole,
+  ]);
   const caddieEnabled = Boolean(greenTargetsByHole);
   const { position, distances, status: liveDistanceStatus, targets } =
     useLiveDistances(activeHole, greenTargetsByHole, caddieEnabled);
@@ -1313,7 +1336,7 @@ export function ScoreEntryForm({
         par={activePar}
         yardage={activeYardage}
         liveDistanceStatus={liveDistanceStatus}
-        selectedTeeKey={selectedTeeKey}
+        selectedTeeKey={effectiveTeeKeyForHole}
         selectedTeeColor={selectedTeeColor}
         usePlayerAsAnchor={activeHole === requiredHole}
         canGoPrevious={activeHoleIndex > 0}

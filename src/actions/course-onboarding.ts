@@ -30,6 +30,7 @@ import {
 import {
   normalizeTeeKey,
   sortCourseTees,
+  sortCourseTeesByTotalYardage,
   totalYardageForTee,
   type CourseTeeInput,
 } from "@/lib/course-tees";
@@ -456,12 +457,20 @@ export async function saveCourseOnboardingScorecard(
     };
   });
 
-  const teesWithTotals = sortCourseTees(tees).map((tee) => ({
+  const teesWithTotals = tees.map((tee) => ({
     ...tee,
     totalYardage: totalYardageForTee(tee.teeKey, normalizedHoles),
   }));
 
-  await replaceCourseTees(courseId, teesWithTotals);
+  const teesSortedByYardage = sortCourseTeesByTotalYardage(
+    teesWithTotals,
+    normalizedHoles
+  ).map((tee, index) => ({
+    ...tee,
+    sortOrder: index,
+  }));
+
+  await replaceCourseTees(courseId, teesSortedByYardage);
   await replaceCourseHoles(courseId, normalizedHoles);
 
   await getDb()

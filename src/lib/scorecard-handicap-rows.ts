@@ -84,6 +84,16 @@ export function handicapRowLabel(
   return "HCP";
 }
 
+export function mensHandicapRowLabel(
+  availability: ReturnType<typeof resolveHandicapAvailability>
+): string {
+  return availability.hasBoth ? "Men's HCP" : "HCP";
+}
+
+export function ladiesHandicapRowLabel(): string {
+  return "Ladies HCP";
+}
+
 export function buildHandicapRowsFromHoles(
   holes: { strokeIndex?: number | null; ladiesStrokeIndex?: number | null }[]
 ): ScorecardHandicapRowInput[] {

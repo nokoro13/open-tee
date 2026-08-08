@@ -17,6 +17,7 @@ import {
   parseManualHoleLineOsmId,
   parseManualTeeOsmId,
   sortCourseTees,
+  teesRequiringMapPins,
   totalYardageForTee,
   type CourseTeeInput,
 } from "@/lib/course-tees";
@@ -55,11 +56,12 @@ export type CourseMappingProgress = {
 
 export function countCourseMappingProgress(
   course: Pick<GolfCourse, "holeCount" | "backNineMirrorsFront">,
-  courseTees: Pick<CourseTee, "teeKey">[],
+  courseTees: Pick<CourseTee, "teeKey" | "teeName" | "sortOrder">[],
   greenTargets: { holeNumber: number; targetType: string }[],
   holeFeatures: { osmId: string | null; featureType: string; holeNumber?: number }[]
 ): CourseMappingProgress {
-  const teeKeys = courseTees.map((tee) => tee.teeKey);
+  const mappingTees = teesRequiringMapPins(courseTees);
+  const teeKeys = mappingTees.map((tee) => tee.teeKey);
   const mappingHoleCount = physicalHoleCount(course);
   const requiredTeeCount = mappingHoleCount * teeKeys.length;
 
@@ -828,6 +830,7 @@ export async function replaceCourseTees(courseId: string, tees: CourseTeeInput[]
       teeKey: tee.teeKey,
       teeName: tee.teeName,
       teeColor: tee.teeColor ?? null,
+      combinationBaseTeeKeys: tee.combinationBaseTeeKeys ?? null,
       sortOrder: tee.sortOrder,
       courseRating: tee.courseRating ?? null,
       slope: tee.slope ?? null,
@@ -1059,6 +1062,44 @@ export async function getVerifiedCourseDetail(
     }));
 
   if (!course || course.courseHoles.length === 0) return null;
+  return verifiedCourseToDetail(course);
+}
+
+export async function getCourseDetailByExternalId(
+  courseId: string
+): Promise<CourseDetail | null> {
+  const verified = await getVerifiedCourseDetail(courseId);
+  if (verified) return verified;
+
+  const db = getDb();
+  const course =
+    (await db.query.golfCourses.findFirst({
+      where: eq(golfCourses.externalCourseId, courseId),
+      with: {
+        courseTees: {
+          orderBy: [asc(courseTees.sortOrder), asc(courseTees.teeName)],
+        },
+        courseHoles: {
+          orderBy: [asc(courseHoles.holeNumber)],
+        },
+      },
+    })) ??
+    (await db.query.golfCourses.findFirst({
+      where: eq(golfCourses.id, courseId),
+      with: {
+        courseTees: {
+          orderBy: [asc(courseTees.sortOrder), asc(courseTees.teeName)],
+        },
+        courseHoles: {
+          orderBy: [asc(courseHoles.holeNumber)],
+        },
+      },
+    }));
+
+  if (!course || course.courseHoles.length === 0 || course.courseTees.length === 0) {
+    return null;
+  }
+
   return verifiedCourseToDetail(course);
 }
 

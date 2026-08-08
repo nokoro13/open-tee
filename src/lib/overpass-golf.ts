@@ -20,6 +20,8 @@ export type OsmGolfFeature = {
     | "scrub"
     | "tree";
   holeNumber: number | null;
+  /** Parsed from `golf:course` or refs like `5/18`. */
+  courseHoleCount: number | null;
   center: LatLng;
   geometry: OsmGeometry | null;
 };
@@ -59,28 +61,80 @@ const LINE_FEATURE_TYPES = new Set<OsmGolfFeature["featureType"]>([
   "cartpath",
 ]);
 
-function parseHoleNumber(tags: Record<string, string> | undefined): number | null {
-  if (!tags) return null;
+function parseCourseHoleCountFromTag(value: string): number | null {
+  const normalized = value.trim().toLowerCase();
+  const holeSuffix = normalized.match(/^(\d+)_hole$/);
+  if (holeSuffix) {
+    const count = Number.parseInt(holeSuffix[1]!, 10);
+    return Number.isFinite(count) && count >= 1 ? count : null;
+  }
+
+  const parsed = Number.parseInt(normalized, 10);
+  return Number.isFinite(parsed) && parsed >= 1 ? parsed : null;
+}
+
+function parseHoleRef(
+  raw: string
+): { holeNumber: number | null; courseHoleCount: number | null } {
+  const slashMatch = raw.trim().match(/^(\d{1,2})\s*\/\s*(\d{1,2})$/);
+  if (slashMatch) {
+    const holeNumber = Number.parseInt(slashMatch[1]!, 10);
+    const courseHoleCount = Number.parseInt(slashMatch[2]!, 10);
+    if (
+      Number.isFinite(holeNumber) &&
+      Number.isFinite(courseHoleCount) &&
+      holeNumber >= 1 &&
+      courseHoleCount >= 1
+    ) {
+      return { holeNumber, courseHoleCount };
+    }
+  }
+
+  const parsed = Number.parseInt(raw, 10);
+  if (Number.isFinite(parsed) && parsed >= 1 && parsed <= 18) {
+    return { holeNumber: parsed, courseHoleCount: null };
+  }
+
+  return { holeNumber: null, courseHoleCount: null };
+}
+
+export function parseOsmHoleTags(
+  tags: Record<string, string> | undefined
+): { holeNumber: number | null; courseHoleCount: number | null } {
+  if (!tags) return { holeNumber: null, courseHoleCount: null };
+
+  let holeNumber: number | null = null;
+  let courseHoleCount: number | null = null;
+
+  const courseTag = tags["golf:course"];
+  if (courseTag) {
+    courseHoleCount = parseCourseHoleCountFromTag(courseTag);
+  }
 
   for (const key of ["ref", "golf:hole", "hole"]) {
     const raw = tags[key];
     if (!raw) continue;
-    const parsed = Number.parseInt(raw, 10);
-    if (Number.isFinite(parsed) && parsed >= 1 && parsed <= 18) {
-      return parsed;
+    const parsed = parseHoleRef(raw);
+    if (parsed.holeNumber != null) {
+      holeNumber = parsed.holeNumber;
+      courseHoleCount ??= parsed.courseHoleCount;
+      break;
     }
   }
 
-  const nameMatch = tags.name?.match(/hole\s*#?\s*(\d{1,2})/i);
-  if (nameMatch) {
-    const parsed = Number.parseInt(nameMatch[1], 10);
-    if (Number.isFinite(parsed) && parsed >= 1 && parsed <= 18) {
-      return parsed;
+  if (holeNumber == null) {
+    const nameMatch = tags.name?.match(/hole\s*#?\s*(\d{1,2})/i);
+    if (nameMatch) {
+      const parsed = Number.parseInt(nameMatch[1]!, 10);
+      if (Number.isFinite(parsed) && parsed >= 1 && parsed <= 18) {
+        holeNumber = parsed;
+      }
     }
   }
 
-  return null;
+  return { holeNumber, courseHoleCount };
 }
+
 
 function mapGolfTag(golfTag: string | undefined): OsmGolfFeature["featureType"] | null {
   switch (golfTag) {
@@ -305,16 +359,237 @@ out body geom;
     const geometry = geometryForFeature(featureType, coords);
     if (!geometry) continue;
 
+    const { holeNumber, courseHoleCount } = parseOsmHoleTags(element.tags);
+
     features.push({
       osmId: `${element.type}/${element.id}`,
       featureType,
-      holeNumber: parseHoleNumber(element.tags),
+      holeNumber,
+      courseHoleCount,
       center,
       geometry,
     });
   }
 
   return features;
+}
+
+type LayoutBucketKey = number | "unknown";
+
+function layoutBucketKey(feature: OsmGolfFeature): LayoutBucketKey {
+  return feature.courseHoleCount ?? "unknown";
+}
+
+function scoreHoleWayLayout(
+  holeWays: OsmGolfFeature[],
+  holeCount: number
+): number {
+  const layoutCount =
+    holeWays.find((way) => way.courseHoleCount != null)?.courseHoleCount ?? null;
+  const holeNumbers = new Set(
+    holeWays
+      .map((way) => way.holeNumber)
+      .filter((holeNumber): holeNumber is number => holeNumber != null)
+  );
+
+  let score = 0;
+  for (let hole = 1; hole <= holeCount; hole += 1) {
+    if (holeNumbers.has(hole)) score += 10;
+  }
+
+  if (layoutCount === holeCount) score += 1000;
+  if (layoutCount != null && layoutCount !== holeCount) score -= 5000;
+
+  score -= (holeWays.length - holeNumbers.size) * 5;
+
+  return score;
+}
+
+function disambiguateUnknownHoleWays(
+  holeWays: OsmGolfFeature[],
+  holeCount: number
+): OsmGolfFeature[] {
+  const byNumber = new Map<number, OsmGolfFeature[]>();
+  for (const way of holeWays) {
+    if (way.holeNumber == null) continue;
+    const list = byNumber.get(way.holeNumber) ?? [];
+    list.push(way);
+    byNumber.set(way.holeNumber, list);
+  }
+
+  const anchorWays = holeWays.filter(
+    (way) =>
+      way.holeNumber != null &&
+      way.holeNumber > Math.min(9, holeCount - 1) &&
+      way.holeNumber <= holeCount
+  );
+  const anchorCentroid =
+    anchorWays.length > 0
+      ? centroid(anchorWays.map((way) => way.center))
+      : null;
+
+  const selected: OsmGolfFeature[] = [];
+  for (let hole = 1; hole <= holeCount; hole += 1) {
+    const candidates = byNumber.get(hole) ?? [];
+    if (candidates.length === 0) continue;
+    if (candidates.length === 1 || !anchorCentroid) {
+      selected.push(candidates[0]!);
+      continue;
+    }
+
+    let best = candidates[0]!;
+    let bestDistance = Infinity;
+    for (const candidate of candidates) {
+      const distance = yardsBetween(candidate.center, anchorCentroid);
+      if (distance < bestDistance) {
+        best = candidate;
+        bestDistance = distance;
+      }
+    }
+    selected.push(best);
+  }
+
+  return selected;
+}
+
+function featureMatchesSelectedLayout(
+  feature: OsmGolfFeature,
+  selectedLayoutCount: number | null,
+  selectedHoleWays: OsmGolfFeature[],
+  holeCount: number
+): boolean {
+  if (feature.holeNumber == null) return true;
+  if (feature.holeNumber < 1 || feature.holeNumber > holeCount) return false;
+
+  if (feature.courseHoleCount != null) {
+    if (selectedLayoutCount != null) {
+      return feature.courseHoleCount === selectedLayoutCount;
+    }
+    return feature.courseHoleCount === holeCount;
+  }
+
+  if (feature.featureType === "hole") {
+    return selectedHoleWays.some((way) => way.osmId === feature.osmId);
+  }
+
+  return selectedHoleWays.some((way) => way.holeNumber === feature.holeNumber);
+}
+
+/**
+ * When a facility has multiple layouts (e.g. 18-hole + 9-hole), keep only OSM
+ * features that belong to the layout matching `holeCount`.
+ */
+export function filterOsmFeaturesForHoleCount(
+  features: OsmGolfFeature[],
+  holeCount: number
+): OsmGolfFeature[] {
+  const holeWays = features.filter(
+    (feature) =>
+      feature.featureType === "hole" &&
+      feature.holeNumber != null &&
+      feature.holeNumber >= 1 &&
+      feature.holeNumber <= holeCount
+  );
+
+  if (holeWays.length === 0) {
+    return features.filter(
+      (feature) => feature.holeNumber == null || feature.holeNumber <= holeCount
+    );
+  }
+
+  const layoutBuckets = new Map<LayoutBucketKey, OsmGolfFeature[]>();
+  for (const way of holeWays) {
+    const key = layoutBucketKey(way);
+    const bucket = layoutBuckets.get(key) ?? [];
+    bucket.push(way);
+    layoutBuckets.set(key, bucket);
+  }
+
+  let bestBucket: OsmGolfFeature[] = holeWays;
+  let bestScore = -Infinity;
+
+  for (const bucket of layoutBuckets.values()) {
+    const score = scoreHoleWayLayout(bucket, holeCount);
+    if (score > bestScore) {
+      bestScore = score;
+      bestBucket = bucket;
+    }
+  }
+
+  const selectedLayoutCount =
+    bestBucket.find((way) => way.courseHoleCount != null)?.courseHoleCount ?? null;
+
+  const selectedHoleWays =
+    selectedLayoutCount == null &&
+    bestBucket.length > new Set(bestBucket.map((way) => way.holeNumber)).size
+      ? disambiguateUnknownHoleWays(bestBucket, holeCount)
+      : bestBucket.filter((way, index, ways) => {
+          if (way.holeNumber == null) return false;
+          return (
+            ways.findIndex((candidate) => candidate.holeNumber === way.holeNumber) ===
+            index
+          );
+        });
+
+  const selectedHoleWayIds = new Set(selectedHoleWays.map((way) => way.osmId));
+  const selectedWayByHole = new Map<number, OsmGolfFeature>();
+  for (const way of selectedHoleWays) {
+    if (way.holeNumber != null) {
+      selectedWayByHole.set(way.holeNumber, way);
+    }
+  }
+
+  const filtered = features.filter((feature) => {
+    if (feature.featureType === "hole" && feature.holeNumber != null) {
+      return selectedHoleWayIds.has(feature.osmId);
+    }
+
+    return featureMatchesSelectedLayout(
+      feature,
+      selectedLayoutCount,
+      selectedHoleWays,
+      holeCount
+    );
+  });
+
+  const ambiguousGroups = new Map<string, OsmGolfFeature[]>();
+  const definiteKeep = new Set<string>();
+
+  for (const feature of filtered) {
+    if (feature.holeNumber == null || feature.courseHoleCount != null) {
+      definiteKeep.add(feature.osmId);
+      continue;
+    }
+
+    const key = `${feature.featureType}:${feature.holeNumber}`;
+    const group = ambiguousGroups.get(key) ?? [];
+    group.push(feature);
+    ambiguousGroups.set(key, group);
+  }
+
+  for (const group of ambiguousGroups.values()) {
+    if (group.length === 1) {
+      definiteKeep.add(group[0]!.osmId);
+      continue;
+    }
+
+    const holeNumber = group[0]!.holeNumber!;
+    const anchor = selectedWayByHole.get(holeNumber)?.center;
+    let best = group[0]!;
+    if (anchor) {
+      let bestDistance = Infinity;
+      for (const feature of group) {
+        const distance = yardsBetween(feature.center, anchor);
+        if (distance < bestDistance) {
+          best = feature;
+          bestDistance = distance;
+        }
+      }
+    }
+    definiteKeep.add(best.osmId);
+  }
+
+  return filtered.filter((feature) => definiteKeep.has(feature.osmId));
 }
 
 export type AssignedGreen = {

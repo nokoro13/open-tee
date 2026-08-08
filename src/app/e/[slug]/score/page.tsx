@@ -152,6 +152,8 @@ export default async function ScorePage({ params, searchParams }: ScorePageProps
       holeFeaturesGeoJson={caddieContext?.holeFeaturesByHole}
       selectedTeeKey={event.selectedTeeKey}
       selectedTeeColor={caddieContext?.selectedTeeColor ?? null}
+      courseTees={caddieContext?.courseTees ?? []}
+      teeYardagesByEventHole={caddieContext?.teeYardagesByEventHole ?? {}}
     />
   );
 }

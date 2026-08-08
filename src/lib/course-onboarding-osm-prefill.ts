@@ -11,6 +11,7 @@ import { assignOsmFeaturesToHoles } from "@/lib/hole-spatial-features";
 import {
   assignGreensToHoles,
   fetchOsmGolfFeaturesNear,
+  filterOsmFeaturesForHoleCount,
   type OsmGolfFeature,
 } from "@/lib/overpass-golf";
 import { sortCourseTees } from "@/lib/course-tees";
@@ -148,9 +149,9 @@ export async function buildOsmOnboardingDraft(options: {
   let allFeatures: OsmGolfFeature[] = [];
 
   try {
-    allFeatures = await fetchOsmGolfFeaturesNear(
-      options.latitude,
-      options.longitude
+    allFeatures = filterOsmFeaturesForHoleCount(
+      await fetchOsmGolfFeaturesNear(options.latitude, options.longitude),
+      options.holeCount
     );
   } catch (error) {
     overpassError =

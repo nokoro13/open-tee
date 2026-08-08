@@ -14,6 +14,8 @@ export type ActionResult =
 export type OrganizationSettingsInput = {
   name: string;
   contactEmail: string;
+  homeExternalCourseId: string | null;
+  homeSelectedTeeKey: string | null;
 };
 
 function parseOrganizationInput(
@@ -35,7 +37,17 @@ function parseOrganizationInput(
     return { success: false, error: "Enter a valid contact email." };
   }
 
-  return { name, contactEmail };
+  const homeExternalCourseId = input.homeExternalCourseId?.trim() || null;
+  const homeSelectedTeeKey = homeExternalCourseId
+    ? input.homeSelectedTeeKey?.trim() || null
+    : null;
+
+  return {
+    name,
+    contactEmail,
+    homeExternalCourseId,
+    homeSelectedTeeKey,
+  };
 }
 
 export async function updateOrganization(
@@ -52,6 +64,8 @@ export async function updateOrganization(
     .set({
       name: parsed.name,
       contactEmail: parsed.contactEmail || null,
+      homeExternalCourseId: parsed.homeExternalCourseId,
+      homeSelectedTeeKey: parsed.homeSelectedTeeKey,
       updatedAt: new Date(),
     })
     .where(eq(organizations.id, org.id));
@@ -63,6 +77,7 @@ export async function updateOrganization(
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/events/new");
 
   for (const event of publishedEvents) {
     if (event.status === "published") {

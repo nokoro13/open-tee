@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   APIProvider,
   Map,
@@ -8,13 +8,12 @@ import {
   type MapMouseEvent,
 } from "@vis.gl/react-google-maps";
 import {
-  ChevronDown,
+  Check,
   ChevronLeft,
   ChevronRight,
   Flag,
   Maximize2,
   Pencil,
-  Ruler,
   ShieldCheck,
   X,
 } from "lucide-react";
@@ -33,7 +32,13 @@ import {
   bearingDegrees,
   type HoleMapView,
 } from "@/lib/hole-map-view";
-import { sortCourseTees, teeMarkerColor } from "@/lib/course-tees";
+import {
+  getCombinationBaseTeeKeys,
+  resolveCombinationTeeKeyForHole,
+  sortCourseTees,
+  teeMarkerColor,
+  teesRequiringMapPins,
+} from "@/lib/course-tees";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -50,6 +55,7 @@ import {
 } from "@/lib/google-maps-config";
 
 type PinMode =
+  | { kind: "none" }
   | { kind: "green" }
   | { kind: "tee"; teeKey: string };
 
@@ -90,18 +96,7 @@ function isHoleMapped(
   courseTees: CourseTee[]
 ): boolean {
   if (!green) return false;
-  return sortCourseTees(courseTees).every((tee) => tees[tee.teeKey] != null);
-}
-
-function nextPinMode(
-  tees: CourseTee[],
-  green: LatLng | null,
-  placedTees: Record<string, LatLng>
-): PinMode {
-  if (!green) return { kind: "green" };
-  const missingTee = sortCourseTees(tees).find((tee) => !placedTees[tee.teeKey]);
-  if (missingTee) return { kind: "tee", teeKey: missingTee.teeKey };
-  return { kind: "green" };
+  return teesRequiringMapPins(courseTees).every((tee) => tees[tee.teeKey] != null);
 }
 
 function defaultSharedLineBreak(
@@ -292,6 +287,7 @@ function HoleYardageGuide({
   scorecardYardages,
   isDragging,
   focusedTeeKey,
+  className,
 }: {
   sortedTees: CourseTee[];
   tees: Record<string, LatLng>;
@@ -301,14 +297,17 @@ function HoleYardageGuide({
   scorecardYardages: Record<string, number>;
   isDragging: boolean;
   focusedTeeKey: string | null;
+  className?: string;
 }) {
-  const [expanded, setExpanded] = useState(false);
-
   const rows = sortedTees
-    .filter((tee) => focusedTeeKey == null || tee.teeKey === focusedTeeKey)
     .map((tee) => {
-      const from = tees[tee.teeKey];
+      const baseKeys = getCombinationBaseTeeKeys(tee, sortedTees);
       const target = scorecardYardages[tee.teeKey];
+      const resolvedTeeKey =
+        baseKeys && target != null
+          ? resolveCombinationTeeKeyForHole(target, scorecardYardages, baseKeys)
+          : tee.teeKey;
+      const from = resolvedTeeKey ? tees[resolvedTeeKey] : null;
       if (from == null || green == null || target == null) {
         return null;
       }
@@ -317,109 +316,69 @@ function HoleYardageGuide({
         if (lineBreak == null) return null;
         const measured = measureHolePathYardage(from, lineBreak, green);
         const delta = yardageMatchDelta(measured.total, target);
-        const tone = yardageMatchTone(delta);
-
         return {
           tee,
           target,
-          measuredLabel: `${measured.leg1}+${measured.leg2}=${measured.total}`,
+          measured: measured.total,
           delta,
-          tone,
+          tone: yardageMatchTone(delta),
         };
       }
 
-      const measuredTotal = segmentYards(from, green);
-      const delta = yardageMatchDelta(measuredTotal, target);
-      const tone = yardageMatchTone(delta);
-
+      const measured = segmentYards(from, green);
+      const delta = yardageMatchDelta(measured, target);
       return {
         tee,
         target,
-        measuredLabel: String(measuredTotal),
+        measured,
         delta,
-        tone,
+        tone: yardageMatchTone(delta),
       };
     })
     .filter((row): row is NonNullable<typeof row> => row != null);
 
   if (rows.length === 0) return null;
 
-  const isOpen = expanded || isDragging;
-
-  if (!isOpen) {
-    return (
-      <div className="pointer-events-none absolute left-3 top-3 z-10">
-        <button
-          type="button"
-          onClick={() => setExpanded(true)}
-          className="pointer-events-auto inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/78 py-1.5 pl-2.5 pr-3 text-white shadow-lg backdrop-blur-sm transition-colors hover:bg-black/90"
-        >
-          <Ruler className="size-3 text-white/70" />
-          <span className="text-[10px] font-medium uppercase tracking-wide text-white/70">
+  return (
+    <div className={cn("pointer-events-none absolute left-2 top-2 z-10", className)}>
+      <div className="pointer-events-auto rounded-md border border-white/15 bg-black/78 px-2 py-1.5 text-[11px] text-white shadow-lg backdrop-blur-sm">
+        <div className="mb-1 flex items-center justify-between gap-2">
+          <span className="text-[10px] font-medium uppercase tracking-wide text-white/55">
             Yardage
           </span>
-          <span className="inline-flex items-center gap-1">
-            {rows.map((row) => (
-              <span
-                key={row.tee.teeKey}
-                className={cn(
-                  "size-1.5 rounded-full",
-                  row.tone === "match" && "bg-emerald-400",
-                  row.tone === "close" && "bg-amber-400",
-                  row.tone === "off" && "bg-red-400"
-                )}
-              />
-            ))}
-          </span>
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="pointer-events-none absolute left-3 top-3 z-10 w-[min(calc(100%-1.5rem),17rem)]">
-      <div className="pointer-events-auto rounded-lg border border-white/15 bg-black/78 px-3 py-2.5 text-white shadow-lg backdrop-blur-sm">
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <p className="text-[10px] font-medium uppercase tracking-wide text-white/70">
-            Yardage guide
-          </p>
-          <div className="flex items-center gap-2">
-            {isDragging && (
-              <span className="text-[10px] font-semibold text-emerald-400">
-                Live
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={() => setExpanded(false)}
-              className="-m-1 rounded p-1 text-white/60 transition-colors hover:text-white"
-              aria-label="Collapse yardage guide"
-            >
-              <ChevronDown className="size-3.5 rotate-180" />
-            </button>
-          </div>
+          {isDragging && (
+            <span className="text-[10px] font-semibold text-emerald-400">
+              Live
+            </span>
+          )}
         </div>
-        <div className="space-y-1.5">
+        <div className="space-y-0.5">
           {rows.map((row) => (
             <div
               key={row.tee.teeKey}
-              className="grid grid-cols-[auto_1fr_auto] items-center gap-x-2 gap-y-0.5 text-[11px]"
+              className={cn(
+                "flex items-center gap-1.5 tabular-nums",
+                focusedTeeKey === row.tee.teeKey && "text-white",
+                focusedTeeKey != null &&
+                  focusedTeeKey !== row.tee.teeKey &&
+                  "text-white/55"
+              )}
             >
-              <span className="inline-flex items-center gap-1.5 font-medium text-white">
-                <span
-                  className="size-2 rounded-full border border-white/20"
-                  style={{ backgroundColor: teeMarkerColor(row.tee) }}
-                />
+              <span
+                className="size-1.5 shrink-0 rounded-full border border-white/20"
+                style={{ backgroundColor: teeMarkerColor(row.tee) }}
+              />
+              <span className="w-14 shrink-0 truncate font-medium">
                 {row.tee.teeName}
               </span>
-              <span className="text-white/65">
-                {row.measuredLabel}
+              <span className="shrink-0 text-white/60">
+                {row.measured}
                 <span className="text-white/30">/</span>
                 {row.target}
               </span>
               <span
                 className={cn(
-                  "font-semibold tabular-nums",
+                  "shrink-0 font-semibold",
                   row.tone === "match" && "text-emerald-400",
                   row.tone === "close" && "text-amber-400",
                   row.tone === "off" && "text-red-400"
@@ -436,6 +395,48 @@ function HoleYardageGuide({
   );
 }
 
+function ControlSection({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </p>
+      {children}
+    </div>
+  );
+}
+
+function PinModeToggleGroup({
+  children,
+  columns = 1,
+  compact = false,
+}: {
+  children: ReactNode;
+  columns?: 1 | 2;
+  compact?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-lg bg-muted/80 p-1",
+        compact
+          ? "inline-flex flex-wrap gap-1"
+          : columns === 2
+            ? "grid grid-cols-2 gap-1"
+            : "grid grid-cols-1 gap-1"
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
 function PinModeToggle({
   active,
   label,
@@ -443,6 +444,8 @@ function PinModeToggle({
   placed,
   onClick,
   disabled,
+  className,
+  compact = false,
 }: {
   active: boolean;
   label: string;
@@ -450,6 +453,8 @@ function PinModeToggle({
   placed?: boolean;
   onClick: () => void;
   disabled?: boolean;
+  className?: string;
+  compact?: boolean;
 }) {
   return (
     <button
@@ -457,21 +462,35 @@ function PinModeToggle({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
+        "inline-flex items-center rounded-md font-medium transition-colors",
+        compact
+          ? "gap-1.5 px-2 py-1 text-[11px]"
+          : "w-full gap-2 px-2.5 py-2 text-xs",
         active
           ? "bg-background text-foreground shadow-sm ring-1 ring-foreground/10"
           : "text-muted-foreground hover:bg-background/60 hover:text-foreground",
-        disabled && "pointer-events-none opacity-50"
+        disabled && "pointer-events-none opacity-50",
+        className
       )}
     >
-      {color && (
+      {color ? (
         <span
-          className="size-2 shrink-0 rounded-full border border-foreground/10"
+          className={cn(
+            "shrink-0 rounded-full border border-foreground/10",
+            compact ? "size-2" : "size-2.5"
+          )}
           style={{ backgroundColor: color }}
         />
-      )}
-      {label}
-      {placed && <span className="text-[10px] text-primary">✓</span>}
+      ) : null}
+      <span className={cn(compact ? "whitespace-nowrap" : "min-w-0 flex-1 truncate text-left")}>
+        {label}
+      </span>
+      {placed ? (
+        <Check
+          className={cn("shrink-0 text-primary", compact ? "size-2.5" : "size-3")}
+          aria-hidden
+        />
+      ) : null}
     </button>
   );
 }
@@ -494,6 +513,10 @@ export function CourseHolePinMap({
   canGoNext = false,
 }: CourseHolePinMapProps) {
   const sortedTees = useMemo(() => sortCourseTees(courseTees), [courseTees]);
+  const mappingTees = useMemo(
+    () => teesRequiringMapPins(courseTees),
+    [courseTees]
+  );
   const [green, setGreen] = useState<LatLng | null>(initialGreen);
   const [tees, setTees] = useState<Record<string, LatLng>>(initialTees);
   const [lineBreak, setLineBreak] = useState<LatLng | null>(initialLineBreak);
@@ -502,11 +525,11 @@ export function CourseHolePinMap({
   const [isEditing, setIsEditing] = useState(
     () => !isHoleMapped(initialGreen, initialTees, courseTees)
   );
-  const [mode, setMode] = useState<PinMode>(() =>
-    nextPinMode(sortedTees, initialGreen, initialTees)
-  );
-  const [focusedTeeKey, setFocusedTeeKey] = useState<string | null>(
-    () => sortedTees[0]?.teeKey ?? null
+  const [mode, setMode] = useState<PinMode>({ kind: "none" });
+  const [focusedTeeKey, setFocusedTeeKey] = useState<string | null>(() =>
+    isHoleMapped(initialGreen, initialTees, courseTees)
+      ? (mappingTees[0]?.teeKey ?? null)
+      : null
   );
   const [isFullscreen, setIsFullscreen] = useState(false);
   const previousHoleRef = useRef(holeNumber);
@@ -522,16 +545,14 @@ export function CourseHolePinMap({
     setDragPreview(null);
 
     if (holeChanged) {
-      const nextMode = nextPinMode(sortedTees, initialGreen, initialTees);
-      setMode(nextMode);
+      const complete = isHoleMapped(initialGreen, initialTees, courseTees);
+      setMode({ kind: "none" });
       setFocusedTeeKey(
-        nextMode.kind === "tee"
-          ? nextMode.teeKey
-          : (sortedTees[0]?.teeKey ?? null)
+        complete ? (mappingTees[0]?.teeKey ?? null) : null
       );
-      setIsEditing(!isHoleMapped(initialGreen, initialTees, sortedTees));
+      setIsEditing(!complete);
     }
-  }, [holeNumber, initialGreen, initialLineBreak, initialTees, sortedTees]);
+  }, [holeNumber, initialGreen, initialLineBreak, initialTees, courseTees, mappingTees]);
 
   useEffect(() => {
     if (mode.kind === "tee") {
@@ -559,10 +580,10 @@ export function CourseHolePinMap({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [isFullscreen]);
 
-  const holeComplete = isHoleMapped(green, tees, sortedTees);
+  const holeComplete = isHoleMapped(green, tees, courseTees);
   const isLocked = readOnly || (holeComplete && !isEditing);
   const dragToAdjust = !readOnly && holeComplete && isEditing;
-  const placedTeeCount = sortedTees.filter((tee) => tees[tee.teeKey]).length;
+  const placedTeeCount = mappingTees.filter((tee) => tees[tee.teeKey]).length;
   const hasPinData =
     initialGreen != null || Object.keys(initialTees).length > 0;
 
@@ -599,8 +620,8 @@ export function CourseHolePinMap({
     }
     if (lineBreak) return lineBreak;
     if (!liveGreen) return null;
-    return defaultSharedLineBreak(liveGreen, liveTees, sortedTees);
-  }, [dragPreview, hasDogleg, lineBreak, liveGreen, liveTees, sortedTees]);
+    return defaultSharedLineBreak(liveGreen, liveTees, mappingTees);
+  }, [dragPreview, hasDogleg, lineBreak, liveGreen, liveTees, mappingTees]);
 
   const canShowPathControls = liveGreen != null && placedTeeCount > 0;
   const pathControlsDisabled = readOnly || isLocked || isSaving;
@@ -612,7 +633,7 @@ export function CourseHolePinMap({
       setHasDogleg(enabled);
       if (enabled) {
         if (!lineBreak && liveGreen) {
-          setLineBreak(defaultSharedLineBreak(liveGreen, liveTees, sortedTees));
+          setLineBreak(defaultSharedLineBreak(liveGreen, liveTees, mappingTees));
         }
       } else {
         setLineBreak(null);
@@ -628,7 +649,7 @@ export function CourseHolePinMap({
       liveTees,
       onSavePin,
       pathControlsDisabled,
-      sortedTees,
+      mappingTees,
     ]
   );
 
@@ -639,21 +660,23 @@ export function CourseHolePinMap({
         initialTees,
         initialLineBreak,
         courseCenter,
-        sortedTees
+        mappingTees
       ),
     [
       courseCenter,
       initialGreen,
       initialLineBreak,
       initialTees,
-      sortedTees,
+      mappingTees,
     ]
   );
 
   const handleMapClick = useCallback(
     (event: MapMouseEvent) => {
       const latLng = event.detail.latLng;
-      if (!latLng || isSaving || isLocked || !onSavePin) return;
+      if (!latLng || isSaving || isLocked || !onSavePin || mode.kind === "none") {
+        return;
+      }
 
       const point = { lat: latLng.lat, lng: latLng.lng };
 
@@ -672,7 +695,7 @@ export function CourseHolePinMap({
   const doglegTeeLines = useMemo(
     () =>
       hasDogleg && liveGreen && sharedLineBreak && focusedTeeKey
-        ? sortedTees
+        ? mappingTees
             .filter((tee) => tee.teeKey === focusedTeeKey)
             .map((tee) => {
               const from = liveTees[tee.teeKey];
@@ -691,7 +714,7 @@ export function CourseHolePinMap({
       hasDogleg,
       liveGreen,
       sharedLineBreak,
-      sortedTees,
+      mappingTees,
       liveTees,
     ]
   );
@@ -699,7 +722,7 @@ export function CourseHolePinMap({
   const straightTeeLines = useMemo(
     () =>
       !hasDogleg && liveGreen && focusedTeeKey
-        ? sortedTees
+        ? mappingTees
             .filter((tee) => tee.teeKey === focusedTeeKey)
             .map((tee) => {
               const from = liveTees[tee.teeKey];
@@ -708,11 +731,11 @@ export function CourseHolePinMap({
             })
             .filter((line): line is NonNullable<typeof line> => line != null)
         : [],
-    [focusedTeeKey, hasDogleg, liveGreen, sortedTees, liveTees]
+    [focusedTeeKey, hasDogleg, liveGreen, mappingTees, liveTees]
   );
 
   const focusedTeeName =
-    sortedTees.find((tee) => tee.teeKey === focusedTeeKey)?.teeName ?? null;
+    mappingTees.find((tee) => tee.teeKey === focusedTeeKey)?.teeName ?? null;
 
   function selectTeeFocus(teeKey: string) {
     setFocusedTeeKey(teeKey);
@@ -724,7 +747,10 @@ export function CourseHolePinMap({
   const modeLabel =
     mode.kind === "green"
       ? "green"
-      : sortedTees.find((tee) => tee.teeKey === mode.teeKey)?.teeName ?? "tee";
+      : mode.kind === "tee"
+        ? (mappingTees.find((tee) => tee.teeKey === mode.teeKey)?.teeName ??
+          "tee")
+        : null;
 
   if (!GOOGLE_MAPS_API_KEY) {
     return (
@@ -737,358 +763,484 @@ export function CourseHolePinMap({
 
   const showPlacementPicker = !readOnly && !isLocked && !dragToAdjust;
 
+  const compactPinToggles = (
+    <>
+      {showPlacementPicker && (
+        <PinModeToggleGroup compact>
+          <PinModeToggle
+            compact
+            active={mode.kind === "green"}
+            label="Green"
+            color="#16a34a"
+            placed={green != null}
+            onClick={() => {
+              setMode({ kind: "green" });
+              setFocusedTeeKey(null);
+            }}
+          />
+        </PinModeToggleGroup>
+      )}
+      {mappingTees.length > 0 && (
+        <PinModeToggleGroup compact>
+          {mappingTees.map((tee) => (
+            <PinModeToggle
+              key={tee.teeKey}
+              compact
+              active={
+                showPlacementPicker
+                  ? mode.kind === "tee" && mode.teeKey === tee.teeKey
+                  : focusedTeeKey === tee.teeKey
+              }
+              label={tee.teeName}
+              color={teeMarkerColor(tee)}
+              placed={tees[tee.teeKey] != null}
+              onClick={() => selectTeeFocus(tee.teeKey)}
+            />
+          ))}
+        </PinModeToggleGroup>
+      )}
+      {canShowPathControls && (
+        <PinModeToggleGroup compact>
+          <PinModeToggle
+            compact
+            active={!hasDogleg}
+            label="Straight"
+            onClick={() => handleDoglegToggle(false)}
+            disabled={pathControlsDisabled}
+          />
+          <PinModeToggle
+            compact
+            active={hasDogleg}
+            label="Dogleg"
+            onClick={() => handleDoglegToggle(true)}
+            disabled={pathControlsDisabled}
+          />
+        </PinModeToggleGroup>
+      )}
+    </>
+  );
+
+  const mapSurface = (
+    <>
+      {hasScorecardYardages && (
+        <HoleYardageGuide
+          sortedTees={sortedTees}
+          tees={liveTees}
+          green={liveGreen}
+          hasDogleg={hasDogleg}
+          lineBreak={sharedLineBreak}
+          scorecardYardages={scorecardYardages}
+          isDragging={dragPreview != null}
+          focusedTeeKey={focusedTeeKey}
+        />
+      )}
+      <APIProvider apiKey={GOOGLE_MAPS_API_KEY}>
+        <Map
+          defaultCenter={pinMapView.center}
+          defaultZoom={17}
+          defaultHeading={pinMapView.bearing}
+          {...GOLF_SATELLITE_MAP_PROPS}
+          renderingType={RenderingType.VECTOR}
+          gestureHandling="greedy"
+          draggableCursor={
+            dragToAdjust ||
+            (showPlacementPicker && mode.kind !== "none")
+              ? "crosshair"
+              : undefined
+          }
+          disableDefaultUI
+          zoomControl
+          rotateControl={false}
+          headingInteractionEnabled={false}
+          tiltInteractionEnabled={false}
+          onClick={isLocked || dragToAdjust ? undefined : handleMapClick}
+          className="absolute inset-0 size-full"
+        >
+          <MapCameraController
+            view={pinMapView}
+            resetKey={holeNumber}
+            enabled={hasPinData}
+          />
+          {straightTeeLines.map((line) => (
+            <StraightTeeLine key={line.teeKey} from={line.from} to={line.to} />
+          ))}
+          {doglegTeeLines.map((line) => (
+            <TeeLineSegments
+              key={line.teeKey}
+              from={line.from}
+              to={line.to}
+              breakPoint={line.breakPoint}
+            />
+          ))}
+          {hasDogleg && sharedLineBreak && focusedTeeKey && (
+            <SharedDoglegMarker
+              position={sharedLineBreak}
+              disabled={isSaving || isLocked}
+              onDrag={(point) => {
+                if (isLocked) return;
+                setDragPreview({ kind: "line_break", ...point });
+              }}
+              onDragEnd={(point) => {
+                if (isLocked || !onSavePin) return;
+                setDragPreview(null);
+                setLineBreak(point);
+                setHasDogleg(true);
+                void onSavePin({
+                  kind: "line_break",
+                  ...point,
+                });
+              }}
+            />
+          )}
+          {mappingTees.map((tee) => {
+            const position = liveTees[tee.teeKey];
+            if (!position) return null;
+            const canDrag = !isLocked && !isSaving;
+            const isFocused = tee.teeKey === focusedTeeKey;
+            return (
+              <LabeledCircleMarker
+                key={tee.teeKey}
+                position={position}
+                draggable={canDrag}
+                clickable={canDrag}
+                opacity={isFocused ? 1 : 0.45}
+                zIndex={isFocused ? 42 : canDrag ? 40 : undefined}
+                title={
+                  canDrag
+                    ? `Drag to move ${tee.teeName} tee`
+                    : tee.teeName
+                }
+                label={tee.teeName.slice(0, 1).toUpperCase()}
+                fill={teeMarkerColor(tee)}
+                stroke="#ffffff"
+                radius={9}
+                onClick={() => selectTeeFocus(tee.teeKey)}
+                onDrag={(point) => {
+                  if (isLocked) return;
+                  setFocusedTeeKey(tee.teeKey);
+                  setDragPreview({
+                    kind: "tee",
+                    teeKey: tee.teeKey,
+                    ...point,
+                  });
+                }}
+                onDragEnd={(point) => {
+                  if (isLocked || !onSavePin) return;
+                  setDragPreview(null);
+                  setTees((current) => ({
+                    ...current,
+                    [tee.teeKey]: point,
+                  }));
+                  void onSavePin({
+                    kind: "tee",
+                    teeKey: tee.teeKey,
+                    ...point,
+                  });
+                }}
+              />
+            );
+          })}
+          {liveGreen && (
+            <LabeledCircleMarker
+              position={liveGreen}
+              draggable={!isLocked && !isSaving}
+              zIndex={!isLocked && !isSaving ? 41 : undefined}
+              title={
+                !isLocked && !isSaving ? "Drag to move green" : undefined
+              }
+              label="G"
+              fill="#16a34a"
+              stroke="#ffffff"
+              radius={9}
+              onDrag={(point) => {
+                if (isLocked) return;
+                setDragPreview({
+                  kind: "green",
+                  ...point,
+                });
+              }}
+              onDragEnd={(point) => {
+                if (isLocked || !onSavePin) return;
+                setDragPreview(null);
+                setGreen(point);
+                void onSavePin({ kind: "green", ...point });
+              }}
+            />
+          )}
+        </Map>
+      </APIProvider>
+    </>
+  );
+
+  if (isFullscreen) {
+    return (
+      <div className={cn("fixed inset-0 z-50 flex flex-col bg-background", className)}>
+        <div className="shrink-0 p-3">
+          <div className="rounded-lg border bg-background/95 px-3 py-2 shadow-lg backdrop-blur-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="outline"
+                aria-label="Close full map"
+                onClick={() => setIsFullscreen(false)}
+              >
+                <X />
+              </Button>
+
+              {(onPreviousHole || onNextHole) && (
+                <div className="inline-flex items-center rounded-full border bg-muted/60">
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="ghost"
+                    className="rounded-full"
+                    disabled={!canGoPrevious}
+                    aria-label="Previous hole"
+                    onClick={onPreviousHole}
+                  >
+                    <ChevronLeft />
+                  </Button>
+                  <span className="min-w-14 px-1 text-center text-xs font-semibold tabular-nums">
+                    Hole {holeNumber}
+                  </span>
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="ghost"
+                    className="rounded-full"
+                    disabled={!canGoNext}
+                    aria-label="Next hole"
+                    onClick={onNextHole}
+                  >
+                    <ChevronRight />
+                  </Button>
+                </div>
+              )}
+
+              {holeComplete && (
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                  Complete
+                </span>
+              )}
+
+              <div className="hidden h-5 w-px bg-border sm:block" />
+
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+                {compactPinToggles}
+              </div>
+
+              {!readOnly &&
+                (isLocked ? (
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    aria-label="Edit hole"
+                    onClick={() => setIsEditing(true)}
+                  >
+                    <Pencil />
+                  </Button>
+                ) : (
+                  holeComplete &&
+                  isEditing && (
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="outline"
+                      aria-label="Lock hole"
+                      onClick={() => setIsEditing(false)}
+                    >
+                      <ShieldCheck />
+                    </Button>
+                  )
+                ))}
+
+              <span className="hidden items-center gap-1.5 text-[11px] text-muted-foreground lg:inline-flex">
+                <Flag className="size-3" />
+                {placedTeeCount}/{mappingTees.length}
+                {isSaving && (
+                  <span className="text-primary">· Saving…</span>
+                )}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="relative min-h-0 flex-1">{mapSurface}</div>
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn(
-        "flex min-h-0 flex-col bg-background",
-        isFullscreen
-          ? "fixed inset-0 z-50"
-          : "h-full",
+        "flex min-h-0 h-full flex-col bg-background sm:flex-row",
         className
       )}
     >
-      <div className="shrink-0 border-b bg-background px-3 py-3 sm:px-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 space-y-1">
-            {isFullscreen ? (
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="outline"
-                  aria-label="Close full map"
-                  onClick={() => setIsFullscreen(false)}
-                >
-                  <X />
-                </Button>
-                {(onPreviousHole || onNextHole) && (
-                  <div className="inline-flex items-center rounded-full border bg-muted/60">
-                    <Button
-                      type="button"
-                      size="icon-sm"
-                      variant="ghost"
-                      className="rounded-full"
-                      disabled={!canGoPrevious}
-                      aria-label="Previous hole"
-                      onClick={onPreviousHole}
-                    >
-                      <ChevronLeft />
-                    </Button>
-                    <span className="min-w-16 px-1 text-center text-sm font-semibold tabular-nums">
-                      Hole {holeNumber}
-                    </span>
-                    <Button
-                      type="button"
-                      size="icon-sm"
-                      variant="ghost"
-                      className="rounded-full"
-                      disabled={!canGoNext}
-                      aria-label="Next hole"
-                      onClick={onNextHole}
-                    >
-                      <ChevronRight />
-                    </Button>
+      <div className="flex max-h-[48%] min-h-0 min-w-0 shrink-0 flex-col overflow-hidden border-b bg-background sm:max-h-full sm:w-80 sm:border-b-0 sm:border-r">
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="space-y-4 px-4 py-3">
+            <div className="space-y-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+                    {holeNumber}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <p className="font-medium leading-tight">
+                        Hole {holeNumber}
+                      </p>
+                      {holeComplete && (
+                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                          Complete
+                        </span>
+                      )}
+                    </div>
                   </div>
-                )}
-                {holeComplete && (
-                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
-                    Complete
-                  </span>
-                )}
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <span className="inline-flex size-7 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-                  {holeNumber}
-                </span>
-                <p className="font-medium">Hole {holeNumber}</p>
-                {holeComplete && (
-                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
-                    Complete
-                  </span>
-                )}
-              </div>
-            )}
-            <p className="text-xs text-muted-foreground">
-              {readOnly
-                ? focusedTeeName
-                  ? `Showing ${focusedTeeName} target line. Select another tee to switch.`
-                  : "Select a tee box to show its target line."
-                : isLocked
-                  ? "Locked — click Edit to adjust pins."
-                  : dragToAdjust
-                    ? focusedTeeName
-                      ? `Editing ${focusedTeeName}. Only that tee's line is shown — select another tee to switch.`
-                      : "Select a tee box to show its target line, then drag pins to adjust."
-                    : hasScorecardYardages
-                      ? `Placing ${modeLabel}. Match map yardages to scorecard targets on the map.`
-                      : `Placing ${modeLabel}. Use Straight for a direct tee-to-green line, or Dogleg when the hole bends.`}
-            </p>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-2">
-            {!isFullscreen && (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => setIsFullscreen(true)}
-              >
-                <Maximize2 />
-                <span className="sm:hidden">Map</span>
-                <span className="hidden sm:inline">Full map</span>
-              </Button>
-            )}
-            {!readOnly &&
-              (isLocked ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => setIsEditing(true)}
-                >
-                  <Pencil />
-                  Edit
-                </Button>
-              ) : (
-                holeComplete &&
-                isEditing && (
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
                   <Button
                     type="button"
-                    size="sm"
+                    size="icon-sm"
                     variant="outline"
-                    onClick={() => setIsEditing(false)}
+                    aria-label="Open full map"
+                    onClick={() => setIsFullscreen(true)}
                   >
-                    <ShieldCheck />
-                    Lock hole
+                    <Maximize2 />
                   </Button>
-                )
-              ))}
+                  {!readOnly &&
+                    (isLocked ? (
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        aria-label="Edit hole"
+                        onClick={() => setIsEditing(true)}
+                      >
+                        <Pencil />
+                      </Button>
+                    ) : (
+                      holeComplete &&
+                      isEditing && (
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant="outline"
+                          aria-label="Lock hole"
+                          onClick={() => setIsEditing(false)}
+                        >
+                          <ShieldCheck />
+                        </Button>
+                      )
+                    ))}
+                </div>
+              </div>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {readOnly
+                  ? focusedTeeName
+                    ? `Showing ${focusedTeeName} target line. Select another tee to switch.`
+                    : "Select a tee box to show its target line."
+                  : isLocked
+                    ? "Locked — click Edit to adjust pins."
+                    : dragToAdjust
+                      ? focusedTeeName
+                        ? `Editing ${focusedTeeName}. Select another tee to switch lines.`
+                        : "Select a tee box, then drag pins to adjust."
+                      : modeLabel == null
+                        ? "Select green or a tee box, then click the map to place it."
+                        : hasScorecardYardages
+                          ? `Placing ${modeLabel}. Match map yardages to scorecard targets.`
+                          : `Placing ${modeLabel}. Use Straight or Dogleg for the fairway path.`}
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              {showPlacementPicker && (
+                <ControlSection label="Place">
+                  <PinModeToggleGroup>
+                    <PinModeToggle
+                      active={mode.kind === "green"}
+                      label="Green"
+                      color="#16a34a"
+                      placed={green != null}
+                      onClick={() => {
+                        setMode({ kind: "green" });
+                        setFocusedTeeKey(null);
+                      }}
+                    />
+                  </PinModeToggleGroup>
+                </ControlSection>
+              )}
+
+              {mappingTees.length > 0 && (
+                <ControlSection label="Tee line">
+                  <PinModeToggleGroup columns={2}>
+                    {mappingTees.map((tee, index) => (
+                      <PinModeToggle
+                        key={tee.teeKey}
+                        className={
+                          mappingTees.length % 2 === 1 &&
+                          index === mappingTees.length - 1
+                            ? "col-span-2"
+                            : undefined
+                        }
+                        active={
+                          showPlacementPicker
+                            ? mode.kind === "tee" && mode.teeKey === tee.teeKey
+                            : focusedTeeKey === tee.teeKey
+                        }
+                        label={tee.teeName}
+                        color={teeMarkerColor(tee)}
+                        placed={tees[tee.teeKey] != null}
+                        onClick={() => selectTeeFocus(tee.teeKey)}
+                      />
+                    ))}
+                  </PinModeToggleGroup>
+                </ControlSection>
+              )}
+
+              {canShowPathControls && (
+                <ControlSection label="Path">
+                  <PinModeToggleGroup columns={2}>
+                    <PinModeToggle
+                      active={!hasDogleg}
+                      label="Straight"
+                      onClick={() => handleDoglegToggle(false)}
+                      disabled={pathControlsDisabled}
+                    />
+                    <PinModeToggle
+                      active={hasDogleg}
+                      label="Dogleg"
+                      onClick={() => handleDoglegToggle(true)}
+                      disabled={pathControlsDisabled}
+                    />
+                  </PinModeToggleGroup>
+                </ControlSection>
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="mt-3 space-y-2">
-          {showPlacementPicker && (
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                Place
-              </span>
-              <div className="flex flex-wrap gap-1 rounded-lg bg-muted/80 p-1">
-                <PinModeToggle
-                  active={mode.kind === "green"}
-                  label="Green"
-                  color="#16a34a"
-                  placed={green != null}
-                  onClick={() => setMode({ kind: "green" })}
-                />
-              </div>
-            </div>
-          )}
-
-          {sortedTees.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                Tee line
-              </span>
-              <div className="flex flex-wrap gap-1 rounded-lg bg-muted/80 p-1">
-                {sortedTees.map((tee) => (
-                  <PinModeToggle
-                    key={tee.teeKey}
-                    active={focusedTeeKey === tee.teeKey}
-                    label={tee.teeName}
-                    color={teeMarkerColor(tee)}
-                    placed={tees[tee.teeKey] != null}
-                    onClick={() => selectTeeFocus(tee.teeKey)}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {canShowPathControls && (
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                Path
-              </span>
-              <div className="flex flex-wrap gap-1 rounded-lg bg-muted/80 p-1">
-                <PinModeToggle
-                  active={!hasDogleg}
-                  label="Straight"
-                  onClick={() => handleDoglegToggle(false)}
-                  disabled={pathControlsDisabled}
-                />
-                <PinModeToggle
-                  active={hasDogleg}
-                  label="Dogleg"
-                  onClick={() => handleDoglegToggle(true)}
-                  disabled={pathControlsDisabled}
-                />
-              </div>
-            </div>
-          )}
+        <div className="flex shrink-0 items-center justify-between gap-3 border-t bg-muted/30 px-4 py-2 text-xs text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5">
+            <Flag className="size-3.5" />
+            {placedTeeCount}/{mappingTees.length} tees
+            <span className="text-foreground/20">·</span>
+            {green ? "Green set" : "Green needed"}
+            {focusedTeeName && (
+              <>
+                <span className="text-foreground/20">·</span>
+                <span className="text-foreground/80">{focusedTeeName} line</span>
+              </>
+            )}
+          </span>
+          {isSaving && <span className="text-primary">Saving…</span>}
         </div>
       </div>
 
-      <div className="relative min-h-0 flex-1 bg-zinc-950/3">
-        {hasScorecardYardages && (
-          <HoleYardageGuide
-            sortedTees={sortedTees}
-            tees={liveTees}
-            green={liveGreen}
-            hasDogleg={hasDogleg}
-            lineBreak={sharedLineBreak}
-            scorecardYardages={scorecardYardages}
-            isDragging={dragPreview != null}
-            focusedTeeKey={focusedTeeKey}
-          />
-        )}
-        <APIProvider apiKey={GOOGLE_MAPS_API_KEY}>
-          <Map
-            defaultCenter={pinMapView.center}
-            defaultZoom={17}
-            defaultHeading={pinMapView.bearing}
-            {...GOLF_SATELLITE_MAP_PROPS}
-            renderingType={RenderingType.VECTOR}
-            gestureHandling="greedy"
-            draggableCursor={
-              showPlacementPicker || dragToAdjust ? "crosshair" : undefined
-            }
-            disableDefaultUI
-            zoomControl
-            rotateControl={false}
-            headingInteractionEnabled={false}
-            tiltInteractionEnabled={false}
-            onClick={isLocked || dragToAdjust ? undefined : handleMapClick}
-            className="absolute inset-0 size-full"
-          >
-            <MapCameraController
-              view={pinMapView}
-              resetKey={holeNumber}
-              enabled={hasPinData}
-            />
-            {straightTeeLines.map((line) => (
-              <StraightTeeLine key={line.teeKey} from={line.from} to={line.to} />
-            ))}
-            {doglegTeeLines.map((line) => (
-              <TeeLineSegments
-                key={line.teeKey}
-                from={line.from}
-                to={line.to}
-                breakPoint={line.breakPoint}
-              />
-            ))}
-            {hasDogleg && sharedLineBreak && focusedTeeKey && (
-              <SharedDoglegMarker
-                position={sharedLineBreak}
-                disabled={isSaving || isLocked}
-                onDrag={(point) => {
-                  if (isLocked) return;
-                  setDragPreview({ kind: "line_break", ...point });
-                }}
-                onDragEnd={(point) => {
-                  if (isLocked || !onSavePin) return;
-                  setDragPreview(null);
-                  setLineBreak(point);
-                  setHasDogleg(true);
-                  void onSavePin({
-                    kind: "line_break",
-                    ...point,
-                  });
-                }}
-              />
-            )}
-            {sortedTees.map((tee) => {
-              const position = liveTees[tee.teeKey];
-              if (!position) return null;
-              const canDrag = !isLocked && !isSaving;
-              const isFocused = tee.teeKey === focusedTeeKey;
-              return (
-                <LabeledCircleMarker
-                  key={tee.teeKey}
-                  position={position}
-                  draggable={canDrag}
-                  clickable={canDrag}
-                  opacity={isFocused ? 1 : 0.45}
-                  zIndex={isFocused ? 42 : canDrag ? 40 : undefined}
-                  title={
-                    canDrag
-                      ? `Drag to move ${tee.teeName} tee`
-                      : tee.teeName
-                  }
-                  label={tee.teeName.slice(0, 1).toUpperCase()}
-                  fill={teeMarkerColor(tee)}
-                  stroke="#ffffff"
-                  radius={9}
-                  onClick={() => selectTeeFocus(tee.teeKey)}
-                  onDrag={(point) => {
-                    if (isLocked) return;
-                    setFocusedTeeKey(tee.teeKey);
-                    setDragPreview({
-                      kind: "tee",
-                      teeKey: tee.teeKey,
-                      ...point,
-                    });
-                  }}
-                  onDragEnd={(point) => {
-                    if (isLocked || !onSavePin) return;
-                    setDragPreview(null);
-                    setTees((current) => ({
-                      ...current,
-                      [tee.teeKey]: point,
-                    }));
-                    void onSavePin({
-                      kind: "tee",
-                      teeKey: tee.teeKey,
-                      ...point,
-                    });
-                  }}
-                />
-              );
-            })}
-            {liveGreen && (
-              <LabeledCircleMarker
-                position={liveGreen}
-                draggable={!isLocked && !isSaving}
-                zIndex={!isLocked && !isSaving ? 41 : undefined}
-                title={
-                  !isLocked && !isSaving ? "Drag to move green" : undefined
-                }
-                label="G"
-                fill="#16a34a"
-                stroke="#ffffff"
-                radius={9}
-                onDrag={(point) => {
-                  if (isLocked) return;
-                  setDragPreview({
-                    kind: "green",
-                    ...point,
-                  });
-                }}
-                onDragEnd={(point) => {
-                  if (isLocked || !onSavePin) return;
-                  setDragPreview(null);
-                  setGreen(point);
-                  void onSavePin({ kind: "green", ...point });
-                }}
-              />
-            )}
-          </Map>
-        </APIProvider>
-      </div>
-
-      <div className="flex shrink-0 items-center justify-between gap-3 border-t bg-muted/30 px-4 py-2 text-xs text-muted-foreground">
-        <span className="inline-flex items-center gap-1.5">
-          <Flag className="size-3.5" />
-          {placedTeeCount}/{sortedTees.length} tees
-          <span className="text-foreground/20">·</span>
-          {green ? "Green set" : "Green needed"}
-          {focusedTeeName && (
-            <>
-              <span className="text-foreground/20">·</span>
-              <span className="text-foreground/80">{focusedTeeName} line</span>
-            </>
-          )}
-        </span>
-        {isSaving && <span className="text-primary">Saving…</span>}
+      <div className="relative min-h-45 min-w-0 flex-1 bg-zinc-950/3">
+        {mapSurface}
       </div>
     </div>
   );

@@ -4,6 +4,8 @@ import {
   getEventFormatLabel,
   type EventFormat,
 } from "@/lib/event-formats";
+import { resolveOrganizationHomeCourseSelection } from "@/lib/organization-home-course";
+import { requireOrganization } from "@/lib/auth";
 
 type NewEventPageProps = {
   searchParams: Promise<{ format?: string }>;
@@ -18,6 +20,8 @@ export default async function NewEventPage({ searchParams }: NewEventPageProps) 
   const { format: formatParam } = await searchParams;
   const format = resolveFormat(formatParam);
   const formatMeta = format ? getEventFormat(format) : undefined;
+  const org = await requireOrganization();
+  const homeCourseSelection = await resolveOrganizationHomeCourseSelection(org);
 
   return (
     <div className="mx-auto w-full min-w-0 space-y-5 pb-2 sm:space-y-6">
@@ -38,7 +42,14 @@ export default async function NewEventPage({ searchParams }: NewEventPageProps) 
         )}
       </div>
 
-      <EventCreationWizard defaultFormat={format} />
+      <EventCreationWizard
+        defaultFormat={format}
+        initialValues={
+          homeCourseSelection
+            ? { courseSelection: homeCourseSelection }
+            : undefined
+        }
+      />
     </div>
   );
 }

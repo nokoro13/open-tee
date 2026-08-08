@@ -182,8 +182,19 @@ export function buildMultiTeeHoleSnapshots(
     holes: "9" | "18";
     nineSide?: "front" | "back" | null;
   },
-  teeColors: readonly string[] = STANDARD_SCORECARD_TEE_COLORS
+  tees?: CourseTeeOption[]
 ): ScorecardHoleSnapshot[] {
+  const teeEntries =
+    tees && tees.length > 0
+      ? tees.map((tee) => ({
+          key: tee.tee_key,
+          color: tee.tee_color ?? null,
+        }))
+      : STANDARD_SCORECARD_TEE_COLORS.map((color) => ({
+          key: color,
+          color,
+        }));
+
   return sliceHolesData(holesData, options).map((hole, index) => ({
     holeNumber: index + 1,
     par: hole.par,
@@ -192,9 +203,11 @@ export function buildMultiTeeHoleSnapshots(
       yardageForTeeColor(hole.yardages, "white") ??
       pickPreferredTeeYardage(hole.yardages),
     yardagesByTee: Object.fromEntries(
-      teeColors.map((color) => [
-        color,
-        yardageForTeeColor(hole.yardages, color),
+      teeEntries.map(({ key, color }) => [
+        key,
+        tees && tees.length > 0
+          ? yardageForTee(hole.yardages, key, color)
+          : yardageForTeeColor(hole.yardages, key),
       ])
     ) as Record<string, number | null>,
   }));

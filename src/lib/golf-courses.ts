@@ -2,15 +2,20 @@ import { and, asc, desc, eq, ilike, or } from "drizzle-orm";
 
 import { getDb } from "@/db";
 import {
+  courseHoles,
   courseTees,
   golfCourses,
   greenTargets,
   holeFeatures,
+  type CourseTee,
   type GolfCourse,
   type GreenTarget,
   type HoleFeature,
 } from "@/db/schema";
-import { sortCourseTees, teeMarkerColor } from "@/lib/course-tees";
+import {
+  sortCourseTees,
+  teeMarkerColor,
+} from "@/lib/course-tees";
 import {
   buildGreenTargetsByEventHole,
   courseHoleToPhysicalHole,
@@ -23,7 +28,7 @@ import {
   assignOsmFeaturesToHoles,
   osmFeatureTypeToHoleFeatureType,
 } from "@/lib/hole-spatial-features";
-import { fetchOsmGolfFeaturesNear, type OsmGolfFeature } from "@/lib/overpass-golf";
+import { fetchOsmGolfFeaturesNear, filterOsmFeaturesForHoleCount, type OsmGolfFeature } from "@/lib/overpass-golf";
 import { unstable_cache } from "next/cache";
 
 function latLngFromTarget(target: GreenTarget) {
@@ -206,7 +211,10 @@ export async function getEnrichedHoleFeatureCollection(
 
   let osmFeatures: OsmGolfFeature[];
   try {
-    osmFeatures = await loadCachedOsmFeatures(courseId, lat, lng);
+    const rawFeatures = await loadCachedOsmFeatures(courseId, lat, lng);
+    osmFeatures = course?.holeCount
+      ? filterOsmFeaturesForHoleCount(rawFeatures, course.holeCount)
+      : rawFeatures;
   } catch {
     return dbCollection;
   }
@@ -341,6 +349,8 @@ export type CaddieContextForEvent = {
     Awaited<ReturnType<typeof getHoleFeatureCollection>> | null
   >;
   selectedTeeColor: string | null;
+  courseTees: CourseTee[];
+  teeYardagesByEventHole: Record<number, Record<string, number>>;
 };
 
 export async function getCaddieContextForEvent(event: {
@@ -355,12 +365,16 @@ export async function getCaddieContextForEvent(event: {
   const course = await getPublishedGolfCourseByExternalId(event.externalCourseId);
   if (!course) return null;
 
-  const [greenTargetsByHole, courseTeeRows, holeFeatureEntries] =
+  const [greenTargetsByHole, courseTeeRows, courseHoleRows, holeFeatureEntries] =
     await Promise.all([
       getGreenTargetsForEvent(event),
       getDb().query.courseTees.findMany({
         where: eq(courseTees.courseId, course.id),
         orderBy: [asc(courseTees.sortOrder), asc(courseTees.teeName)],
+      }),
+      getDb().query.courseHoles.findMany({
+        where: eq(courseHoles.courseId, course.id),
+        orderBy: [asc(courseHoles.holeNumber)],
       }),
       Promise.all(
         event.holeNumbers.map(async (eventHole) => {
@@ -391,6 +405,21 @@ export async function getCaddieContextForEvent(event: {
     null;
   const selectedTeeColor = selectedTee ? teeMarkerColor(selectedTee) : null;
 
+  const teeYardagesByEventHole: Record<number, Record<string, number>> = {};
+  for (const eventHole of event.holeNumbers) {
+    const courseHole = eventHoleToCourseHole(eventHole, {
+      holes: event.holes,
+      nineSide: event.nineSide,
+    });
+    const physicalHole = courseHoleToPhysicalHole(courseHole, course);
+    const holeData = courseHoleRows.find(
+      (hole) => hole.holeNumber === physicalHole
+    );
+    if (holeData?.teeYardages) {
+      teeYardagesByEventHole[eventHole] = holeData.teeYardages;
+    }
+  }
+
   return {
     courseId: course.id,
     dataQuality: course.dataQuality,
@@ -398,5 +427,7 @@ export async function getCaddieContextForEvent(event: {
     greenTargetsByHole,
     holeFeaturesByHole,
     selectedTeeColor,
+    courseTees: sortedCourseTees,
+    teeYardagesByEventHole,
   };
 }

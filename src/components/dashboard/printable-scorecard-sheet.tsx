@@ -1,13 +1,20 @@
 import type {
   PrintableScorecard,
   PrintableScorecardEvent,
+  PrintableScorecardTeeRow,
 } from "@/lib/printable-scorecard";
 import {
   getHoleValue,
-  STANDARD_SCORECARD_TEE_COLORS,
   sumRange,
 } from "@/lib/printable-scorecard";
 import { formatHandicapDisplay } from "@/lib/handicap-strokes";
+import {
+  resolveCombinationTeeColorForHole,
+  resolveTeeDisplayColor,
+  teeCellPresentation,
+  type TeeCellStyle,
+} from "@/lib/course-tees";
+import type { ScorecardHoleSnapshot } from "@/lib/scorecard";
 
 type PrintableScorecardSheetProps = {
   event: PrintableScorecardEvent;
@@ -15,26 +22,47 @@ type PrintableScorecardSheetProps = {
   qrDataUrl: string;
 };
 
-const TEE_YARDAGE_ROWS = [
-  { color: "black", label: "Black" },
-  { color: "blue", label: "Blue" },
-  { color: "white", label: "White" },
-  { color: "red", label: "Red" },
-] as const satisfies ReadonlyArray<{
-  color: (typeof STANDARD_SCORECARD_TEE_COLORS)[number];
-  label: string;
-}>;
+function teeRowPresentationForEvent(
+  tee: PrintableScorecardTeeRow,
+  allTees: PrintableScorecardTeeRow[]
+): {
+  className: string;
+  style?: TeeCellStyle;
+} {
+  return teeCellPresentation(resolveTeeDisplayColor(tee, allTees));
+}
 
-const TEE_ROW_CELL_STYLES: Record<
-  (typeof TEE_YARDAGE_ROWS)[number]["color"],
-  string
-> = {
-  black: "bg-neutral-700 text-white print:bg-neutral-700 print:text-white",
-  blue: "bg-blue-700 text-white print:bg-blue-700 print:text-white",
-  white:
-    "bg-white text-neutral-900 print:bg-white print:text-neutral-900",
-  red: "bg-red-600 text-white print:bg-red-600 print:text-white",
-};
+function yardageCellPresentation(
+  tee: PrintableScorecardTeeRow,
+  allTees: PrintableScorecardTeeRow[],
+  hole: ScorecardHoleSnapshot | null,
+  isTotalColumn: boolean
+): { className: string; style?: TeeCellStyle } {
+  if (isTotalColumn || !hole) {
+    return {
+      className: isTotalColumn
+        ? "bg-neutral-100 font-semibold print:bg-neutral-100"
+        : "bg-white print:bg-white",
+    };
+  }
+
+  if (!tee.isCombination || !hole.yardagesByTee) {
+    return teeRowPresentationForEvent(tee, allTees);
+  }
+
+  const fillColor = resolveCombinationTeeColorForHole(
+    tee.teeKey,
+    allTees,
+    hole.yardagesByTee
+  );
+  if (!fillColor) {
+    return {
+      className: "bg-white print:bg-white",
+    };
+  }
+
+  return teeCellPresentation(fillColor);
+}
 
 type ScorecardColumn =
   | { kind: "label" }
@@ -116,18 +144,21 @@ function GridCell({
   strokeDots = 0,
   header = false,
   fixedHeight = false,
+  style,
 }: {
   children?: React.ReactNode;
   className?: string;
   strokeDots?: number;
   header?: boolean;
   fixedHeight?: boolean;
+  style?: React.CSSProperties;
 }) {
   const Tag = header ? "th" : "td";
 
   return (
     <Tag
       className={`relative border border-black px-0.5 py-1 text-center align-middle tabular-nums leading-none ${fixedHeight ? "h-8 min-h-8" : ""} ${className}`}
+      style={style}
     >
       <StrokeDots count={strokeDots} />
       {children ?? (fixedHeight ? "\u00a0" : null)}
@@ -141,12 +172,14 @@ function LabelCell({
   shaded = false,
   fixedHeight = false,
   tinted = false,
+  style,
 }: {
   children: React.ReactNode;
   className?: string;
   shaded?: boolean;
   fixedHeight?: boolean;
   tinted?: boolean;
+  style?: React.CSSProperties;
 }) {
   const backgroundClass = tinted
     ? ""
@@ -157,6 +190,7 @@ function LabelCell({
   return (
     <td
       className={`border border-black px-2 text-left align-middle text-[9px] font-semibold leading-snug ${fixedHeight ? "h-8 min-h-8 py-1" : "py-1.5"} ${backgroundClass} ${className}`}
+      style={style}
     >
       {children}
     </td>
@@ -195,20 +229,23 @@ export function PrintableScorecardSheet({
   const inPar = isEighteen ? sumRange(event.holeData, 10, 18, "par") : null;
 
   const teeYardageTotals = Object.fromEntries(
-    TEE_YARDAGE_ROWS.map(({ color }) => {
-      const total = sumRange(event.holeData, 1, isEighteen ? 18 : 9, "yardage", color);
+    event.teeRows.map((tee) => {
+      const total = sumRange(
+        event.holeData,
+        1,
+        isEighteen ? 18 : 9,
+        "yardage",
+        tee.teeKey
+      );
       const out = isEighteen
-        ? sumRange(event.holeData, 1, 9, "yardage", color)
+        ? sumRange(event.holeData, 1, 9, "yardage", tee.teeKey)
         : total;
       const backNine = isEighteen
-        ? sumRange(event.holeData, 10, 18, "yardage", color)
+        ? sumRange(event.holeData, 10, 18, "yardage", tee.teeKey)
         : null;
-      return [color, { total, out, backNine }] as const;
+      return [tee.teeKey, { total, out, backNine }] as const;
     })
-  ) as Record<
-    (typeof TEE_YARDAGE_ROWS)[number]["color"],
-    { total: number | null; out: number | null; backNine: number | null }
-  >;
+  ) as Record<string, { total: number | null; out: number | null; backNine: number | null }>;
 
   const playerRows = Array.from(
     { length: scorecard.minPlayerRows },
@@ -218,29 +255,29 @@ export function PrintableScorecardSheet({
   function holeCellValue(
     column: ScorecardColumn,
     field: "yardage" | "par" | "strokeIndex",
-    teeColor?: string
+    teeKey?: string
   ): number | null {
     if (column.kind === "hole") {
-      return getHoleValue(event.holeData, column.hole, field, teeColor);
+      return getHoleValue(event.holeData, column.hole, field, teeKey);
     }
     if (column.kind === "out") {
       if (field === "par") return outPar;
-      if (field === "yardage" && teeColor) {
-        return teeYardageTotals[teeColor as keyof typeof teeYardageTotals]?.out ?? null;
+      if (field === "yardage" && teeKey) {
+        return teeYardageTotals[teeKey]?.out ?? null;
       }
       return null;
     }
     if (column.kind === "in") {
       if (field === "par") return inPar;
-      if (field === "yardage" && teeColor) {
-        return teeYardageTotals[teeColor as keyof typeof teeYardageTotals]?.backNine ?? null;
+      if (field === "yardage" && teeKey) {
+        return teeYardageTotals[teeKey]?.backNine ?? null;
       }
       return null;
     }
     if (column.kind === "tot") {
       if (field === "par") return totalPar;
-      if (field === "yardage" && teeColor) {
-        return teeYardageTotals[teeColor as keyof typeof teeYardageTotals]?.total ?? null;
+      if (field === "yardage" && teeKey) {
+        return teeYardageTotals[teeKey]?.total ?? null;
       }
       return null;
     }
@@ -253,12 +290,12 @@ export function PrintableScorecardSheet({
       player?: PrintableScorecard["players"][number] | null;
       rowIndex?: number;
       playerRow?: boolean;
-      teeColor?: string;
-      teeRowClass?: string;
+      teeKey?: string;
+      tee?: PrintableScorecardTeeRow;
+      allTees?: PrintableScorecardTeeRow[];
     }
   ) {
     const fixedHeight = options?.playerRow ?? options?.player != null;
-    const teeRowClass = options?.teeRowClass ?? "";
 
     return dataColumns.map((column) => {
       if (options?.player != null) {
@@ -308,29 +345,40 @@ export function PrintableScorecardSheet({
       }
 
       if (field === "yardage" || field === "par" || field === "strokeIndex") {
+        const isTotalColumn =
+          column.kind === "out" ||
+          column.kind === "in" ||
+          column.kind === "tot";
+        const hole =
+          column.kind === "hole"
+            ? (event.holeData.find((entry) => entry.holeNumber === column.hole) ??
+              null)
+            : null;
+        const cellPresentation =
+          field === "yardage" && options?.tee && options?.allTees
+            ? yardageCellPresentation(
+                options.tee,
+                options.allTees,
+                hole,
+                isTotalColumn
+              )
+            : null;
+
         if (column.kind === "hdcp" || column.kind === "net") {
-          return (
-            <GridCell
-              key={columnKey(column, field)}
-              className={teeRowClass}
-            />
-          );
+          return <GridCell key={columnKey(column, field)} />;
         }
 
         const value = holeCellValue(
           column,
           field as "yardage" | "par" | "strokeIndex",
-          options?.teeColor
+          options?.teeKey ?? options?.tee?.teeKey
         );
-        const isTotalColumn =
-          column.kind === "out" ||
-          column.kind === "in" ||
-          column.kind === "tot";
 
         return (
           <GridCell
             key={columnKey(column, field)}
-            className={`${teeRowClass} ${field !== "strokeIndex" && isTotalColumn ? "font-semibold" : ""}`}
+            className={`${cellPresentation?.className ?? ""} ${field !== "strokeIndex" && isTotalColumn ? "font-semibold" : ""}`.trim()}
+            style={cellPresentation?.style}
           >
             {value ?? ""}
           </GridCell>
@@ -453,16 +501,27 @@ export function PrintableScorecardSheet({
                 </GridCell>
               ))}
             </tr>
-            {TEE_YARDAGE_ROWS.map(({ color, label }) => {
-              const teeRowClass = TEE_ROW_CELL_STYLES[color];
+            {event.teeRows.map((tee) => {
+              const isCombination = tee.isCombination && tee.baseTeeKeys?.length;
+              const labelPresentation = isCombination
+                ? null
+                : teeRowPresentationForEvent(tee, event.teeRows);
+
               return (
-                <tr key={color} className={`scorecard-tee-row scorecard-tee-${color}`}>
-                  <LabelCell tinted className={teeRowClass}>
-                    {label}
+                <tr
+                  key={tee.teeKey}
+                  className={`scorecard-tee-row scorecard-tee-${tee.teeKey}`}
+                >
+                  <LabelCell
+                    tinted={!isCombination}
+                    className={labelPresentation?.className}
+                    style={labelPresentation?.style}
+                  >
+                    {tee.teeName}
                   </LabelCell>
                   {renderDataCells("yardage", {
-                    teeColor: color,
-                    teeRowClass,
+                    tee,
+                    allTees: event.teeRows,
                   })}
                 </tr>
               );

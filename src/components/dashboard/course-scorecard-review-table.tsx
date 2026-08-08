@@ -1,17 +1,33 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, type ReactNode } from "react";
 
-import { HandicapRowToggle } from "@/components/dashboard/handicap-row-toggle";
-import type { CourseHole, CourseTee } from "@/db/schema";
-import { holeNumbersForCount } from "@/lib/course-onboarding";
+import { CombinationTeeLabel } from "@/components/dashboard/combination-tee-name";
+import { buildScorecardNineSections } from "@/components/dashboard/course-scorecard-sections";
 import {
-  activeHandicapView,
-  defaultHandicapView,
-  handicapRowLabel,
+  CourseScorecardNineSectionsShell,
+  ScorecardNineSectionHeader,
+  scorecardNineSectionTableClassName,
+  SCORECARD_TABLE_BODY,
+} from "@/components/dashboard/course-scorecard-nine-sections-shell";
+import {
+  SCORECARD_DATA_CELL,
+  SCORECARD_HOLE_HEADER,
+  SCORECARD_ROW_LABEL,
+  SCORECARD_TOTAL_CELL,
+} from "@/components/dashboard/course-scorecard-table-styles";
+import type { CourseHole, CourseTee } from "@/db/schema";
+import {
+  getCombinationBaseTeeKeys,
+  sortCourseTeesByTotalYardage,
+  yardageCellPresentationForHole,
+  type TeeCellStyle,
+} from "@/lib/course-tees";
+import {
+  ladiesHandicapRowLabel,
+  mensHandicapRowLabel,
   resolveHandicapAvailability,
   strokeIndexForHandicapView,
-  type HandicapView,
 } from "@/lib/scorecard-handicap-rows";
 import { cn } from "@/lib/utils";
 
@@ -21,31 +37,82 @@ type CourseScorecardReviewTableProps = {
   sortedTees: CourseTee[];
 };
 
-/**
- * Sticky first column with an opaque background so horizontally scrolled
- * columns never show through. Rows rely on hairlines and type weight instead
- * of fills so the sticky cell always matches its row.
- */
-const STICKY_CELL =
-  "sticky left-0 z-10 bg-card px-3 py-2 whitespace-nowrap after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-border";
-
 function sumYardages(
   holes: CourseHole[],
   teeKey: string,
-  range: number[]
+  holeNumbers: number[]
 ): number {
-  return range.reduce((total, holeNumber) => {
+  return holeNumbers.reduce((total, holeNumber) => {
     const hole = holes.find((entry) => entry.holeNumber === holeNumber);
     const yardage = hole?.teeYardages?.[teeKey] ?? hole?.yardage;
     return total + (yardage ?? 0);
   }, 0);
 }
 
-function sumPar(holes: CourseHole[], range: number[]): number {
-  return range.reduce((total, holeNumber) => {
+function sumPar(holes: CourseHole[], holeNumbers: number[]): number {
+  return holeNumbers.reduce((total, holeNumber) => {
     const hole = holes.find((entry) => entry.holeNumber === holeNumber);
     return total + (hole?.par ?? 0);
   }, 0);
+}
+
+function holeTeeYardageNumbers(
+  hole: CourseHole | undefined
+): Record<string, number | null | undefined> {
+  if (!hole?.teeYardages) return {};
+  return Object.fromEntries(
+    Object.entries(hole.teeYardages).map(([teeKey, yardage]) => [
+      teeKey,
+      yardage ?? null,
+    ])
+  );
+}
+
+function ScorecardValueRow({
+  label,
+  values,
+  total,
+  emphasizeTotal = false,
+  labelClassName,
+  getCellProps,
+}: {
+  label: ReactNode;
+  values: (string | number | null)[];
+  total?: string | number | null;
+  emphasizeTotal?: boolean;
+  labelClassName?: string;
+  getCellProps?: (index: number) => {
+    className?: string;
+    style?: TeeCellStyle;
+  } | null;
+}) {
+  return (
+    <tr>
+      <th scope="row" className={cn(SCORECARD_ROW_LABEL, labelClassName)}>
+        {label}
+      </th>
+      {values.map((value, index) => {
+        const cellProps = getCellProps?.(index);
+        return (
+          <td
+            key={index}
+            className={cn(SCORECARD_DATA_CELL, cellProps?.className)}
+            style={cellProps?.style}
+          >
+            {value ?? "—"}
+          </td>
+        );
+      })}
+      <td
+        className={cn(
+          SCORECARD_TOTAL_CELL,
+          emphasizeTotal && total != null && "font-semibold"
+        )}
+      >
+        {total ?? null}
+      </td>
+    </tr>
+  );
 }
 
 export function CourseScorecardReviewTable({
@@ -53,127 +120,153 @@ export function CourseScorecardReviewTable({
   courseHoles,
   sortedTees,
 }: CourseScorecardReviewTableProps) {
+  const sections = useMemo(
+    () => buildScorecardNineSections(holeCount),
+    [holeCount]
+  );
   const handicapAvailability = useMemo(
     () => resolveHandicapAvailability(courseHoles),
     [courseHoles]
   );
-  const [handicapView, setHandicapView] = useState<HandicapView>(() =>
-    defaultHandicapView(handicapAvailability)
+  const displayTees = useMemo(
+    () => sortCourseTeesByTotalYardage(sortedTees, courseHoles),
+    [courseHoles, sortedTees]
   );
-
-  const activeView = activeHandicapView(handicapView, handicapAvailability);
-  const handicapHeaderLabel = handicapRowLabel(handicapAvailability);
-
-  const holeNumbers = useMemo(
-    () => holeNumbersForCount(holeCount),
-    [holeCount]
-  );
-  const frontNine = holeNumbers.filter((hole) => hole <= 9);
-  const backNine = holeNumbers.filter((hole) => hole > 9);
-
-  const totalRows: { label: string; range: number[]; emphasize?: boolean }[] = [
-    ...(frontNine.length > 0 && backNine.length > 0
-      ? [
-          { label: "OUT", range: frontNine },
-          { label: "IN", range: backNine },
-        ]
-      : []),
-    { label: "TOT", range: holeNumbers, emphasize: true },
-  ];
 
   return (
-    <div className="overflow-hidden rounded-lg border bg-card">
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <thead>
-            <tr className="border-b text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-              <th className={cn(STICKY_CELL, "font-medium")}>Hole</th>
-              <th className="px-3 py-2 font-medium">Par</th>
-              {sortedTees.map((tee) => (
-                <th
-                  key={tee.teeKey}
-                  className="whitespace-nowrap px-3 py-2 font-medium"
-                >
-                  <span className="inline-flex items-center gap-1.5">
-                    {tee.teeColor && (
-                      <span
-                        className="size-2 shrink-0 rounded-full border border-black/10"
-                        style={{ backgroundColor: tee.teeColor }}
-                        aria-hidden
-                      />
-                    )}
-                    {tee.teeName}
-                  </span>
-                </th>
-              ))}
-              <th className="whitespace-nowrap px-3 py-2 font-medium normal-case">
-                {handicapAvailability.hasBoth ? (
-                  <HandicapRowToggle
-                    view={activeView}
-                    onChange={setHandicapView}
-                  />
-                ) : (
-                  <span className="uppercase">{handicapHeaderLabel}</span>
-                )}
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border/60">
-            {holeNumbers.map((holeNumber) => {
-              const hole = courseHoles.find(
-                (entry) => entry.holeNumber === holeNumber
-              );
-              const strokeIndex = hole
-                ? strokeIndexForHandicapView(hole, activeView)
-                : null;
+    <CourseScorecardNineSectionsShell sections={sections}>
+      {(section) => {
+        const sectionPar = sumPar(courseHoles, section.holeNumbers);
 
-              return (
-                <tr key={holeNumber}>
-                  <td className={cn(STICKY_CELL, "font-medium tabular-nums")}>
-                    {holeNumber}
-                  </td>
-                  <td className="px-3 py-2 tabular-nums">{hole?.par ?? "—"}</td>
-                  {sortedTees.map((tee) => (
-                    <td key={tee.teeKey} className="px-3 py-2 tabular-nums">
-                      {hole?.teeYardages?.[tee.teeKey] ?? hole?.yardage ?? "—"}
-                    </td>
+        return (
+          <div className="overflow-x-auto">
+            <ScorecardNineSectionHeader label={section.label} par={sectionPar} />
+
+            <table className={scorecardNineSectionTableClassName()}>
+              <thead>
+                <tr className="border-b bg-muted/10">
+                  <th className={SCORECARD_HOLE_HEADER}>Hole</th>
+                  {section.holeNumbers.map((holeNumber) => (
+                    <th
+                      key={holeNumber}
+                      className={cn(SCORECARD_DATA_CELL, "font-semibold")}
+                    >
+                      {holeNumber}
+                    </th>
                   ))}
-                  <td className="px-3 py-2 tabular-nums">{strokeIndex ?? "—"}</td>
+                  <th className={SCORECARD_TOTAL_CELL}>Tot</th>
                 </tr>
-              );
-            })}
-          </tbody>
-          <tfoot>
-            {totalRows.map((row) => (
-              <tr
-                key={row.label}
-                className={cn(
-                  "border-t",
-                  row.emphasize ? "font-semibold" : "font-medium text-muted-foreground"
+              </thead>
+              <tbody className={SCORECARD_TABLE_BODY}>
+                {displayTees.map((tee) => {
+                  const sectionYardage = sumYardages(
+                    courseHoles,
+                    tee.teeKey,
+                    section.holeNumbers
+                  );
+                  const isCombination =
+                    getCombinationBaseTeeKeys(tee, displayTees) != null;
+
+                  return (
+                    <ScorecardValueRow
+                      key={tee.teeKey}
+                      label={
+                        isCombination ? (
+                          <CombinationTeeLabel
+                            teeKey={tee.teeKey}
+                            teeName={tee.teeName}
+                            allTees={displayTees}
+                            className="normal-case tracking-normal"
+                          />
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 normal-case tracking-normal">
+                            {tee.teeColor && (
+                              <span
+                                className="size-2 shrink-0 rounded-full border border-black/10"
+                                style={{ backgroundColor: tee.teeColor }}
+                                aria-hidden
+                              />
+                            )}
+                            {tee.teeName}
+                          </span>
+                        )
+                      }
+                      labelClassName="normal-case tracking-normal"
+                      values={section.holeNumbers.map((holeNumber) => {
+                        const hole = courseHoles.find(
+                          (entry) => entry.holeNumber === holeNumber
+                        );
+                        return (
+                          hole?.teeYardages?.[tee.teeKey] ??
+                          hole?.yardage ??
+                          null
+                        );
+                      })}
+                      getCellProps={(index) => {
+                        const holeNumber = section.holeNumbers[index]!;
+                        const hole = courseHoles.find(
+                          (entry) => entry.holeNumber === holeNumber
+                        );
+                        return yardageCellPresentationForHole(
+                          tee,
+                          displayTees,
+                          holeTeeYardageNumbers(hole)
+                        );
+                      }}
+                      total={
+                        sectionYardage > 0
+                          ? sectionYardage.toLocaleString()
+                          : null
+                      }
+                      emphasizeTotal
+                    />
+                  );
+                })}
+                {handicapAvailability.hasMens && (
+                  <ScorecardValueRow
+                    label={mensHandicapRowLabel(handicapAvailability)}
+                    labelClassName="normal-case tracking-normal"
+                    values={section.holeNumbers.map((holeNumber) => {
+                      const hole = courseHoles.find(
+                        (entry) => entry.holeNumber === holeNumber
+                      );
+                      return hole
+                        ? strokeIndexForHandicapView(hole, "mens")
+                        : null;
+                    })}
+                    total={null}
+                  />
                 )}
-              >
-                <td
-                  className={cn(
-                    STICKY_CELL,
-                    row.emphasize ? "font-semibold" : "font-medium"
-                  )}
-                >
-                  {row.label}
-                </td>
-                <td className="px-3 py-2 tabular-nums">
-                  {sumPar(courseHoles, row.range)}
-                </td>
-                {sortedTees.map((tee) => (
-                  <td key={tee.teeKey} className="px-3 py-2 tabular-nums">
-                    {sumYardages(courseHoles, tee.teeKey, row.range).toLocaleString()}
-                  </td>
-                ))}
-                <td className="px-3 py-2" />
-              </tr>
-            ))}
-          </tfoot>
-        </table>
-      </div>
-    </div>
+                {handicapAvailability.hasLadies && (
+                  <ScorecardValueRow
+                    label={ladiesHandicapRowLabel()}
+                    labelClassName="normal-case tracking-normal"
+                    values={section.holeNumbers.map((holeNumber) => {
+                      const hole = courseHoles.find(
+                        (entry) => entry.holeNumber === holeNumber
+                      );
+                      return hole
+                        ? strokeIndexForHandicapView(hole, "ladies")
+                        : null;
+                    })}
+                    total={null}
+                  />
+                )}
+                <ScorecardValueRow
+                  label="Par"
+                  values={section.holeNumbers.map((holeNumber) => {
+                    const hole = courseHoles.find(
+                      (entry) => entry.holeNumber === holeNumber
+                    );
+                    return hole?.par ?? null;
+                  })}
+                  total={sectionPar}
+                />
+              </tbody>
+            </table>
+          </div>
+        );
+      }}
+    </CourseScorecardNineSectionsShell>
   );
 }

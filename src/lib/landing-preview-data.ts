@@ -393,6 +393,12 @@ export const previewPrintableScorecardEvent: PrintableScorecardEvent = {
   formatLabel: "Scramble",
   holes: "18",
   holeData: previewScorecardHoles,
+  teeRows: [
+    { teeKey: "black", teeName: "Black", teeColor: "#1f2937" },
+    { teeKey: "blue", teeName: "Blue", teeColor: "#2563eb" },
+    { teeKey: "white", teeName: "White", teeColor: "#f8fafc" },
+    { teeKey: "red", teeName: "Red", teeColor: "#dc2626" },
+  ],
 };
 
 export const previewPrintableScorecard: PrintableScorecard = {
