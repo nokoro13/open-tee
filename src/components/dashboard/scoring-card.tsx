@@ -129,21 +129,26 @@ export function ScoringCard({
   }
 
   return (
-    <Card className="border-primary/20">
-      <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
-        <div className="space-y-1">
+    <Card className="rounded-2xl border-primary/20">
+      <CardHeader className="flex flex-col gap-3 border-b border-border/60 pb-4 sm:flex-row sm:items-start sm:justify-between [.border-b]:pb-4">
+        <div className="min-w-0 space-y-1">
           <CardTitle className="flex items-center gap-2">
-            <Trophy className="size-4" />
+            <Trophy className="size-4 shrink-0" />
             Live scoring
           </CardTitle>
-          <CardDescription>
+          <CardDescription className="text-pretty">
             Open scoring for tournament day. Email players their scorecard links
             or share each group&apos;s link from the Pairings section.
           </CardDescription>
         </div>
-        <Badge variant={statusVariant[scoringStatus]}>{statusLabel[scoringStatus]}</Badge>
+        <Badge
+          variant={statusVariant[scoringStatus]}
+          className="w-fit shrink-0"
+        >
+          {statusLabel[scoringStatus]}
+        </Badge>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 pt-4">
         {error && (
           <p className="text-sm text-destructive" role="alert">
             {error}
@@ -159,18 +164,18 @@ export function ScoringCard({
         {scoringStatus === "disabled" && (
           <>
             {!canOpenScoring && workflow && workflow.pairingsIssues.length > 0 && (
-              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm">
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-3 text-sm">
                 <p className="font-medium text-amber-950 dark:text-amber-100">
                   Before opening scoring
                 </p>
-                <ul className="mt-1 list-disc pl-4 text-amber-950 dark:text-amber-100">
+                <ul className="mt-1 list-disc space-y-0.5 pl-4 text-amber-950 dark:text-amber-100">
                   {workflow.pairingsIssues.map((issue) => (
                     <li key={issue}>{issue}</li>
                   ))}
                 </ul>
               </div>
             )}
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-pretty text-muted-foreground">
               Opening scoring closes public registration and locks pairings and
               the start schedule.
             </p>
@@ -217,12 +222,12 @@ export function ScoringCard({
         {scoringStatus !== "disabled" && (
           <>
             {scoringCode && (
-              <div className="space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-3">
+              <div className="space-y-2 rounded-xl border border-amber-500/30 bg-amber-500/5 px-3.5 py-3.5">
                 <p className="text-sm font-medium">Marshal code (organizers only)</p>
                 <p className="font-mono text-2xl font-semibold tracking-widest">
                   {scoringCode}
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-pretty text-muted-foreground">
                   For staff who need to enter scores for any group. Do not share
                   with players.
                 </p>
@@ -233,6 +238,7 @@ export function ScoringCard({
                     href={getScorePageHref(slug, scoringCode)}
                     target="_blank"
                     rel="noopener noreferrer"
+                    className="h-10 w-full sm:h-8 sm:w-auto"
                   >
                     <ExternalLink />
                     Open marshal scorer
@@ -241,13 +247,14 @@ export function ScoringCard({
               </div>
             )}
 
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
               <ButtonLink
                 variant="outline"
                 size="sm"
                 href={`/e/${slug}/leaderboard`}
                 target="_blank"
                 rel="noopener noreferrer"
+                className="h-10 w-full sm:h-8 sm:w-auto"
               >
                 <ExternalLink />
                 View leaderboard
@@ -260,6 +267,7 @@ export function ScoringCard({
                   size="sm"
                   disabled={isPending}
                   onClick={runEmailPlayers}
+                  className="h-10 w-full sm:h-8 sm:w-auto"
                 >
                   <Mail />
                   {isPending ? "Sending..." : "Email players"}
@@ -280,12 +288,13 @@ export function ScoringCard({
                   variant="destructive"
                   disabled={isPending || !canFinalize}
                   onClick={() => runAction(() => finalizeScoring(eventId))}
+                  className="h-11 w-full sm:w-auto"
                 >
                   <Lock />
                   {isPending ? "Finalizing..." : "Finalize results"}
                 </Button>
                 {!canFinalize && groupScoringProgress && (
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-pretty text-muted-foreground">
                     Finalize is available once every group has finished scoring.
                   </p>
                 )}
@@ -293,7 +302,7 @@ export function ScoringCard({
             )}
 
             {scoringStatus === "finalized" && (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-pretty text-muted-foreground">
                 Results are locked. Share the{" "}
                 <a
                   href={leaderboardUrl}

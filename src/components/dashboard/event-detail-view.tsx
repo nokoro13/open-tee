@@ -9,9 +9,16 @@ import {
   type ReactNode,
 } from "react";
 
-import { EventDetailTabs } from "@/components/dashboard/event-detail-tabs";
+import {
+  EventSidebar,
+  type EventSidebarEvent,
+} from "@/components/dashboard/event-sidebar";
+import { EventMobileNav } from "@/components/dashboard/event-mobile-nav";
+import { ButtonLink } from "@/components/ui/button-link";
+import { SidebarInset } from "@/components/ui/sidebar";
 import { parseEventTab, type EventTab } from "@/lib/event-dashboard";
 import { cn } from "@/lib/utils";
+import { ArrowLeft } from "lucide-react";
 
 type EventDetailTabContextValue = {
   activeTab: EventTab;
@@ -33,12 +40,14 @@ export function useEventDetailTab() {
 type EventDetailViewProps = {
   initialTab: EventTab;
   isDraft: boolean;
+  event: EventSidebarEvent;
   children: ReactNode;
 };
 
 export function EventDetailView({
   initialTab,
   isDraft,
+  event,
   children,
 }: EventDetailViewProps) {
   const [activeTab, setActiveTabState] = useState(initialTab);
@@ -62,17 +71,38 @@ export function EventDetailView({
 
   return (
     <EventDetailTabContext.Provider value={{ activeTab, setActiveTab }}>
-      <div className="min-w-0">
-        <div className="sticky top-0 z-20 bg-background/95 pb-px backdrop-blur-sm supports-backdrop-filter:bg-background/80 md:static md:bg-transparent md:backdrop-blur-none">
-          <EventDetailTabs
-            activeTab={activeTab}
-            onTabChange={setActiveTab}
-            isDraft={isDraft}
-          />
+      <EventSidebar
+        event={event}
+        isDraft={isDraft}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+      />
+      <SidebarInset>
+        <div className="flex flex-1 flex-col gap-5 p-4 pb-[calc(5rem+env(safe-area-inset-bottom))] sm:gap-6 sm:p-6 md:pb-6">
+          <div className="flex items-center gap-2 md:hidden">
+            <ButtonLink
+              href="/dashboard"
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Back to Events"
+              className="-ml-1 shrink-0"
+            >
+              <ArrowLeft />
+            </ButtonLink>
+            <p className="min-w-0 truncate text-sm font-medium text-foreground">
+              {event.name}
+            </p>
+          </div>
+          <div className="mx-auto w-full min-w-0 space-y-5 sm:space-y-6">
+            {children}
+          </div>
         </div>
-
-        <div className="mt-5 space-y-4 sm:mt-6 sm:space-y-6">{children}</div>
-      </div>
+      </SidebarInset>
+      <EventMobileNav
+        isDraft={isDraft}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+      />
     </EventDetailTabContext.Provider>
   );
 }

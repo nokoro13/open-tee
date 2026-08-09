@@ -43,10 +43,10 @@ export function FlightsPanel({ eventId, flights }: FlightsPanelProps) {
   }
 
   return (
-    <Card>
+    <Card className="rounded-2xl">
       <CardHeader>
         <CardTitle>Flights</CardTitle>
-        <CardDescription>
+        <CardDescription className="text-pretty">
           Create flights for segmented leaderboards and pairings.
         </CardDescription>
       </CardHeader>
@@ -58,14 +58,15 @@ export function FlightsPanel({ eventId, flights }: FlightsPanelProps) {
             {flights.map((flight) => (
               <li
                 key={flight.id}
-                className="flex items-center justify-between rounded-lg border border-border/70 px-3 py-2"
+                className="flex items-center justify-between gap-3 rounded-xl border border-border/70 px-3 py-2.5"
               >
-                <span className="font-medium">{flight.name}</span>
+                <span className="min-w-0 truncate font-medium">{flight.name}</span>
                 <Button
                   variant="outline"
                   size="sm"
                   disabled={isPending}
                   onClick={() => handleDelete(flight.id)}
+                  className="shrink-0"
                 >
                   Delete
                 </Button>
@@ -79,8 +80,13 @@ export function FlightsPanel({ eventId, flights }: FlightsPanelProps) {
             placeholder="Championship Flight"
             value={name}
             onChange={(e) => setName(e.target.value)}
+            className="h-11 text-base sm:text-sm"
           />
-          <Button disabled={isPending} onClick={handleCreate}>
+          <Button
+            disabled={isPending}
+            onClick={handleCreate}
+            className="h-11 w-full sm:w-auto"
+          >
             Add flight
           </Button>
         </div>

@@ -1,9 +1,9 @@
 import { notFound } from "next/navigation";
 import {
-  ArrowLeft,
-  ArrowUpRight,
   CalendarDays,
   ExternalLink,
+  Flag,
+  MapPin,
   Trophy,
   Users,
 } from "lucide-react";
@@ -80,7 +80,7 @@ type EventDetailPageProps = {
 function StatusPill({ event }: { event: Event }) {
   if (event.scoringStatus === "open") {
     return (
-      <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary sm:gap-2 sm:px-3 sm:text-sm">
         <span className="relative flex size-2">
           <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-60" />
           <span className="relative inline-flex size-2 rounded-full bg-primary" />
@@ -92,7 +92,7 @@ function StatusPill({ event }: { event: Event }) {
 
   if (event.scoringStatus === "finalized") {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-sm font-medium text-muted-foreground">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground sm:px-3 sm:text-sm">
         <Trophy className="size-3.5" />
         Complete
       </span>
@@ -101,7 +101,7 @@ function StatusPill({ event }: { event: Event }) {
 
   if (event.status === "draft") {
     return (
-      <span className="inline-flex items-center rounded-full bg-secondary px-3 py-1 text-sm font-medium text-secondary-foreground">
+      <span className="inline-flex items-center rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-secondary-foreground sm:px-3 sm:text-sm">
         Draft
       </span>
     );
@@ -109,7 +109,7 @@ function StatusPill({ event }: { event: Event }) {
 
   if (event.status === "closed") {
     return (
-      <span className="inline-flex items-center rounded-full bg-amber-500/10 px-3 py-1 text-sm font-medium text-amber-800 dark:text-amber-300">
+      <span className="inline-flex items-center rounded-full bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-800 sm:px-3 sm:text-sm dark:text-amber-300">
         Registration closed
       </span>
     );
@@ -117,16 +117,17 @@ function StatusPill({ event }: { event: Event }) {
 
   if (event.status === "archived") {
     return (
-      <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-sm font-medium text-muted-foreground">
+      <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground sm:px-3 sm:text-sm">
         Archived
       </span>
     );
   }
 
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary">
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary sm:px-3 sm:text-sm">
       <span className="size-1.5 rounded-full bg-primary" />
-      Live — accepting registrations
+      <span className="sm:hidden">Live</span>
+      <span className="hidden sm:inline">Live — accepting registrations</span>
     </span>
   );
 }
@@ -145,10 +146,10 @@ function StatTile({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-border/70 bg-card p-3 sm:p-5">
+    <div className="min-w-0 rounded-2xl border border-border/70 bg-card p-3.5 sm:p-5">
       <div className="flex items-center gap-1.5 text-muted-foreground sm:gap-2">
         <Icon className="size-3.5 shrink-0 sm:size-4" />
-        <span className="text-[10px] font-medium uppercase tracking-wide sm:text-xs">
+        <span className="truncate text-[10px] font-medium uppercase tracking-wide sm:text-xs">
           {label}
         </span>
       </div>
@@ -156,12 +157,27 @@ function StatTile({
         {value}
       </p>
       {caption && (
-        <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground sm:text-xs">
+        <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground sm:text-xs">
           {caption}
         </p>
       )}
       {children}
     </div>
+  );
+}
+
+function MetaRow({
+  icon: Icon,
+  children,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  children: React.ReactNode;
+}) {
+  return (
+    <li className="flex min-w-0 items-start gap-2 text-sm text-muted-foreground sm:text-base">
+      <Icon className="mt-0.5 size-3.5 shrink-0 sm:mt-1 sm:size-4" />
+      <span className="min-w-0 text-pretty">{children}</span>
+    </li>
   );
 }
 
@@ -263,95 +279,56 @@ export default async function EventDetailPage({
       : null;
 
   return (
-    <div className="mx-auto w-full min-w-0 space-y-6">
-      {/* Top bar */}
-      <div className="flex items-center justify-between gap-2">
-        <ButtonLink
-          variant="ghost"
-          size="sm"
-          href="/dashboard"
-          className="w-fit shrink-0 text-muted-foreground"
-        >
-          <ArrowLeft />
-          Events
-        </ButtonLink>
-
-        {isOperationalEvent && (
-          <div className="flex shrink-0 gap-1 sm:gap-2">
-            <ButtonLink
-              variant="ghost"
-              size="sm"
-              href={`/e/${event.slug}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-2 text-muted-foreground sm:px-3"
-              aria-label="Open event page"
-            >
-              <span className="hidden sm:inline">Event page</span>
-              <ArrowUpRight className="sm:ml-1" />
-            </ButtonLink>
-            {(event.scoringStatus === "open" ||
-              event.scoringStatus === "finalized") && (
-              <ButtonLink
-                variant="ghost"
-                size="sm"
-                href={`/e/${event.slug}/leaderboard`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-2 text-muted-foreground sm:px-3"
-                aria-label="Open leaderboard"
-              >
-                <span className="hidden sm:inline">Leaderboard</span>
-                <ArrowUpRight className="sm:ml-1" />
-              </ButtonLink>
-            )}
-          </div>
-        )}
-      </div>
-
+    <EventDetailView
+      initialTab={activeTab}
+      isDraft={isDraft}
+      event={{
+        id: event.id,
+        name: event.name,
+        slug: event.slug,
+        status: event.status,
+        scoringStatus: event.scoringStatus,
+      }}
+    >
       {/* Notices */}
       {published === "1" && (
-        <div className="rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
+        <div className="rounded-xl border border-primary/30 bg-primary/5 px-3.5 py-3 text-sm text-pretty sm:px-4">
           Payment received. Your event is live and accepting registrations.
         </div>
       )}
 
       {publish_canceled === "1" && (
-        <div className="rounded-xl border bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
+        <div className="rounded-xl border bg-muted/50 px-3.5 py-3 text-sm text-pretty text-muted-foreground sm:px-4">
           Publish checkout was canceled. Your event remains in draft.
         </div>
       )}
 
       {/* Hero */}
-      <header className="space-y-5 sm:space-y-6">
-        <div className="space-y-3 sm:space-y-4">
-          <StatusPill event={event} />
-          <div className="min-w-0">
-            <h1 className="font-heading text-2xl font-semibold tracking-tight text-balance sm:text-3xl lg:text-4xl">
-              {event.name}
-            </h1>
-            <p className="mt-2 text-sm text-muted-foreground sm:text-base">
-              <span className="block sm:inline">{formatEventHeaderDate(event.date)}</span>
-              <span className="hidden sm:inline"> · </span>
-              <span className="block sm:inline">{event.courseName}</span>
-              <span className="hidden sm:inline"> · </span>
-              <span className="block sm:inline">
+      <header className="space-y-4 sm:space-y-5">
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+          <div className="min-w-0 space-y-2">
+            <StatusPill event={event} />
+            <ul className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:gap-x-4 sm:gap-y-1.5">
+              <MetaRow icon={CalendarDays}>
+                {formatEventHeaderDate(event.date)}
+              </MetaRow>
+              <MetaRow icon={MapPin}>{event.courseName}</MetaRow>
+              <MetaRow icon={Flag}>
                 {getEventFormatLabel(event.format)}, {event.holes} holes
-              </span>
-            </p>
+              </MetaRow>
+            </ul>
           </div>
         </div>
 
-        {/* Stats */}
         {isOperationalEvent && (
-          <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
             <StatTile
               label="Players"
               value={`${registrationCount}`}
               caption={`of ${event.maxPlayers} spots filled`}
               icon={Users}
             >
-              <div className="mt-3 h-1 overflow-hidden rounded-full bg-muted">
+              <div className="mt-2.5 h-1 overflow-hidden rounded-full bg-muted sm:mt-3">
                 <div
                   className="h-full rounded-full bg-primary transition-all"
                   style={{ width: `${capacityPercent}%` }}
@@ -406,270 +383,266 @@ export default async function EventDetailPage({
         )}
       </header>
 
-      <EventDetailView initialTab={activeTab} isDraft={isDraft}>
-        {showNextStepBanner && nextStep && (
+      {showNextStepBanner && nextStep && (
+        <EventTabPanel tab="details">
+          <EventDetailNextStep eventId={event.id} step={nextStep} />
+        </EventTabPanel>
+      )}
+
+      {isDraft && (
+        <>
           <EventTabPanel tab="details">
-            <EventDetailNextStep eventId={event.id} step={nextStep} />
+            <Card className="rounded-2xl">
+              <CardHeader>
+                <CardTitle>Event details</CardTitle>
+                <CardDescription>
+                  Set course, schedule, and registration settings. Changes save
+                  to your draft.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <EventForm event={eventWithScorecard ?? undefined} />
+              </CardContent>
+            </Card>
           </EventTabPanel>
-        )}
 
-        {isDraft && (
-          <>
-            <EventTabPanel tab="details">
-                  <Card className="rounded-2xl">
-                    <CardHeader>
-                      <CardTitle>Event details</CardTitle>
-                      <CardDescription>
-                        Set course, schedule, and registration settings. Changes
-                        save to your draft.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <EventForm event={eventWithScorecard ?? undefined} />
-                    </CardContent>
-                  </Card>
-                </EventTabPanel>
+          <EventTabPanel tab="publish">
+            <PublishEventCard
+              eventId={event.id}
+              eventName={event.name}
+              eventStatus={event.status}
+              hasActiveSubscription={isOrgSubscriptionActive(org)}
+              subscribed={subscribed === "1"}
+              subscribeCanceled={subscribe_canceled === "1"}
+            />
+          </EventTabPanel>
+        </>
+      )}
 
-                <EventTabPanel tab="publish">
-                  <PublishEventCard
-                    eventId={event.id}
-                    eventName={event.name}
-                    eventStatus={event.status}
-                    hasActiveSubscription={isOrgSubscriptionActive(org)}
-                    subscribed={subscribed === "1"}
-                    subscribeCanceled={subscribe_canceled === "1"}
-                  />
+      {isOperationalEvent && (
+        <>
+          <EventTabPanel tab="players">
+            <div className="space-y-4 sm:space-y-6">
+              <Card className="rounded-2xl">
+                <CardHeader className="gap-1">
+                  <CardTitle>Registration link</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <CopyRegistrationLink url={registrationUrl} />
+                  <ButtonLink
+                    variant="outline"
+                    size="sm"
+                    href={`/e/${event.slug}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="h-11 w-full sm:h-9 sm:w-auto"
+                  >
+                    <ExternalLink />
+                    Preview registration page
+                  </ButtonLink>
+                </CardContent>
+              </Card>
+
+              <RegistrationsList
+                eventId={event.id}
+                registrations={registrations}
+                registrationCount={registrationCount}
+                maxPlayers={event.maxPlayers}
+                scoringStatus={event.scoringStatus}
+                eventStatus={event.status}
+              />
+            </div>
+          </EventTabPanel>
+
+          {pairings && (
+            <EventTabPanel tab="pairings">
+              <div className="space-y-4 sm:space-y-6">
+                <StartFormatCard
+                  eventId={event.id}
+                  scoringStatus={event.scoringStatus}
+                  event={{
+                    startFormat: event.startFormat,
+                    shotgunStartTime: event.shotgunStartTime,
+                    firstTeeTime: event.firstTeeTime,
+                    teeTimeIntervalMinutes: event.teeTimeIntervalMinutes,
+                  }}
+                />
+                <PairingsPanel
+                  eventId={event.id}
+                  slug={event.slug}
+                  appUrl={getAppUrl()}
+                  scoringStatus={event.scoringStatus}
+                  startFormat={event.startFormat}
+                  shotgunStartTime={event.shotgunStartTime}
+                  firstTeeTime={event.firstTeeTime}
+                  teeTimeIntervalMinutes={event.teeTimeIntervalMinutes}
+                  holes={event.holes}
+                  format={event.format}
+                  teamSize={event.teamSize}
+                  teamAName={event.teamAName}
+                  teamBName={event.teamBName}
+                  pairings={pairings}
+                />
+              </div>
             </EventTabPanel>
-          </>
-        )}
+          )}
 
-        {isOperationalEvent && (
-          <>
-            <EventTabPanel tab="players">
-                  <div className="space-y-6">
-                    <Card className="rounded-2xl">
-                      <CardHeader>
-                        <CardTitle>Registration link</CardTitle>
-                        <CardDescription>
-                          Share with players — works on any phone, no app needed.
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        <CopyRegistrationLink url={registrationUrl} />
-                        <ButtonLink
-                          variant="outline"
-                          size="sm"
-                          href={`/e/${event.slug}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
+          {workflow && (
+            <EventTabPanel tab="scoring">
+              <ScoringCard
+                eventId={event.id}
+                slug={event.slug}
+                scoringStatus={event.scoringStatus}
+                scoringCode={event.scoringCode}
+                appUrl={getAppUrl()}
+                canOpenScoring={workflow.canOpenScoring}
+                workflow={workflow}
+                groupScoringProgress={groupScoringProgress}
+              />
+            </EventTabPanel>
+          )}
+
+          <EventTabPanel tab="analytics">
+            {analyticsReport ? (
+              <EventAnalyticsReportCard
+                eventId={event.id}
+                report={analyticsReport}
+              />
+            ) : (
+              <Card className="rounded-2xl">
+                <CardHeader>
+                  <CardTitle>Analytics</CardTitle>
+                  <CardDescription className="text-pretty">
+                    Analytics will appear here once players register for your
+                    event.
+                  </CardDescription>
+                </CardHeader>
+              </Card>
+            )}
+          </EventTabPanel>
+
+          <EventTabPanel tab="settings">
+            <div className="space-y-4 sm:space-y-6">
+              <ProFeaturesPanel event={event} />
+              <EventBrandingPanel event={event} />
+              <FlightsPanel eventId={event.id} flights={flights} />
+              <SponsorPackagesPanel
+                eventId={event.id}
+                packages={sponsorData.packages}
+                purchases={sponsorData.purchases}
+              />
+              {event.waitlistEnabled && waitlist.length > 0 && (
+                <Card className="rounded-2xl">
+                  <CardHeader>
+                    <CardTitle>Waitlist</CardTitle>
+                    <CardDescription>
+                      {waitlist.length} player
+                      {waitlist.length === 1 ? "" : "s"} waiting for a spot.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ul className="space-y-2 text-sm">
+                      {waitlist.map((entry) => (
+                        <li
+                          key={entry.id}
+                          className="flex items-start justify-between gap-3 rounded-xl border border-border/70 px-3 py-2.5"
                         >
-                          <ExternalLink />
-                          Preview registration page
-                        </ButtonLink>
-                      </CardContent>
-                    </Card>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate font-medium">{entry.name}</p>
+                            <p className="truncate text-muted-foreground">
+                              {entry.email}
+                            </p>
+                          </div>
+                          <span className="shrink-0 pt-0.5 text-xs text-muted-foreground sm:text-sm">
+                            {entry.notifiedAt ? "Notified" : "Waiting"}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
+              )}
 
-                    <RegistrationsList
-                      eventId={event.id}
-                      registrations={registrations}
-                      registrationCount={registrationCount}
-                      maxPlayers={event.maxPlayers}
-                      scoringStatus={event.scoringStatus}
-                      eventStatus={event.status}
-                    />
-                  </div>
-                </EventTabPanel>
+              <EventLifecycleCard event={event} />
 
-                {pairings && (
-                  <EventTabPanel tab="pairings">
-                    <div className="space-y-4 sm:space-y-6">
-                      <StartFormatCard
+              <PayoutInfoCard />
+
+              <Card className="rounded-2xl">
+                <CardHeader>
+                  <CardTitle>Event details</CardTitle>
+                  <CardDescription>
+                    Core settings for this event. Contact support if you need to
+                    change course or format after publishing.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6 sm:space-y-8">
+                  <dl className="grid gap-x-8 gap-y-4 text-sm sm:grid-cols-2 sm:gap-y-5">
+                    {[
+                      { label: "Course", value: event.courseName },
+                      {
+                        label: "Date",
+                        value: formatEventHeaderDate(event.date),
+                      },
+                      {
+                        label: "Format",
+                        value: `${getEventFormatLabel(event.format)} · ${event.holes} holes`,
+                      },
+                      {
+                        label: "Entry fee",
+                        value:
+                          event.entryFeeCents === 0
+                            ? "Free"
+                            : `$${(event.entryFeeCents / 100).toFixed(2)}`,
+                      },
+                      {
+                        label: "Capacity",
+                        value: `${event.maxPlayers} players`,
+                      },
+                      ...(eventWithScorecard?.eventHoles &&
+                      eventWithScorecard.eventHoles.length > 0
+                        ? [
+                            {
+                              label: "Scorecard",
+                              value: `Par ${eventWithScorecard.eventHoles.reduce(
+                                (sum, hole) => sum + hole.par,
+                                0
+                              )} · ${eventWithScorecard.eventHoles.length} holes`,
+                            },
+                          ]
+                        : []),
+                    ].map((row) => (
+                      <div
+                        key={row.label}
+                        className="flex flex-col gap-1 border-b border-border/60 pb-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4"
+                      >
+                        <dt className="text-muted-foreground">{row.label}</dt>
+                        <dd className="min-w-0 font-medium sm:text-right">
+                          {row.value}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+
+                  <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4">
+                    <h3 className="text-sm font-medium">Danger zone</h3>
+                    <p className="mt-1 text-sm text-pretty text-muted-foreground">
+                      Permanently delete this event, including registrations,
+                      pairings, and scores.
+                    </p>
+                    <div className="mt-4">
+                      <DeleteEventButton
                         eventId={event.id}
-                        scoringStatus={event.scoringStatus}
-                        event={{
-                          startFormat: event.startFormat,
-                          shotgunStartTime: event.shotgunStartTime,
-                          firstTeeTime: event.firstTeeTime,
-                          teeTimeIntervalMinutes: event.teeTimeIntervalMinutes,
-                        }}
-                      />
-                      <PairingsPanel
-                        eventId={event.id}
-                        slug={event.slug}
-                        appUrl={getAppUrl()}
-                        scoringStatus={event.scoringStatus}
-                        startFormat={event.startFormat}
-                        shotgunStartTime={event.shotgunStartTime}
-                        firstTeeTime={event.firstTeeTime}
-                        teeTimeIntervalMinutes={event.teeTimeIntervalMinutes}
-                        holes={event.holes}
-                        format={event.format}
-                        teamSize={event.teamSize}
-                        teamAName={event.teamAName}
-                        teamBName={event.teamBName}
-                        pairings={pairings}
+                        eventName={event.name}
+                        status={event.status}
                       />
                     </div>
-                  </EventTabPanel>
-                )}
-
-                {workflow && (
-                  <EventTabPanel tab="scoring">
-                    <ScoringCard
-                      eventId={event.id}
-                      slug={event.slug}
-                      scoringStatus={event.scoringStatus}
-                      scoringCode={event.scoringCode}
-                      appUrl={getAppUrl()}
-                      canOpenScoring={workflow.canOpenScoring}
-                      workflow={workflow}
-                      groupScoringProgress={groupScoringProgress}
-                    />
-                  </EventTabPanel>
-                )}
-
-                <EventTabPanel tab="analytics">
-                  {analyticsReport ? (
-                    <EventAnalyticsReportCard
-                      eventId={event.id}
-                      report={analyticsReport}
-                    />
-                  ) : (
-                    <Card className="rounded-2xl">
-                      <CardHeader>
-                        <CardTitle>Analytics</CardTitle>
-                        <CardDescription>
-                          Analytics will appear here once players register for
-                          your event.
-                        </CardDescription>
-                      </CardHeader>
-                    </Card>
-                  )}
-                </EventTabPanel>
-
-                <EventTabPanel tab="settings">
-                  <div className="space-y-6">
-                    <ProFeaturesPanel event={event} />
-                    <EventBrandingPanel event={event} />
-                    <FlightsPanel eventId={event.id} flights={flights} />
-                    <SponsorPackagesPanel
-                      eventId={event.id}
-                      packages={sponsorData.packages}
-                      purchases={sponsorData.purchases}
-                    />
-                    {event.waitlistEnabled && waitlist.length > 0 && (
-                      <Card className="rounded-2xl">
-                        <CardHeader>
-                          <CardTitle>Waitlist</CardTitle>
-                          <CardDescription>
-                            {waitlist.length} player
-                            {waitlist.length === 1 ? "" : "s"} waiting for a
-                            spot.
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                          <ul className="space-y-2 text-sm">
-                            {waitlist.map((entry) => (
-                              <li
-                                key={entry.id}
-                                className="flex items-center justify-between rounded-lg border border-border/70 px-3 py-2"
-                              >
-                                <span>
-                                  {entry.name} · {entry.email}
-                                </span>
-                                <span className="text-muted-foreground">
-                                  {entry.notifiedAt ? "Notified" : "Waiting"}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                        </CardContent>
-                      </Card>
-                    )}
-
-                    <EventLifecycleCard event={event} />
-
-                    <PayoutInfoCard />
-
-                    <Card className="rounded-2xl">
-                      <CardHeader>
-                        <CardTitle>Event details</CardTitle>
-                        <CardDescription>
-                          Core settings for this event. Contact support if you
-                          need to change course or format after publishing.
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="space-y-8">
-                        <dl className="grid gap-x-8 gap-y-5 text-sm sm:grid-cols-2">
-                          {[
-                            { label: "Course", value: event.courseName },
-                            {
-                              label: "Date",
-                              value: formatEventHeaderDate(event.date),
-                            },
-                            {
-                              label: "Format",
-                              value: `${getEventFormatLabel(event.format)} · ${event.holes} holes`,
-                            },
-                            {
-                              label: "Entry fee",
-                              value:
-                                event.entryFeeCents === 0
-                                  ? "Free"
-                                  : `$${(event.entryFeeCents / 100).toFixed(2)}`,
-                            },
-                            {
-                              label: "Capacity",
-                              value: `${event.maxPlayers} players`,
-                            },
-                            ...(eventWithScorecard?.eventHoles &&
-                            eventWithScorecard.eventHoles.length > 0
-                              ? [
-                                  {
-                                    label: "Scorecard",
-                                    value: `Par ${eventWithScorecard.eventHoles.reduce(
-                                      (sum, hole) => sum + hole.par,
-                                      0
-                                    )} · ${eventWithScorecard.eventHoles.length} holes`,
-                                  },
-                                ]
-                              : []),
-                          ].map((row) => (
-                            <div
-                              key={row.label}
-                              className="flex items-baseline justify-between gap-4 border-b border-border/60 pb-3"
-                            >
-                              <dt className="text-muted-foreground">
-                                {row.label}
-                              </dt>
-                              <dd className="text-right font-medium">
-                                {row.value}
-                              </dd>
-                            </div>
-                          ))}
-                        </dl>
-
-                        <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4">
-                          <h3 className="text-sm font-medium">Danger zone</h3>
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            Permanently delete this event, including
-                            registrations, pairings, and scores.
-                          </p>
-                          <div className="mt-4">
-                            <DeleteEventButton
-                              eventId={event.id}
-                              eventName={event.name}
-                              status={event.status}
-                            />
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
                   </div>
-            </EventTabPanel>
-          </>
-        )}
-      </EventDetailView>
-    </div>
+                </CardContent>
+              </Card>
+            </div>
+          </EventTabPanel>
+        </>
+      )}
+    </EventDetailView>
   );
 }

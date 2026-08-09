@@ -36,6 +36,11 @@ export const DRAFT_EVENT_TABS: EventTabDefinition[] = [
 const PUBLISHED_TAB_SET = new Set<string>(PUBLISHED_EVENT_TABS.map((tab) => tab.id));
 const DRAFT_TAB_SET = new Set<string>(DRAFT_EVENT_TABS.map((tab) => tab.id));
 
+export function getEventTabLabel(tab: EventTab, isDraft: boolean): string {
+  const tabs = isDraft ? DRAFT_EVENT_TABS : PUBLISHED_EVENT_TABS;
+  return tabs.find((entry) => entry.id === tab)?.label ?? tab;
+}
+
 export function parseEventTab(
   tab: string | undefined,
   isDraft: boolean
@@ -59,6 +64,11 @@ export function parseEventTab(
 
 export function eventTabHref(eventId: string, tab: EventTab): string {
   return `/dashboard/events/${eventId}?tab=${tab}`;
+}
+
+/** True for `/dashboard/events/[id]` (excludes `/dashboard/events/new`). */
+export function isEventWorkspacePath(pathname: string): boolean {
+  return /^\/dashboard\/events\/(?!new$)[^/]+$/.test(pathname);
 }
 
 function todayDateString(): string {

@@ -136,10 +136,10 @@ export function RegistrationsList({
 
   return (
     <Card className="rounded-2xl">
-      <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
-        <div className="space-y-1">
+      <CardHeader className="flex flex-col gap-3 border-b border-border/60 pb-4 sm:flex-row sm:items-start sm:justify-between [.border-b]:pb-4">
+        <div className="min-w-0 space-y-1">
           <CardTitle>Registrations</CardTitle>
-          <CardDescription>
+          <CardDescription className="text-pretty">
             {registrationCount} of {maxPlayers} spots filled
             {eventStatus === "published" && scoringStatus === "disabled" && (
               <>
@@ -159,12 +159,16 @@ export function RegistrationsList({
             )}
           </CardDescription>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
           {canManageComps && (
             <Sheet open={compOpen} onOpenChange={setCompOpen}>
               <SheetTrigger
                 render={
-                  <Button variant="outline" size="sm">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-10 w-full sm:h-8 sm:w-auto"
+                  >
                     <Plus />
                     Comp player
                   </Button>
@@ -249,6 +253,7 @@ export function RegistrationsList({
               variant="outline"
               size="sm"
               href={`/dashboard/events/${eventId}/export`}
+              className="h-10 w-full sm:h-8 sm:w-auto"
             >
               <Download />
               Export CSV
@@ -256,7 +261,7 @@ export function RegistrationsList({
           )}
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 pt-4">
         {registrations.length > 0 && (
           <div className="flex flex-col gap-3 sm:flex-row">
             <div className="relative flex-1">
@@ -289,7 +294,7 @@ export function RegistrationsList({
         )}
 
         {registrations.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-pretty text-muted-foreground">
             No registrations yet. Share your registration link to get players
             signed up.
           </p>
@@ -298,13 +303,13 @@ export function RegistrationsList({
             No registrations match your search.
           </p>
         ) : (
-          <ul className="divide-y divide-border">
+          <ul className="-mx-1 divide-y divide-border">
             {filtered.map((reg) => (
               <li
                 key={reg.id}
-                className="flex items-start justify-between gap-3 py-3 first:pt-0"
+                className="flex items-start justify-between gap-3 px-1 py-3.5 first:pt-1 last:pb-0"
               >
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 space-y-0.5">
                   <p className="truncate font-medium">{reg.name}</p>
                   <p className="truncate text-sm text-muted-foreground">
                     {reg.email}
@@ -315,7 +320,7 @@ export function RegistrationsList({
                     </p>
                   )}
                 </div>
-                <div className="flex shrink-0 items-center gap-1">
+                <div className="flex shrink-0 items-center gap-1.5 pt-0.5">
                   <EditRegistrationSheet
                     eventId={eventId}
                     registration={reg}

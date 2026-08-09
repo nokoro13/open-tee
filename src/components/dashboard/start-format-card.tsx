@@ -68,7 +68,7 @@ export function StartFormatCard({
   }
 
   return (
-    <Card className="min-w-0 overflow-hidden">
+    <Card className="min-w-0 overflow-hidden rounded-2xl">
       <CardHeader className="space-y-1">
         <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
           <Clock className="size-4 shrink-0" />

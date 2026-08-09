@@ -277,6 +277,32 @@ function SidebarTrigger({
   )
 }
 
+function SidebarDesktopTrigger({
+  className,
+  ...props
+}: React.ComponentProps<typeof SidebarTrigger>) {
+  const { isMobile } = useSidebar()
+
+  if (isMobile) {
+    return null
+  }
+
+  return <SidebarTrigger className={className} {...props} />
+}
+
+function SidebarMobileTrigger({
+  className,
+  ...props
+}: React.ComponentProps<typeof SidebarTrigger>) {
+  const { isMobile } = useSidebar()
+
+  if (!isMobile) {
+    return null
+  }
+
+  return <SidebarTrigger className={className} {...props} />
+}
+
 function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
   const { toggleSidebar } = useSidebar()
 
@@ -337,6 +363,42 @@ function SidebarHeader({ className, ...props }: React.ComponentProps<"div">) {
       className={cn("flex flex-col gap-2 p-2", className)}
       {...props}
     />
+  )
+}
+
+function SidebarHeaderActions({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="sidebar-header-actions"
+      className={cn("flex items-start gap-1", className)}
+      {...props}
+    />
+  )
+}
+
+function SidebarCollapseTrigger({
+  className,
+  ...props
+}: React.ComponentProps<typeof SidebarDesktopTrigger>) {
+  return (
+    <SidebarDesktopTrigger
+      className={cn(
+        "shrink-0 group-data-[collapsible=icon]:hidden",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function SidebarExpandTrigger({
+  className,
+  ...props
+}: React.ComponentProps<typeof SidebarDesktopTrigger>) {
+  return (
+    <div className="hidden group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center">
+      <SidebarDesktopTrigger className={className} {...props} />
+    </div>
   )
 }
 
@@ -698,12 +760,15 @@ function SidebarMenuSubButton({
 export {
   Sidebar,
   SidebarContent,
+  SidebarCollapseTrigger,
+  SidebarExpandTrigger,
   SidebarFooter,
   SidebarGroup,
   SidebarGroupAction,
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarHeader,
+  SidebarHeaderActions,
   SidebarInput,
   SidebarInset,
   SidebarMenu,
@@ -716,6 +781,8 @@ export {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
   SidebarProvider,
+  SidebarDesktopTrigger,
+  SidebarMobileTrigger,
   SidebarRail,
   SidebarSeparator,
   SidebarTrigger,

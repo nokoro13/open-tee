@@ -67,10 +67,10 @@ export function EventBrandingPanel({ event }: EventBrandingPanelProps) {
   }
 
   return (
-    <Card>
+    <Card className="rounded-2xl">
       <CardHeader>
         <CardTitle>Custom branding</CardTitle>
-        <CardDescription>
+        <CardDescription className="text-pretty">
           Logo, cover image, and colors on your public registration page.
         </CardDescription>
       </CardHeader>
@@ -147,7 +147,11 @@ export function EventBrandingPanel({ event }: EventBrandingPanelProps) {
         {message && <p className="text-sm text-primary">{message}</p>}
         {error && <p className="text-sm text-destructive">{error}</p>}
 
-        <Button disabled={isPending} onClick={handleSave}>
+        <Button
+          disabled={isPending}
+          onClick={handleSave}
+          className="h-11 w-full sm:w-auto"
+        >
           {isPending ? "Saving..." : "Save branding"}
         </Button>
       </CardContent>

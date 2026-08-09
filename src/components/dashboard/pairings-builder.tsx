@@ -1132,6 +1132,7 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
           appUrl={appUrl}
           slug={slug}
           unassignedCount={localPairings.unassigned.length}
+          isMobile={isMobile}
           onAddPlayers={() => {
             if (detailsGroup) {
               openPlayerPicker(detailsGroup.id);
@@ -1586,21 +1587,25 @@ function GroupRow({
   function handleRowClick() {
     if (assignMode) {
       onAssignHere();
+      return;
+    }
+    if (isMobile) {
+      onOpenDetails();
     }
   }
 
   return (
     <div
       ref={useTeamZones ? undefined : setNodeRef}
-      role={assignMode ? "button" : undefined}
-      tabIndex={assignMode ? 0 : undefined}
-      onClick={assignMode ? handleRowClick : undefined}
+      role={isMobile || assignMode ? "button" : undefined}
+      tabIndex={isMobile || assignMode ? 0 : undefined}
+      onClick={isMobile || assignMode ? handleRowClick : undefined}
       onKeyDown={
-        assignMode
+        isMobile || assignMode
           ? (event) => {
               if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
-                onAssignHere();
+                handleRowClick();
               }
             }
           : undefined
@@ -1608,13 +1613,15 @@ function GroupRow({
       className={cn(
         "min-w-0 rounded-xl border bg-card transition-colors",
         isMobile
-          ? "flex flex-col gap-3 px-3 py-3"
+          ? "flex flex-col gap-3 px-3 py-3 touch-manipulation"
           : "grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 px-3 py-2.5 sm:gap-3 sm:px-3.5 sm:py-3",
         assignMode
           ? "cursor-pointer border-primary bg-primary/5 ring-2 ring-primary/25"
-          : !useTeamZones && isOver
-            ? "border-primary bg-primary/5 ring-2 ring-inset ring-primary/20"
-            : "border-border",
+          : isMobile
+            ? "cursor-pointer active:bg-muted/40"
+            : !useTeamZones && isOver
+              ? "border-primary bg-primary/5 ring-2 ring-inset ring-primary/20"
+              : "border-border",
         isFull && !assignMode && "bg-muted/15"
       )}
     >
@@ -2241,6 +2248,7 @@ type GroupDetailsSheetProps = {
   appUrl: string;
   slug: string;
   unassignedCount: number;
+  isMobile: boolean;
   onAddPlayers: () => void;
   onUpdate: (input: GroupUpdateInput) => void;
   onDelete: () => void;
@@ -2268,13 +2276,13 @@ function GroupDetailsSheet({
   appUrl,
   slug,
   unassignedCount,
+  isMobile,
   onAddPlayers,
   onUpdate,
   onDelete,
   onTeamSide,
   onRemovePlayer,
 }: GroupDetailsSheetProps) {
-  const isMobile = useIsMobile();
   const [localLabel, setLocalLabel] = useState(group?.label ?? "");
   const pairSides = usesPairSides(format, teamSize);
 
@@ -2312,26 +2320,33 @@ function GroupDetailsSheet({
     <Sheet open={group != null} onOpenChange={onOpenChange}>
       <SheetContent
         side={isMobile ? "bottom" : "right"}
+        showCloseButton={!isMobile}
         className={cn(
-          "gap-0",
+          "gap-0 overflow-hidden",
           isMobile
-            ? "max-h-[88dvh] rounded-t-3xl p-0"
+            ? [
+                "inset-x-0 bottom-0 left-0 right-0 w-full max-w-none",
+                "h-[min(92dvh,100%)] max-h-[92dvh]",
+                "rounded-t-3xl border-x-0 border-b-0 p-0",
+              ].join(" ")
             : "w-full sm:max-w-md"
         )}
       >
         {group && (
           <>
             {isMobile && (
-              <div
-                className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-muted"
-                aria-hidden
-              />
+              <div className="flex shrink-0 flex-col items-center pt-2.5">
+                <div
+                  className="h-1 w-10 rounded-full bg-muted-foreground/30"
+                  aria-hidden
+                />
+              </div>
             )}
             <SheetHeader
               className={cn(
                 "shrink-0 border-b border-border",
                 isMobile
-                  ? "border-border/50 px-5 pb-4 pt-3 text-left"
+                  ? "gap-1 border-border/50 px-5 pb-4 pt-3 text-left"
                   : "pr-12"
               )}
             >
@@ -2354,7 +2369,7 @@ function GroupDetailsSheet({
 
             <div
               className={cn(
-                "min-h-0 flex-1 space-y-6 overflow-y-auto",
+                "min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain",
                 isMobile ? "px-5 py-4" : "p-4"
               )}
             >
@@ -2663,7 +2678,7 @@ function GroupDetailsSheet({
                   type="button"
                   variant="destructive"
                   size="sm"
-                  className="w-full"
+                  className="h-11 w-full"
                   disabled={disabled}
                   onClick={onDelete}
                 >
@@ -2674,6 +2689,18 @@ function GroupDetailsSheet({
                   Players return to the registrants list.
                 </p>
               </SheetFooter>
+            )}
+            {isMobile && setupLocked && (
+              <div className="shrink-0 px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-11 w-full"
+                  onClick={() => onOpenChange(false)}
+                >
+                  Done
+                </Button>
+              </div>
             )}
           </>
         )}
@@ -2770,7 +2797,8 @@ function PlayerPickerSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="bottom"
-        className="max-h-[85dvh] gap-0 rounded-t-3xl p-0 lg:hidden"
+        showCloseButton={false}
+        className="inset-x-0 bottom-0 left-0 right-0 h-[min(85dvh,100%)] max-h-[85dvh] w-full max-w-none gap-0 overflow-hidden rounded-t-3xl border-x-0 border-b-0 p-0 lg:hidden"
       >
         <div
           className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-muted"
@@ -2871,7 +2899,8 @@ function TeamSidePickerSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="bottom"
-        className="gap-0 rounded-t-3xl p-0 lg:hidden"
+        showCloseButton={false}
+        className="inset-x-0 bottom-0 left-0 right-0 w-full max-w-none gap-0 overflow-hidden rounded-t-3xl border-x-0 border-b-0 p-0 lg:hidden"
       >
         <div
           className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-muted"

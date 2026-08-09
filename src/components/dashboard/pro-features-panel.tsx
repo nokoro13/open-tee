@@ -80,29 +80,29 @@ export function ProFeaturesPanel({ event }: ProFeaturesPanelProps) {
   }
 
   return (
-    <Card>
+    <Card className="rounded-2xl">
       <CardHeader>
         <CardTitle>Registration features</CardTitle>
-        <CardDescription>
+        <CardDescription className="text-pretty">
           Open or close registration, plus waitlist, group signup, and SMS
           reminders.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         {scoringStarted && event.status !== "draft" && event.status !== "archived" && (
-          <div className="rounded-xl border border-border/70 bg-muted/10 px-4 py-3 text-sm text-muted-foreground">
+          <div className="rounded-xl border border-border/70 bg-muted/10 px-3.5 py-3 text-sm text-pretty text-muted-foreground sm:px-4">
             Registration is locked while scoring is active.
           </div>
         )}
 
         <div className="space-y-3">
           {canToggleRegistration && (
-            <div className="flex items-center justify-between gap-4 rounded-xl border border-border/70 p-4">
-              <div className="space-y-1">
+            <div className="flex items-start justify-between gap-3 rounded-xl border border-border/70 p-3.5 sm:items-center sm:gap-4 sm:p-4">
+              <div className="min-w-0 space-y-1">
                 <Label htmlFor="registration-open" className="text-sm font-medium">
                   Registration open
                 </Label>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-pretty text-muted-foreground">
                   Turn off when your field is set. Scoring locks registration
                   automatically.
                 </p>
@@ -112,16 +112,17 @@ export function ProFeaturesPanel({ event }: ProFeaturesPanelProps) {
                 checked={registrationOpen}
                 disabled={isPending}
                 onCheckedChange={handleRegistrationToggle}
+                className="mt-0.5 shrink-0 sm:mt-0"
               />
             </div>
           )}
 
-          <div className="flex items-center justify-between gap-4 rounded-xl border border-border/70 p-4">
-            <div className="space-y-1">
+          <div className="flex items-start justify-between gap-3 rounded-xl border border-border/70 p-3.5 sm:items-center sm:gap-4 sm:p-4">
+            <div className="min-w-0 space-y-1">
               <Label htmlFor="waitlist-enabled" className="text-sm font-medium">
                 Waitlist when sold out
               </Label>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-pretty text-muted-foreground">
                 Let players join a waitlist after the event fills up.
               </p>
             </div>
@@ -132,18 +133,19 @@ export function ProFeaturesPanel({ event }: ProFeaturesPanelProps) {
               onCheckedChange={(checked) =>
                 setForm({ ...form, waitlistEnabled: checked })
               }
+              className="mt-0.5 shrink-0 sm:mt-0"
             />
           </div>
 
-          <div className="flex items-center justify-between gap-4 rounded-xl border border-border/70 p-4">
-            <div className="space-y-1">
+          <div className="flex items-start justify-between gap-3 rounded-xl border border-border/70 p-3.5 sm:items-center sm:gap-4 sm:p-4">
+            <div className="min-w-0 space-y-1">
               <Label
                 htmlFor="group-registration-enabled"
                 className="text-sm font-medium"
               >
                 Group registration
               </Label>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-pretty text-muted-foreground">
                 Allow one person to register multiple players at once.
               </p>
             </div>
@@ -154,15 +156,16 @@ export function ProFeaturesPanel({ event }: ProFeaturesPanelProps) {
               onCheckedChange={(checked) =>
                 setForm({ ...form, groupRegistrationEnabled: checked })
               }
+              className="mt-0.5 shrink-0 sm:mt-0"
             />
           </div>
 
-          <div className="flex items-center justify-between gap-4 rounded-xl border border-border/70 p-4">
-            <div className="space-y-1">
+          <div className="flex items-start justify-between gap-3 rounded-xl border border-border/70 p-3.5 sm:items-center sm:gap-4 sm:p-4">
+            <div className="min-w-0 space-y-1">
               <Label htmlFor="sms-reminders-enabled" className="text-sm font-medium">
                 SMS reminders
               </Label>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-pretty text-muted-foreground">
                 Text registrants 24 hours before tee time.
               </p>
             </div>
@@ -173,6 +176,7 @@ export function ProFeaturesPanel({ event }: ProFeaturesPanelProps) {
               onCheckedChange={(checked) =>
                 setForm({ ...form, smsRemindersEnabled: checked })
               }
+              className="mt-0.5 shrink-0 sm:mt-0"
             />
           </div>
         </div>
@@ -180,7 +184,11 @@ export function ProFeaturesPanel({ event }: ProFeaturesPanelProps) {
         {message && <p className="text-sm text-primary">{message}</p>}
         {error && <p className="text-sm text-destructive">{error}</p>}
 
-        <Button disabled={isPending} onClick={handleSave}>
+        <Button
+          disabled={isPending}
+          onClick={handleSave}
+          className="h-11 w-full sm:w-auto"
+        >
           {isPending ? "Saving..." : "Save settings"}
         </Button>
       </CardContent>

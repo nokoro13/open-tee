@@ -24,6 +24,9 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
+  SidebarCollapseTrigger,
+  SidebarExpandTrigger,
+  SidebarHeaderActions,
   useSidebar,
 } from "@/components/ui/sidebar";
 
@@ -50,25 +53,28 @@ export function AppSidebar({ showAdminNav = false }: { showAdminNav?: boolean })
   return (
     <Sidebar collapsible="icon" variant="sidebar">
       <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              size="lg"
-              render={<Link href="/dashboard" onClick={closeMobileSidebar} />}
-              className="data-active:bg-transparent"
-            >
-              <OpenRoundMark size="sm" />
-              <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-heading font-semibold tracking-tight">
-                  OpenRound
-                </span>
-                <span className="truncate text-xs text-sidebar-foreground/70">
-                  Tournament hosting
-                </span>
-              </div>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <SidebarHeaderActions>
+          <SidebarMenu className="min-w-0 flex-1">
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                size="lg"
+                render={<Link href="/dashboard" onClick={closeMobileSidebar} />}
+                className="data-active:bg-transparent"
+              >
+                <OpenRoundMark size="sm" />
+                <div className="grid flex-1 text-left text-sm leading-tight">
+                  <span className="truncate font-heading font-semibold tracking-tight">
+                    OpenRound
+                  </span>
+                  <span className="truncate text-xs text-sidebar-foreground/70">
+                    Tournament hosting
+                  </span>
+                </div>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+          <SidebarCollapseTrigger className="mt-1.5" />
+        </SidebarHeaderActions>
       </SidebarHeader>
 
       <SidebarContent>
@@ -160,6 +166,7 @@ export function AppSidebar({ showAdminNav = false }: { showAdminNav?: boolean })
       </SidebarContent>
 
       <SidebarFooter>
+        <SidebarExpandTrigger />
         <SidebarMenu>
           <SidebarMenuItem>
             <div className="flex items-center gap-2 rounded-md p-2 group-data-[collapsible=icon]:justify-center">

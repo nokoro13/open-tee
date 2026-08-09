@@ -86,11 +86,11 @@ export function EventLifecycleCard({ event }: EventLifecycleCardProps) {
         )}
 
         {event.status !== "archived" && (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
             <Button
               type="button"
               variant="outline"
-              className="h-11"
+              className="h-11 w-full sm:w-auto"
               disabled={isPending}
               onClick={() => setArchiveDialogOpen(true)}
             >
