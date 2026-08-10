@@ -6,7 +6,6 @@ export type EventListFilter = "all" | "drafts" | "upcoming" | "past";
 export type PublishedEventTab =
   | "players"
   | "pairings"
-  | "scoring"
   | "analytics"
   | "settings";
 
@@ -18,19 +17,45 @@ export type EventTabDefinition = {
   id: EventTab;
   label: string;
   shortLabel?: string;
+  description?: string;
 };
 
 export const PUBLISHED_EVENT_TABS: EventTabDefinition[] = [
-  { id: "players", label: "Players" },
-  { id: "pairings", label: "Pairings" },
-  { id: "scoring", label: "Scoring" },
-  { id: "analytics", label: "Analytics", shortLabel: "Stats" },
-  { id: "settings", label: "Settings" },
+  {
+    id: "players",
+    label: "Players",
+    description: "Share your signup link and manage registrations.",
+  },
+  {
+    id: "pairings",
+    label: "Pairings",
+    description: "Set start times, build groups, and print scorecards.",
+  },
+  {
+    id: "analytics",
+    label: "Analytics",
+    shortLabel: "Stats",
+    description: "Revenue, registration trends, and exports.",
+  },
+  {
+    id: "settings",
+    label: "Settings",
+    description: "Branding, flights, sponsors, and event lifecycle.",
+  },
 ];
 
 export const DRAFT_EVENT_TABS: EventTabDefinition[] = [
-  { id: "details", label: "Event details", shortLabel: "Details" },
-  { id: "publish", label: "Publish" },
+  {
+    id: "details",
+    label: "Event details",
+    shortLabel: "Details",
+    description: "Course, schedule, and registration settings.",
+  },
+  {
+    id: "publish",
+    label: "Publish",
+    description: "Go live and start accepting registrations.",
+  },
 ];
 
 const PUBLISHED_TAB_SET = new Set<string>(PUBLISHED_EVENT_TABS.map((tab) => tab.id));
@@ -39,6 +64,14 @@ const DRAFT_TAB_SET = new Set<string>(DRAFT_EVENT_TABS.map((tab) => tab.id));
 export function getEventTabLabel(tab: EventTab, isDraft: boolean): string {
   const tabs = isDraft ? DRAFT_EVENT_TABS : PUBLISHED_EVENT_TABS;
   return tabs.find((entry) => entry.id === tab)?.label ?? tab;
+}
+
+export function getEventTabDescription(
+  tab: EventTab,
+  isDraft: boolean
+): string | undefined {
+  const tabs = isDraft ? DRAFT_EVENT_TABS : PUBLISHED_EVENT_TABS;
+  return tabs.find((entry) => entry.id === tab)?.description;
 }
 
 export function parseEventTab(
@@ -55,6 +88,10 @@ export function parseEventTab(
 
   if (tab === "features") {
     return "settings";
+  }
+
+  if (tab === "scoring") {
+    return "pairings";
   }
 
   return tab && PUBLISHED_TAB_SET.has(tab)
@@ -119,6 +156,8 @@ export type SetupStep = {
   tab: EventTab;
   /** When set, overrides tab navigation (e.g. print scorecards). */
   href?: string;
+  /** Scroll to the persistent scoring bar instead of switching tabs. */
+  focusScoring?: boolean;
 };
 
 export type SetupChecklistItem = {
@@ -127,6 +166,7 @@ export type SetupChecklistItem = {
   description: string;
   tab: PublishedEventTab;
   href?: string;
+  focusScoring?: boolean;
   done: boolean;
 };
 
@@ -196,11 +236,12 @@ export function getEventSetupChecklist(options: {
       label: "Open scoring",
       description:
         scoringStatus === "disabled"
-          ? "Send scoring links when groups tee off."
+          ? "Use the scoring bar when groups tee off."
           : scoringStatus === "open"
             ? "Players are entering scores."
             : "Scoring is complete.",
-      tab: "scoring",
+      tab: "pairings",
+      focusScoring: true,
       done: scoringStatus !== "disabled",
     },
     {
@@ -210,7 +251,8 @@ export function getEventSetupChecklist(options: {
         scoringStatus === "finalized"
           ? "Final leaderboard is published."
           : "Lock scores and publish the final leaderboard.",
-      tab: "scoring",
+      tab: "pairings",
+      focusScoring: true,
       done: scoringStatus === "finalized",
     },
   ];
@@ -261,7 +303,8 @@ export function getCurrentSetupStep(options: {
     return {
       label: "Finalize results",
       description: "Lock scores and publish the final leaderboard.",
-      tab: "scoring",
+      tab: "pairings",
+      focusScoring: true,
     };
   }
 

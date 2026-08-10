@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import type { Flight } from "@/db/schema";
+import { eventWorkspaceSettingsSurfaceClassName } from "@/lib/event-workspace-layout";
 
 type FlightsPanelProps = {
   eventId: string;
@@ -43,7 +44,7 @@ export function FlightsPanel({ eventId, flights }: FlightsPanelProps) {
   }
 
   return (
-    <Card className="rounded-2xl">
+    <Card className={eventWorkspaceSettingsSurfaceClassName}>
       <CardHeader>
         <CardTitle>Flights</CardTitle>
         <CardDescription className="text-pretty">

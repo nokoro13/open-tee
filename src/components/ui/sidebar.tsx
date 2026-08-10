@@ -396,7 +396,7 @@ function SidebarExpandTrigger({
   ...props
 }: React.ComponentProps<typeof SidebarDesktopTrigger>) {
   return (
-    <div className="hidden group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center">
+    <div className="hidden w-full px-2 pt-0.5 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center">
       <SidebarDesktopTrigger className={className} {...props} />
     </div>
   )

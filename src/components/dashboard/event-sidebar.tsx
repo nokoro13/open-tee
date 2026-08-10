@@ -9,8 +9,16 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
+import type { Event } from "@/db/schema";
 import { EVENT_TAB_ICONS } from "@/components/dashboard/event-mobile-nav";
+import { EventStatusBadge } from "@/components/dashboard/event-status-badge";
 import { useIsMobile } from "@/hooks/use-mobile";
+import {
+  DRAFT_EVENT_TABS,
+  PUBLISHED_EVENT_TABS,
+  formatEventListDate,
+  type EventTab,
+} from "@/lib/event-dashboard";
 import {
   Sidebar,
   SidebarContent,
@@ -28,19 +36,17 @@ import {
   SidebarExpandTrigger,
   SidebarHeaderActions,
 } from "@/components/ui/sidebar";
-import {
-  DRAFT_EVENT_TABS,
-  PUBLISHED_EVENT_TABS,
-  type EventTab,
-} from "@/lib/event-dashboard";
 
-export type EventSidebarEvent = {
-  id: string;
-  name: string;
-  slug: string;
-  status: string;
-  scoringStatus: string;
-};
+export type EventSidebarEvent = Pick<
+  Event,
+  | "id"
+  | "name"
+  | "slug"
+  | "status"
+  | "scoringStatus"
+  | "courseName"
+  | "date"
+>;
 
 type EventSidebarProps = {
   event: EventSidebarEvent;
@@ -48,15 +54,6 @@ type EventSidebarProps = {
   activeTab: EventTab;
   onTabChange: (tab: EventTab) => void;
 };
-
-function statusLabel(event: EventSidebarEvent) {
-  if (event.scoringStatus === "open") return "Scoring live";
-  if (event.scoringStatus === "finalized") return "Complete";
-  if (event.status === "draft") return "Draft";
-  if (event.status === "closed") return "Registration closed";
-  if (event.status === "archived") return "Archived";
-  return "Live";
-}
 
 export function EventSidebar({
   event,
@@ -90,13 +87,14 @@ export function EventSidebar({
           <SidebarCollapseTrigger />
         </SidebarHeaderActions>
 
-        <div className="px-2 py-1 group-data-[collapsible=icon]:hidden">
+        <div className="min-w-0 space-y-1.5 px-2 py-1 group-data-[collapsible=icon]:hidden">
           <p className="truncate font-heading text-sm font-semibold tracking-tight">
             {event.name}
           </p>
           <p className="truncate text-xs text-sidebar-foreground/70">
-            {statusLabel(event)}
+            {event.courseName} · {formatEventListDate(event.date)}
           </p>
+          <EventStatusBadge event={event} size="sm" className="shrink-0" />
         </div>
       </SidebarHeader>
 

@@ -6,7 +6,6 @@ import {
   LayoutGrid,
   Rocket,
   Settings2,
-  Trophy,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -21,7 +20,6 @@ import { cn } from "@/lib/utils";
 export const EVENT_TAB_ICONS: Record<EventTab, LucideIcon> = {
   players: Users,
   pairings: LayoutGrid,
-  scoring: Trophy,
   analytics: BarChart3,
   settings: Settings2,
   details: ClipboardList,
@@ -44,9 +42,9 @@ export function EventMobileNav({
   return (
     <nav
       aria-label="Event sections"
-      className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur supports-backdrop-filter:bg-background/80 md:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-border/80 bg-background/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-1px_0_0_rgba(0,0,0,0.04)] backdrop-blur-lg md:hidden"
     >
-      <div className="flex items-stretch justify-around">
+      <div className="flex items-stretch justify-around px-2">
         {tabs.map((tab) => {
           const Icon = EVENT_TAB_ICONS[tab.id];
           const isActive = activeTab === tab.id;
@@ -59,14 +57,17 @@ export function EventMobileNav({
               aria-current={isActive ? "page" : undefined}
               onClick={() => onTabChange(tab.id)}
               className={cn(
-                "flex min-w-0 flex-1 flex-col items-center gap-1 px-1 py-2.5 text-[10px] font-medium transition-colors",
+                "flex min-h-12.25 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-[10px] font-medium touch-manipulation transition-opacity active:opacity-60",
                 isActive
                   ? "text-primary"
-                  : "text-muted-foreground hover:text-foreground"
+                  : "text-muted-foreground"
               )}
             >
-              <Icon className="size-5 shrink-0" aria-hidden />
-              <span className="max-w-full truncate">{label}</span>
+              <Icon
+                className={cn("size-5.5 shrink-0", isActive && "stroke-[2.25]")}
+                aria-hidden
+              />
+              <span className="max-w-full truncate leading-none">{label}</span>
             </button>
           );
         })}

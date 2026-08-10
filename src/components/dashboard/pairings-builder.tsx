@@ -779,12 +779,12 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
 
   return (
     <Card className="min-w-0 overflow-hidden">
-      <CardHeader className="border-b border-border/70 pb-4">
+      <CardHeader className="border-b border-border/60 pb-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0 space-y-1">
             <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
               <Users className="size-4 shrink-0" />
-              Pairings
+              Groups & pairings
             </CardTitle>
             <p className="max-w-2xl text-pretty text-sm text-muted-foreground">
               {pairingHint}
@@ -797,13 +797,13 @@ export function PairingsBuilder(props: PairingsBuilderProps) {
             <Badge variant="secondary" className="tabular-nums font-normal">
               {totalAssigned} assigned
             </Badge>
-            <Badge variant="outline" className="tabular-nums font-normal">
-              {localPairings.unassigned.length} unassigned
-            </Badge>
-            {localPairings.groups.length > 0 && (
+            {localPairings.unassigned.length > 0 ? (
+              <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 tabular-nums font-normal text-amber-900 dark:text-amber-100">
+                {localPairings.unassigned.length} unassigned
+              </Badge>
+            ) : (
               <Badge variant="outline" className="tabular-nums font-normal">
-                {localPairings.groups.length}{" "}
-                {showMatchType ? "matches" : "groups"}
+                All assigned
               </Badge>
             )}
           </div>

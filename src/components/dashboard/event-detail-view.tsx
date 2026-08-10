@@ -8,17 +8,18 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { ArrowLeft } from "lucide-react";
 
 import {
   EventSidebar,
   type EventSidebarEvent,
 } from "@/components/dashboard/event-sidebar";
 import { EventMobileNav } from "@/components/dashboard/event-mobile-nav";
+import { EventStatusBadge } from "@/components/dashboard/event-status-badge";
 import { ButtonLink } from "@/components/ui/button-link";
 import { SidebarInset } from "@/components/ui/sidebar";
 import { parseEventTab, type EventTab } from "@/lib/event-dashboard";
 import { cn } from "@/lib/utils";
-import { ArrowLeft } from "lucide-react";
 
 type EventDetailTabContextValue = {
   activeTab: EventTab;
@@ -41,6 +42,7 @@ type EventDetailViewProps = {
   initialTab: EventTab;
   isDraft: boolean;
   event: EventSidebarEvent;
+  header?: ReactNode;
   children: ReactNode;
 };
 
@@ -48,6 +50,7 @@ export function EventDetailView({
   initialTab,
   isDraft,
   event,
+  header,
   children,
 }: EventDetailViewProps) {
   const [activeTab, setActiveTabState] = useState(initialTab);
@@ -77,24 +80,36 @@ export function EventDetailView({
         activeTab={activeTab}
         onTabChange={setActiveTab}
       />
-      <SidebarInset>
-        <div className="flex flex-1 flex-col gap-5 p-4 pb-[calc(5rem+env(safe-area-inset-bottom))] sm:gap-6 sm:p-6 md:pb-6">
-          <div className="flex items-center gap-2 md:hidden">
+      <SidebarInset className="bg-background md:bg-muted/30">
+        <div className="pb-[calc(3.25rem+env(safe-area-inset-bottom))] md:pb-0">
+          <header className="sticky top-0 z-30 flex items-start gap-2 bg-background/95 px-4 pb-2 pt-4 backdrop-blur-lg md:hidden">
             <ButtonLink
               href="/dashboard"
               variant="ghost"
               size="icon-sm"
+              className="-ml-1 shrink-0 self-start touch-manipulation"
               aria-label="Back to Events"
-              className="-ml-1 shrink-0"
             >
               <ArrowLeft />
             </ButtonLink>
-            <p className="min-w-0 truncate text-sm font-medium text-foreground">
-              {event.name}
-            </p>
-          </div>
-          <div className="mx-auto w-full min-w-0 space-y-5 sm:space-y-6">
-            {children}
+            <div className="flex min-h-7 min-w-0 flex-1 items-center gap-2">
+              <p className="truncate text-base font-semibold leading-tight">
+                {event.name}
+              </p>
+              <EventStatusBadge event={event} size="sm" className="shrink-0" />
+            </div>
+          </header>
+
+          <div className="mx-auto w-full max-w-7xl md:px-6 md:py-8">
+            <div className="px-4 pt-4 md:px-0 md:pt-0">{header}</div>
+            <div
+              className={cn(
+                "px-4 pb-4 pt-4 md:px-0 md:pb-0",
+                header && "md:pt-6"
+              )}
+            >
+              {children}
+            </div>
           </div>
         </div>
       </SidebarInset>

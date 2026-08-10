@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { Event } from "@/db/schema";
+import { eventWorkspaceSettingsSurfaceClassName } from "@/lib/event-workspace-layout";
 
 type EventBrandingPanelProps = {
   event: Event;
@@ -67,7 +68,7 @@ export function EventBrandingPanel({ event }: EventBrandingPanelProps) {
   }
 
   return (
-    <Card className="rounded-2xl">
+    <Card className={eventWorkspaceSettingsSurfaceClassName}>
       <CardHeader>
         <CardTitle>Custom branding</CardTitle>
         <CardDescription className="text-pretty">

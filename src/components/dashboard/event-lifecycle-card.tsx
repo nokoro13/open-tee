@@ -24,6 +24,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import type { Event } from "@/db/schema";
+import { eventWorkspaceSettingsSurfaceClassName } from "@/lib/event-workspace-layout";
 import { isRegistrationOpen } from "@/lib/events";
 
 type EventLifecycleCardProps = {
@@ -57,7 +58,7 @@ export function EventLifecycleCard({ event }: EventLifecycleCardProps) {
   }
 
   return (
-    <Card className="rounded-2xl">
+    <Card className={eventWorkspaceSettingsSurfaceClassName}>
       <CardHeader>
         <CardTitle>Event lifecycle</CardTitle>
         <CardDescription>

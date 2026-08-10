@@ -19,7 +19,8 @@ export type WorkflowStep = {
   id: WorkflowStepId;
   label: string;
   description: string;
-  tab: "players" | "pairings" | "scoring";
+  tab: "players" | "pairings";
+  focusScoring?: boolean;
   href?: string;
   finalizedAt: Date | null;
   isComplete: boolean;
@@ -231,7 +232,8 @@ export function buildEventWorkflowSnapshot(options: {
         : scoringLive
           ? "Players are entering scores."
           : "Open scoring on tournament day.",
-      tab: "scoring",
+      tab: "pairings",
+      focusScoring: true,
       finalizedAt: event.scoringFinalizedAt ?? null,
       isComplete: scoringDone,
       isCurrent: phase === "scoring" || phase === "complete",

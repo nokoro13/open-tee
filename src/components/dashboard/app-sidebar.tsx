@@ -53,7 +53,7 @@ export function AppSidebar({ showAdminNav = false }: { showAdminNav?: boolean })
   return (
     <Sidebar collapsible="icon" variant="sidebar">
       <SidebarHeader>
-        <SidebarHeaderActions>
+        <SidebarHeaderActions className="group-data-[collapsible=icon]:hidden">
           <SidebarMenu className="min-w-0 flex-1">
             <SidebarMenuItem>
               <SidebarMenuButton
@@ -75,6 +75,7 @@ export function AppSidebar({ showAdminNav = false }: { showAdminNav?: boolean })
           </SidebarMenu>
           <SidebarCollapseTrigger className="mt-1.5" />
         </SidebarHeaderActions>
+        <SidebarExpandTrigger />
       </SidebarHeader>
 
       <SidebarContent>
@@ -166,7 +167,6 @@ export function AppSidebar({ showAdminNav = false }: { showAdminNav?: boolean })
       </SidebarContent>
 
       <SidebarFooter>
-        <SidebarExpandTrigger />
         <SidebarMenu>
           <SidebarMenuItem>
             <div className="flex items-center gap-2 rounded-md p-2 group-data-[collapsible=icon]:justify-center">

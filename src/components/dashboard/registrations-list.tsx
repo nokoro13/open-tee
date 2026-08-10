@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Download, Plus, Search } from "lucide-react";
+import { Check, Copy, Download, ExternalLink, Plus, Search } from "lucide-react";
 
 import {
   addCompRegistration,
@@ -42,8 +42,17 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { formatHandicapDisplay, validateHandicapInput } from "@/lib/handicap-strokes";
 import { isOperationalEventStatus } from "@/lib/events";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { EditRegistrationSheet } from "@/components/dashboard/edit-registration-sheet";
 
 const statusVariant: Record<
@@ -63,6 +72,8 @@ type RegistrationsListProps = {
   registrations: Registration[];
   registrationCount: number;
   maxPlayers: number;
+  registrationUrl: string;
+  previewHref: string;
   scoringStatus: "disabled" | "open" | "finalized";
   eventStatus: string;
 };
@@ -72,12 +83,16 @@ export function RegistrationsList({
   registrations,
   registrationCount,
   maxPlayers,
+  registrationUrl,
+  previewHref,
   scoringStatus,
   eventStatus,
 }: RegistrationsListProps) {
   const router = useRouter();
+  const isMobile = useIsMobile();
   const [query, setQuery] = useState("");
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>("all");
+  const [copied, setCopied] = useState(false);
   const [compOpen, setCompOpen] = useState(false);
   const [compPending, startCompTransition] = useTransition();
   const [compError, setCompError] = useState<string | null>(null);
@@ -107,6 +122,12 @@ export function RegistrationsList({
     });
   }, [paymentFilter, query, registrations]);
 
+  async function copyLink() {
+    await navigator.clipboard.writeText(registrationUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
   function handleCompSubmit(event: React.FormEvent) {
     event.preventDefault();
     setCompError(null);
@@ -135,207 +156,274 @@ export function RegistrationsList({
   }
 
   return (
-    <Card className="rounded-2xl">
-      <CardHeader className="flex flex-col gap-3 border-b border-border/60 pb-4 sm:flex-row sm:items-start sm:justify-between [.border-b]:pb-4">
-        <div className="min-w-0 space-y-1">
-          <CardTitle>Registrations</CardTitle>
-          <CardDescription className="text-pretty">
-            {registrationCount} of {maxPlayers} spots filled
-            {eventStatus === "published" && scoringStatus === "disabled" && (
-              <>
-                {" "}
-                · Online signup is open (
-                <a
-                  href="?tab=settings"
-                  className="text-primary hover:underline"
-                >
-                  close in Settings
-                </a>
-                )
-              </>
-            )}
-            {eventStatus === "closed" && scoringStatus === "disabled" && (
-              <> · Online signup is closed</>
-            )}
-          </CardDescription>
-        </div>
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
-          {canManageComps && (
-            <Sheet open={compOpen} onOpenChange={setCompOpen}>
-              <SheetTrigger
-                render={
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-10 w-full sm:h-8 sm:w-auto"
-                  >
-                    <Plus />
-                    Comp player
-                  </Button>
-                }
-              />
-              <SheetContent side="right" className="w-full sm:max-w-md">
-                <SheetHeader>
-                  <SheetTitle>Comp a player</SheetTitle>
-                  <SheetDescription>
-                    Add a free entry without payment. They&apos;ll receive a
-                    confirmation email.
-                  </SheetDescription>
-                </SheetHeader>
-                <form onSubmit={handleCompSubmit} className="flex flex-1 flex-col gap-4 px-4">
-                  <FieldGroup>
-                    <Field>
-                      <FieldLabel htmlFor="comp-name">Full name</FieldLabel>
-                      <Input
-                        id="comp-name"
-                        value={compForm.name}
-                        onChange={(e) =>
-                          setCompForm({ ...compForm, name: e.target.value })
-                        }
-                        required
-                        disabled={compPending}
-                        autoComplete="name"
-                        className="h-11 text-base sm:text-sm"
-                      />
-                    </Field>
-                    <Field>
-                      <FieldLabel htmlFor="comp-email">Email</FieldLabel>
-                      <Input
-                        id="comp-email"
-                        type="email"
-                        value={compForm.email}
-                        onChange={(e) =>
-                          setCompForm({ ...compForm, email: e.target.value })
-                        }
-                        required
-                        disabled={compPending}
-                        autoComplete="email"
-                        className="h-11 text-base sm:text-sm"
-                      />
-                    </Field>
-                    <Field>
-                      <FieldLabel htmlFor="comp-handicap">
-                        Handicap (optional)
-                      </FieldLabel>
-                      <Input
-                        id="comp-handicap"
-                        value={compForm.handicap}
-                        onChange={(e) =>
-                          setCompForm({ ...compForm, handicap: e.target.value })
-                        }
-                        disabled={compPending}
-                        placeholder="12.4 or +3"
-                        inputMode="decimal"
-                        className="h-11 text-base sm:text-sm"
-                      />
-                    </Field>
-                  </FieldGroup>
-                  {compError && (
-                    <p className="text-sm text-destructive" role="alert">
-                      {compError}
-                    </p>
-                  )}
-                  <SheetFooter className="px-0">
+    <Card className="overflow-hidden rounded-2xl">
+      <CardHeader className="gap-4 border-b [.border-b]:pb-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <CardTitle>Registrations</CardTitle>
+            <CardDescription>
+              {registrationCount} of {maxPlayers} spots filled
+            </CardDescription>
+          </div>
+          <div className="-mx-1 flex gap-2 overflow-x-auto overscroll-x-contain px-1 pb-0.5 [-ms-overflow-style:none] scrollbar-none sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden">
+            {canManageComps && (
+              <Sheet open={compOpen} onOpenChange={setCompOpen}>
+                <SheetTrigger
+                  render={
                     <Button
-                      type="submit"
-                      disabled={compPending}
-                      className="h-11 w-full"
+                      variant="outline"
+                      size="sm"
+                      className="h-11 shrink-0 touch-manipulation sm:h-7"
                     >
-                      {compPending ? "Adding..." : "Add comp entry"}
+                      <Plus />
+                      Comp player
                     </Button>
-                  </SheetFooter>
-                </form>
-              </SheetContent>
-            </Sheet>
-          )}
-          {registrations.length > 0 && (
+                  }
+                />
+                <SheetContent
+                  side={isMobile === false ? "right" : "bottom"}
+                  className={
+                    isMobile !== false
+                      ? "max-h-[90dvh] rounded-t-2xl pb-[max(1rem,env(safe-area-inset-bottom))]"
+                      : "w-full sm:max-w-md"
+                  }
+                >
+                  <SheetHeader>
+                    <SheetTitle>Comp a player</SheetTitle>
+                    <SheetDescription>
+                      Add a free entry without payment.
+                    </SheetDescription>
+                  </SheetHeader>
+                  <form
+                    onSubmit={handleCompSubmit}
+                    className="flex flex-1 flex-col gap-4 px-4"
+                  >
+                    <FieldGroup>
+                      <Field>
+                        <FieldLabel htmlFor="comp-name">Full name</FieldLabel>
+                        <Input
+                          id="comp-name"
+                          value={compForm.name}
+                          onChange={(e) =>
+                            setCompForm({ ...compForm, name: e.target.value })
+                          }
+                          required
+                          disabled={compPending}
+                          autoComplete="name"
+                        />
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor="comp-email">Email</FieldLabel>
+                        <Input
+                          id="comp-email"
+                          type="email"
+                          value={compForm.email}
+                          onChange={(e) =>
+                            setCompForm({ ...compForm, email: e.target.value })
+                          }
+                          required
+                          disabled={compPending}
+                          autoComplete="email"
+                        />
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor="comp-handicap">
+                          Handicap (optional)
+                        </FieldLabel>
+                        <Input
+                          id="comp-handicap"
+                          value={compForm.handicap}
+                          onChange={(e) =>
+                            setCompForm({
+                              ...compForm,
+                              handicap: e.target.value,
+                            })
+                          }
+                          disabled={compPending}
+                          placeholder="12.4 or +3"
+                          inputMode="decimal"
+                        />
+                      </Field>
+                    </FieldGroup>
+                    {compError && (
+                      <p className="text-sm text-destructive" role="alert">
+                        {compError}
+                      </p>
+                    )}
+                    <SheetFooter className="px-0">
+                      <Button type="submit" disabled={compPending}>
+                        {compPending ? "Adding..." : "Add comp entry"}
+                      </Button>
+                    </SheetFooter>
+                  </form>
+                </SheetContent>
+              </Sheet>
+            )}
+            {registrations.length > 0 && (
+              <ButtonLink
+                variant="outline"
+                size="sm"
+                className="h-11 shrink-0 touch-manipulation sm:h-7"
+                href={`/dashboard/events/${eventId}/export`}
+              >
+                <Download />
+                Export
+              </ButtonLink>
+            )}
             <ButtonLink
               variant="outline"
               size="sm"
-              href={`/dashboard/events/${eventId}/export`}
-              className="h-10 w-full sm:h-8 sm:w-auto"
+              className="h-11 shrink-0 touch-manipulation sm:h-7"
+              href={previewHref}
+              target="_blank"
+              rel="noopener noreferrer"
             >
-              <Download />
-              Export CSV
+              <ExternalLink />
+              Preview
             </ButtonLink>
-          )}
+          </div>
+        </div>
+
+        <div className="flex gap-2">
+          <Input
+            readOnly
+            value={registrationUrl}
+            className="h-11 min-w-0 font-mono text-xs sm:h-8 sm:text-sm"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            className="size-11 shrink-0 touch-manipulation sm:size-8"
+            onClick={copyLink}
+            aria-label="Copy registration link"
+          >
+            {copied ? <Check /> : <Copy />}
+          </Button>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4 pt-4">
-        {registrations.length > 0 && (
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <div className="relative flex-1">
-              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search by name or email"
-                className="h-11 pl-9 text-base sm:text-sm"
-              />
-            </div>
-            <Select
-              value={paymentFilter}
-              onValueChange={(value) => {
-                if (value) setPaymentFilter(value as PaymentFilter);
-              }}
-            >
-              <SelectTrigger className="h-11 w-full sm:w-44">
-                <SelectValue placeholder="Payment status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All statuses</SelectItem>
-                <SelectItem value="paid">Paid</SelectItem>
-                <SelectItem value="comped">Comped</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="refunded">Refunded</SelectItem>
-              </SelectContent>
-            </Select>
+
+      <CardContent className="pt-4">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search players"
+              className="h-11 pl-9 sm:h-8"
+            />
           </div>
-        )}
+          <Select
+            value={paymentFilter}
+            onValueChange={(value) => {
+              if (value) setPaymentFilter(value as PaymentFilter);
+            }}
+          >
+            <SelectTrigger className="h-11 w-full touch-manipulation sm:h-8 sm:w-40">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="paid">Paid</SelectItem>
+              <SelectItem value="comped">Comped</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="refunded">Refunded</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
         {registrations.length === 0 ? (
-          <p className="text-sm text-pretty text-muted-foreground">
-            No registrations yet. Share your registration link to get players
-            signed up.
+          <p className="py-12 text-center text-sm text-muted-foreground">
+            No players yet. Copy the registration link above to get started.
           </p>
         ) : filtered.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No registrations match your search.
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            No players match your search.
           </p>
         ) : (
-          <ul className="-mx-1 divide-y divide-border">
-            {filtered.map((reg) => (
-              <li
-                key={reg.id}
-                className="flex items-start justify-between gap-3 px-1 py-3.5 first:pt-1 last:pb-0"
-              >
-                <div className="min-w-0 flex-1 space-y-0.5">
-                  <p className="truncate font-medium">{reg.name}</p>
-                  <p className="truncate text-sm text-muted-foreground">
-                    {reg.email}
-                  </p>
-                  {reg.handicap && (
-                    <p className="text-xs text-muted-foreground">
-                      Handicap: {formatHandicapDisplay(reg.handicap)}
+          <>
+            <ul className="divide-y divide-border md:hidden">
+              {filtered.map((reg) => (
+                <li
+                  key={reg.id}
+                  className="flex items-center gap-3 py-3.5 touch-manipulation active:bg-muted/40"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">{reg.name}</p>
+                    <p className="truncate text-sm text-muted-foreground">
+                      {reg.email}
                     </p>
-                  )}
-                </div>
-                <div className="flex shrink-0 items-center gap-1.5 pt-0.5">
-                  <EditRegistrationSheet
-                    eventId={eventId}
-                    registration={reg}
-                    canComp={
-                      canManageComps && reg.paymentStatus === "pending"
-                    }
-                    onComp={() => compRegistration(reg.id, eventId)}
-                  />
-                  <Badge variant={statusVariant[reg.paymentStatus]} className="capitalize">
-                    {reg.paymentStatus}
-                  </Badge>
-                </div>
-              </li>
-            ))}
-          </ul>
+                    {reg.handicap != null && (
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        HCP {formatHandicapDisplay(reg.handicap)}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-2">
+                    <Badge
+                      variant={statusVariant[reg.paymentStatus]}
+                      className="capitalize"
+                    >
+                      {reg.paymentStatus}
+                    </Badge>
+                    <EditRegistrationSheet
+                      eventId={eventId}
+                      registration={reg}
+                      canComp={
+                        canManageComps && reg.paymentStatus === "pending"
+                      }
+                      onComp={() => compRegistration(reg.id, eventId)}
+                    />
+                  </div>
+                </li>
+              ))}
+            </ul>
+
+            <Table className="hidden md:table">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead className="hidden sm:table-cell">Email</TableHead>
+                  <TableHead className="hidden md:table-cell">Handicap</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="w-10" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((reg) => (
+                  <TableRow key={reg.id}>
+                    <TableCell className="font-medium">{reg.name}</TableCell>
+                    <TableCell className="hidden max-w-[200px] truncate sm:table-cell text-muted-foreground">
+                      {reg.email}
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell text-muted-foreground">
+                      {reg.handicap
+                        ? formatHandicapDisplay(reg.handicap)
+                        : "—"}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={statusVariant[reg.paymentStatus]}
+                        className="capitalize"
+                      >
+                        {reg.paymentStatus}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <EditRegistrationSheet
+                        eventId={eventId}
+                        registration={reg}
+                        canComp={
+                          canManageComps && reg.paymentStatus === "pending"
+                        }
+                        onComp={() => compRegistration(reg.id, eventId)}
+                      />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </>
         )}
       </CardContent>
     </Card>

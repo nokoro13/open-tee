@@ -32,10 +32,10 @@ function AppDashboardChrome({
       <Suspense fallback={<SidebarFallback />}>
         <AppSidebar showAdminNav={showAdminNav} />
       </Suspense>
-      <SidebarInset>
+      <SidebarInset className="bg-muted/20">
         <div className="flex flex-1 flex-col gap-6 p-4 sm:p-6">
           <SidebarMobileTrigger className="-ml-1 self-start md:hidden" />
-          {children}
+          <div className="mx-auto w-full max-w-6xl">{children}</div>
         </div>
       </SidebarInset>
     </>

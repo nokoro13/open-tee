@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import type { Event } from "@/db/schema";
 import { isRegistrationOpen } from "@/lib/events";
+import { eventWorkspaceSettingsSurfaceClassName } from "@/lib/event-workspace-layout";
 
 type ProFeaturesPanelProps = {
   event: Event;
@@ -80,7 +81,7 @@ export function ProFeaturesPanel({ event }: ProFeaturesPanelProps) {
   }
 
   return (
-    <Card className="rounded-2xl">
+    <Card className={eventWorkspaceSettingsSurfaceClassName}>
       <CardHeader>
         <CardTitle>Registration features</CardTitle>
         <CardDescription className="text-pretty">

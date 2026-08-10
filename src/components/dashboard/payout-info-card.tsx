@@ -5,10 +5,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { eventWorkspaceSettingsSurfaceClassName } from "@/lib/event-workspace-layout";
 
 export function PayoutInfoCard() {
   return (
-    <Card className="rounded-2xl">
+    <Card className={eventWorkspaceSettingsSurfaceClassName}>
       <CardHeader>
         <CardTitle>Entry fee payouts</CardTitle>
         <CardDescription>

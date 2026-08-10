@@ -1,19 +1,11 @@
 import { notFound } from "next/navigation";
-import {
-  CalendarDays,
-  ExternalLink,
-  Flag,
-  MapPin,
-  Trophy,
-  Users,
-} from "lucide-react";
 
 import { syncRegistrationWorkflow } from "@/actions/event-workflow";
 import { getEventById, getEventByIdWithScorecard } from "@/actions/events";
 import { syncPublishIfPaid } from "@/actions/publish";
 import { syncCurrentOrganizationSubscription } from "@/actions/subscription";
-import { CopyRegistrationLink } from "@/components/dashboard/copy-registration-link";
-import { EventDetailNextStep } from "@/components/dashboard/event-detail-next-step";
+import { EventWorkspaceActions } from "@/components/dashboard/event-workspace-actions";
+import { EventWorkspaceHeader } from "@/components/dashboard/event-workspace-header";
 import {
   EventDetailView,
   EventTabPanel,
@@ -32,10 +24,8 @@ import { FlightsPanel } from "@/components/dashboard/flights-panel";
 import { ProFeaturesPanel } from "@/components/dashboard/pro-features-panel";
 import { SponsorPackagesPanel } from "@/components/dashboard/sponsor-packages-panel";
 import { PayoutInfoCard } from "@/components/dashboard/payout-info-card";
-import { ScoringCard } from "@/components/dashboard/scoring-card";
 import { StartFormatCard } from "@/components/dashboard/start-format-card";
 import { DeleteEventButton } from "@/components/dashboard/delete-event-button";
-import { ButtonLink } from "@/components/ui/button-link";
 import {
   Card,
   CardContent,
@@ -44,10 +34,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
-  formatDaysUntilEvent,
   formatEventHeaderDate,
   getCurrentSetupStep,
-  getDaysUntilEvent,
   parseEventTab,
 } from "@/lib/event-dashboard";
 import {
@@ -64,7 +52,10 @@ import { syncTeeTimesForEvent } from "@/actions/start-format";
 import { getEventPairings } from "@/lib/pairings";
 import { requireOrganization } from "@/lib/auth";
 import { getEventFormatLabel } from "@/lib/event-formats";
-import type { Event } from "@/db/schema";
+import {
+  eventWorkspaceSettingsStackClassName,
+  eventWorkspaceSettingsSurfaceClassName,
+} from "@/lib/event-workspace-layout";
 
 type EventDetailPageProps = {
   params: Promise<{ id: string }>;
@@ -76,110 +67,6 @@ type EventDetailPageProps = {
     tab?: string;
   }>;
 };
-
-function StatusPill({ event }: { event: Event }) {
-  if (event.scoringStatus === "open") {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary sm:gap-2 sm:px-3 sm:text-sm">
-        <span className="relative flex size-2">
-          <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-60" />
-          <span className="relative inline-flex size-2 rounded-full bg-primary" />
-        </span>
-        Scoring live
-      </span>
-    );
-  }
-
-  if (event.scoringStatus === "finalized") {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground sm:px-3 sm:text-sm">
-        <Trophy className="size-3.5" />
-        Complete
-      </span>
-    );
-  }
-
-  if (event.status === "draft") {
-    return (
-      <span className="inline-flex items-center rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-secondary-foreground sm:px-3 sm:text-sm">
-        Draft
-      </span>
-    );
-  }
-
-  if (event.status === "closed") {
-    return (
-      <span className="inline-flex items-center rounded-full bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-800 sm:px-3 sm:text-sm dark:text-amber-300">
-        Registration closed
-      </span>
-    );
-  }
-
-  if (event.status === "archived") {
-    return (
-      <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground sm:px-3 sm:text-sm">
-        Archived
-      </span>
-    );
-  }
-
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary sm:px-3 sm:text-sm">
-      <span className="size-1.5 rounded-full bg-primary" />
-      <span className="sm:hidden">Live</span>
-      <span className="hidden sm:inline">Live — accepting registrations</span>
-    </span>
-  );
-}
-
-function StatTile({
-  label,
-  value,
-  caption,
-  icon: Icon,
-  children,
-}: {
-  label: string;
-  value: string;
-  caption?: string;
-  icon: React.ComponentType<{ className?: string }>;
-  children?: React.ReactNode;
-}) {
-  return (
-    <div className="min-w-0 rounded-2xl border border-border/70 bg-card p-3.5 sm:p-5">
-      <div className="flex items-center gap-1.5 text-muted-foreground sm:gap-2">
-        <Icon className="size-3.5 shrink-0 sm:size-4" />
-        <span className="truncate text-[10px] font-medium uppercase tracking-wide sm:text-xs">
-          {label}
-        </span>
-      </div>
-      <p className="mt-1.5 font-heading text-xl font-semibold tracking-tight sm:mt-2 sm:text-3xl">
-        {value}
-      </p>
-      {caption && (
-        <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground sm:text-xs">
-          {caption}
-        </p>
-      )}
-      {children}
-    </div>
-  );
-}
-
-function MetaRow({
-  icon: Icon,
-  children,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  children: React.ReactNode;
-}) {
-  return (
-    <li className="flex min-w-0 items-start gap-2 text-sm text-muted-foreground sm:text-base">
-      <Icon className="mt-0.5 size-3.5 shrink-0 sm:mt-1 sm:size-4" />
-      <span className="min-w-0 text-pretty">{children}</span>
-    </li>
-  );
-}
 
 export default async function EventDetailPage({
   params,
@@ -263,20 +150,26 @@ export default async function EventDetailPage({
     scoringStatus: event.scoringStatus,
   });
 
-  const showNextStepBanner = nextStep && isDraft;
-
-  const countdown = formatDaysUntilEvent(event.date);
-  const eventUpcoming = getDaysUntilEvent(event.date) >= 0;
-  const capacityPercent =
-    event.maxPlayers > 0
-      ? Math.min(100, Math.round((registrationCount / event.maxPlayers) * 100))
-      : 0;
-  const groupCount = pairings?.groups.length ?? 0;
-  const unassignedCount = pairings?.unassigned.length ?? 0;
   const groupScoringProgress =
     isOperationalEvent && event.scoringStatus !== "disabled"
       ? await getGroupScoringProgress(event.id, event.format, event.holes)
       : null;
+  const canPrintScorecards =
+    pairings?.groups.some(
+      (group) => group.players.length > 0 && group.scoringCode != null
+    ) ?? false;
+
+  const workspaceActions = (
+    <EventWorkspaceActions
+      event={event}
+      canPrintScorecards={canPrintScorecards}
+      printScorecardsHref={`/print/events/${event.id}/scorecards`}
+      workflow={workflow}
+      groupScoringProgress={groupScoringProgress}
+      nextStep={nextStep}
+      isDraft={isDraft}
+    />
+  );
 
   return (
     <EventDetailView
@@ -288,119 +181,30 @@ export default async function EventDetailPage({
         slug: event.slug,
         status: event.status,
         scoringStatus: event.scoringStatus,
+        courseName: event.courseName,
+        date: event.date,
       }}
+      header={
+        <EventWorkspaceHeader isDraft={isDraft} actions={workspaceActions} />
+      }
     >
-      {/* Notices */}
       {published === "1" && (
-        <div className="rounded-xl border border-primary/30 bg-primary/5 px-3.5 py-3 text-sm text-pretty sm:px-4">
-          Payment received. Your event is live and accepting registrations.
-        </div>
+        <p className="mb-4 text-sm text-primary">
+          Payment received — your event is live.
+        </p>
       )}
 
       {publish_canceled === "1" && (
-        <div className="rounded-xl border bg-muted/50 px-3.5 py-3 text-sm text-pretty text-muted-foreground sm:px-4">
+        <p className="mb-4 text-sm text-muted-foreground">
           Publish checkout was canceled. Your event remains in draft.
-        </div>
-      )}
-
-      {/* Hero */}
-      <header className="space-y-4 sm:space-y-5">
-        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-          <div className="min-w-0 space-y-2">
-            <StatusPill event={event} />
-            <ul className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:gap-x-4 sm:gap-y-1.5">
-              <MetaRow icon={CalendarDays}>
-                {formatEventHeaderDate(event.date)}
-              </MetaRow>
-              <MetaRow icon={MapPin}>{event.courseName}</MetaRow>
-              <MetaRow icon={Flag}>
-                {getEventFormatLabel(event.format)}, {event.holes} holes
-              </MetaRow>
-            </ul>
-          </div>
-        </div>
-
-        {isOperationalEvent && (
-          <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
-            <StatTile
-              label="Players"
-              value={`${registrationCount}`}
-              caption={`of ${event.maxPlayers} spots filled`}
-              icon={Users}
-            >
-              <div className="mt-2.5 h-1 overflow-hidden rounded-full bg-muted sm:mt-3">
-                <div
-                  className="h-full rounded-full bg-primary transition-all"
-                  style={{ width: `${capacityPercent}%` }}
-                />
-              </div>
-            </StatTile>
-            <StatTile
-              label={eventUpcoming ? "Countdown" : "Played"}
-              value={countdown.value}
-              caption={countdown.caption}
-              icon={CalendarDays}
-            />
-            <StatTile
-              label="Groups"
-              value={
-                groupScoringProgress && groupScoringProgress.totalGroups > 0
-                  ? `${groupScoringProgress.completedGroups}/${groupScoringProgress.totalGroups}`
-                  : groupCount > 0
-                    ? `${groupCount}`
-                    : "—"
-              }
-              caption={
-                groupScoringProgress && groupScoringProgress.totalGroups > 0
-                  ? "groups completed"
-                  : groupCount === 0
-                    ? "No pairings yet"
-                    : unassignedCount > 0
-                      ? `${unassignedCount} player${unassignedCount === 1 ? "" : "s"} unassigned`
-                      : "All players assigned"
-              }
-              icon={Users}
-            />
-            <StatTile
-              label="Scoring"
-              value={
-                event.scoringStatus === "open"
-                  ? "Live"
-                  : event.scoringStatus === "finalized"
-                    ? "Final"
-                    : "Not started"
-              }
-              caption={
-                event.scoringStatus === "disabled"
-                  ? "Open when groups tee off"
-                  : event.scoringStatus === "open"
-                    ? "Players are entering scores"
-                    : "Leaderboard published"
-              }
-              icon={Trophy}
-            />
-          </div>
-        )}
-      </header>
-
-      {showNextStepBanner && nextStep && (
-        <EventTabPanel tab="details">
-          <EventDetailNextStep eventId={event.id} step={nextStep} />
-        </EventTabPanel>
+        </p>
       )}
 
       {isDraft && (
         <>
           <EventTabPanel tab="details">
-            <Card className="rounded-2xl">
-              <CardHeader>
-                <CardTitle>Event details</CardTitle>
-                <CardDescription>
-                  Set course, schedule, and registration settings. Changes save
-                  to your draft.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
+            <Card>
+              <CardContent className="pt-(--card-spacing)">
                 <EventForm event={eventWithScorecard ?? undefined} />
               </CardContent>
             </Card>
@@ -422,41 +226,21 @@ export default async function EventDetailPage({
       {isOperationalEvent && (
         <>
           <EventTabPanel tab="players">
-            <div className="space-y-4 sm:space-y-6">
-              <Card className="rounded-2xl">
-                <CardHeader className="gap-1">
-                  <CardTitle>Registration link</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <CopyRegistrationLink url={registrationUrl} />
-                  <ButtonLink
-                    variant="outline"
-                    size="sm"
-                    href={`/e/${event.slug}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="h-11 w-full sm:h-9 sm:w-auto"
-                  >
-                    <ExternalLink />
-                    Preview registration page
-                  </ButtonLink>
-                </CardContent>
-              </Card>
-
-              <RegistrationsList
-                eventId={event.id}
-                registrations={registrations}
-                registrationCount={registrationCount}
-                maxPlayers={event.maxPlayers}
-                scoringStatus={event.scoringStatus}
-                eventStatus={event.status}
-              />
-            </div>
+            <RegistrationsList
+              eventId={event.id}
+              registrations={registrations}
+              registrationCount={registrationCount}
+              maxPlayers={event.maxPlayers}
+              registrationUrl={registrationUrl}
+              previewHref={`/e/${event.slug}`}
+              scoringStatus={event.scoringStatus}
+              eventStatus={event.status}
+            />
           </EventTabPanel>
 
           {pairings && (
             <EventTabPanel tab="pairings">
-              <div className="space-y-4 sm:space-y-6">
+              <div className="space-y-4">
                 <StartFormatCard
                   eventId={event.id}
                   scoringStatus={event.scoringStatus}
@@ -487,21 +271,6 @@ export default async function EventDetailPage({
             </EventTabPanel>
           )}
 
-          {workflow && (
-            <EventTabPanel tab="scoring">
-              <ScoringCard
-                eventId={event.id}
-                slug={event.slug}
-                scoringStatus={event.scoringStatus}
-                scoringCode={event.scoringCode}
-                appUrl={getAppUrl()}
-                canOpenScoring={workflow.canOpenScoring}
-                workflow={workflow}
-                groupScoringProgress={groupScoringProgress}
-              />
-            </EventTabPanel>
-          )}
-
           <EventTabPanel tab="analytics">
             {analyticsReport ? (
               <EventAnalyticsReportCard
@@ -512,9 +281,8 @@ export default async function EventDetailPage({
               <Card className="rounded-2xl">
                 <CardHeader>
                   <CardTitle>Analytics</CardTitle>
-                  <CardDescription className="text-pretty">
-                    Analytics will appear here once players register for your
-                    event.
+                  <CardDescription>
+                    Analytics appear once players register.
                   </CardDescription>
                 </CardHeader>
               </Card>
@@ -522,7 +290,7 @@ export default async function EventDetailPage({
           </EventTabPanel>
 
           <EventTabPanel tab="settings">
-            <div className="space-y-4 sm:space-y-6">
+            <div className={eventWorkspaceSettingsStackClassName}>
               <ProFeaturesPanel event={event} />
               <EventBrandingPanel event={event} />
               <FlightsPanel eventId={event.id} flights={flights} />
@@ -532,28 +300,27 @@ export default async function EventDetailPage({
                 purchases={sponsorData.purchases}
               />
               {event.waitlistEnabled && waitlist.length > 0 && (
-                <Card className="rounded-2xl">
+                <Card className={eventWorkspaceSettingsSurfaceClassName}>
                   <CardHeader>
                     <CardTitle>Waitlist</CardTitle>
                     <CardDescription>
-                      {waitlist.length} player
-                      {waitlist.length === 1 ? "" : "s"} waiting for a spot.
+                      {waitlist.length} waiting for a spot.
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <ul className="space-y-2 text-sm">
+                    <ul className="divide-y text-sm">
                       {waitlist.map((entry) => (
                         <li
                           key={entry.id}
-                          className="flex items-start justify-between gap-3 rounded-xl border border-border/70 px-3 py-2.5"
+                          className="flex items-center justify-between gap-3 py-2.5"
                         >
-                          <div className="min-w-0 flex-1">
+                          <div className="min-w-0">
                             <p className="truncate font-medium">{entry.name}</p>
                             <p className="truncate text-muted-foreground">
                               {entry.email}
                             </p>
                           </div>
-                          <span className="shrink-0 pt-0.5 text-xs text-muted-foreground sm:text-sm">
+                          <span className="shrink-0 text-xs text-muted-foreground">
                             {entry.notifiedAt ? "Notified" : "Waiting"}
                           </span>
                         </li>
@@ -564,19 +331,14 @@ export default async function EventDetailPage({
               )}
 
               <EventLifecycleCard event={event} />
-
               <PayoutInfoCard />
 
-              <Card className="rounded-2xl">
+              <Card className={eventWorkspaceSettingsSurfaceClassName}>
                 <CardHeader>
                   <CardTitle>Event details</CardTitle>
-                  <CardDescription>
-                    Core settings for this event. Contact support if you need to
-                    change course or format after publishing.
-                  </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-6 sm:space-y-8">
-                  <dl className="grid gap-x-8 gap-y-4 text-sm sm:grid-cols-2 sm:gap-y-5">
+                <CardContent className="space-y-6">
+                  <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
                     {[
                       { label: "Course", value: event.courseName },
                       {
@@ -598,38 +360,20 @@ export default async function EventDetailPage({
                         label: "Capacity",
                         value: `${event.maxPlayers} players`,
                       },
-                      ...(eventWithScorecard?.eventHoles &&
-                      eventWithScorecard.eventHoles.length > 0
-                        ? [
-                            {
-                              label: "Scorecard",
-                              value: `Par ${eventWithScorecard.eventHoles.reduce(
-                                (sum, hole) => sum + hole.par,
-                                0
-                              )} · ${eventWithScorecard.eventHoles.length} holes`,
-                            },
-                          ]
-                        : []),
                     ].map((row) => (
-                      <div
-                        key={row.label}
-                        className="flex flex-col gap-1 border-b border-border/60 pb-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4"
-                      >
+                      <div key={row.label}>
                         <dt className="text-muted-foreground">{row.label}</dt>
-                        <dd className="min-w-0 font-medium sm:text-right">
-                          {row.value}
-                        </dd>
+                        <dd className="font-medium">{row.value}</dd>
                       </div>
                     ))}
                   </dl>
 
-                  <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4">
+                  <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-4">
                     <h3 className="text-sm font-medium">Danger zone</h3>
-                    <p className="mt-1 text-sm text-pretty text-muted-foreground">
-                      Permanently delete this event, including registrations,
-                      pairings, and scores.
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Permanently delete this event and all associated data.
                     </p>
-                    <div className="mt-4">
+                    <div className="mt-3">
                       <DeleteEventButton
                         eventId={event.id}
                         eventName={event.name}

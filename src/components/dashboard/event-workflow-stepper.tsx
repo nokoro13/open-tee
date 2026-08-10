@@ -61,7 +61,9 @@ export function EventWorkflowStepper({
       <StepperList className="hidden sm:flex">
         {workflow.steps.map((step, index) => {
           const state = getStepState(step, index, currentIndex);
-          const href = step.href ?? eventTabHref(eventId, step.tab);
+          const href =
+            step.href ??
+            `${eventTabHref(eventId, step.tab)}`;
           const isLast = index === workflow.steps.length - 1;
           const lineComplete = step.isComplete;
 

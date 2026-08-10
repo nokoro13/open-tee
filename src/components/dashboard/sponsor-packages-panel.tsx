@@ -17,6 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatFee } from "@/lib/events";
+import { eventWorkspaceSettingsSurfaceClassName } from "@/lib/event-workspace-layout";
 import type { SponsorPackage, SponsorPurchase } from "@/db/schema";
 
 type SponsorPackagesPanelProps = {
@@ -66,8 +67,8 @@ export function SponsorPackagesPanel({
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6">
-      <Card className="rounded-2xl">
+    <div className="flex flex-col gap-5 md:gap-4">
+      <Card className={eventWorkspaceSettingsSurfaceClassName}>
         <CardHeader>
           <CardTitle>Sponsor packages</CardTitle>
           <CardDescription className="text-pretty">
@@ -158,7 +159,7 @@ export function SponsorPackagesPanel({
       </Card>
 
       {purchases.length > 0 && (
-        <Card className="rounded-2xl">
+        <Card className={eventWorkspaceSettingsSurfaceClassName}>
           <CardHeader>
             <CardTitle>Sponsor purchases</CardTitle>
           </CardHeader>
